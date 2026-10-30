@@ -21,7 +21,7 @@ Set by the repository variable `SUMMARY_MODE`.
 
 | Mode | Who summarises | Needs |
 |---|---|---|
-| `claude-code` (default, also when unset) | A scheduled Claude Code task on Eric's Mac, using Haiku subagents | Claude subscription; the Mac awake with the Claude app open |
+| `claude-code` (default, also when unset) | A local coding agent: the scheduled Claude Code task on Eric's Mac (Haiku subagents), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
 | `api` | The Actions job, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key secret |
 
 ### API providers
@@ -66,6 +66,23 @@ Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local ti
 6. `uv run python -m summaries finish` releases the run's lock.
 
 Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off on the next run. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md).
+
+### Other coding agents (Codex, Antigravity, ...)
+
+The same local job runs through any coding-agent CLI's headless mode; each chunk of 20 papers goes to one call that reads the chunk and writes its summaries file:
+
+```bash
+uv run python -m summaries run-local --client codex
+```
+
+| `--client` | Command it runs per chunk |
+|---|---|
+| `claude` | `claude -p <prompt> --model haiku --allowedTools Read,Write` |
+| `codex` | `codex exec --sandbox workspace-write <prompt>` |
+| `antigravity` | `agy -p <prompt>` (files inside the workspace are allowed by default) |
+| `custom` | your own argv, e.g. `--command '["mycli","-p","{prompt}","--model","{model}"]'` |
+
+Useful flags: `--model`, `--parallel 2` (calls at once), `--max-chunks N` (a per-run budget, since only Claude exposes plan usage), `--days 4`. Progress is merged and pushed every few chunks and the day is logged as `local-<client>`, so a run that stops resumes on the next one. Schedule it with cron or launchd, for example `30 10,16,21 * * * cd ~/daily-arXiv-ai-enhanced && uv run python -m summaries run-local --client codex --max-chunks 40 >> .cache/run-local.log 2>&1`. Agents working in this repository get the same instructions from [`AGENTS.md`](AGENTS.md) (Codex, Antigravity) and [`CLAUDE.md`](CLAUDE.md).
 
 ### Fallback at the usage gate
 

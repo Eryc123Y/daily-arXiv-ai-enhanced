@@ -356,13 +356,16 @@ def cmd_prepare(args):
         emit(locked=True, holder=holder)
         return 3
     try:
-        return write_chunks(args)
+        plan = write_chunks(args)
     except BaseException:
         release_lock(root)
         raise
+    print(json.dumps(plan, ensure_ascii=False, indent=2))
+    return 0
 
 
 def write_chunks(args):
+    """Write INSTRUCTIONS.md and chunk inputs for the day's pending papers; return the plan."""
     directory = work_dir(args, args.date)
     leftovers = None
     if directory.exists() and any(directory.glob("*.out.txt")):
@@ -384,20 +387,13 @@ def write_chunks(args):
         stem = directory / f"chunk-{index // args.chunk_size:03d}"
         Path(f"{stem}.in.txt").write_text(format_chunk(part), encoding="utf-8")
         chunks.append({"input": f"{stem}.in.txt", "output": f"{stem}.out.txt", "papers": len(part)})
-    print(
-        json.dumps(
-            {
-                "date": args.date,
-                **counts(raw, ai_records),
-                "merged_leftovers": leftovers,
-                "instructions": str(guide),
-                "chunks": chunks,
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
-    return 0
+    return {
+        "date": args.date,
+        **counts(raw, ai_records),
+        "merged_leftovers": leftovers,
+        "instructions": str(guide),
+        "chunks": chunks,
+    }
 
 
 def cmd_finish(args):
@@ -471,6 +467,10 @@ def build_parser():
     merge.set_defaults(func=cmd_merge)
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
+
+    from summaries import local_runner
+
+    local_runner.add_parser(sub)
 
     handover = sub.add_parser("handover", help="usage gate reached: start the API job or pause")
     handover.add_argument("--date", required=True)
