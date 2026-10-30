@@ -3,8 +3,8 @@
 # Summaries depend on the SUMMARY_MODE repository variable:
 #   claude-code (default)  this job only crawls and publishes; a local Claude
 #                          Code task writes the summaries afterwards.
-#   api                    this job also summarises with Claude Haiku 5.5;
-#                          needs the ANTHROPIC_API_KEY secret.
+#   api                    this job also summarises through SUMMARY_PROVIDER
+#                          (anthropic, openai or gemini) and its key secret.
 # The site shows papers as "summary pending" until their summary exists.
 
 name: arXiv-daily-ai-enhanced
@@ -64,18 +64,35 @@ jobs:
         id: mode
         env:
           SUMMARY_MODE: ${{ vars.SUMMARY_MODE }}
+          SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          SUMMARY_REASONING_EFFORT: ${{ vars.SUMMARY_REASONING_EFFORT }}
+          SUMMARY_RESPONSE_FORMAT: ${{ vars.SUMMARY_RESPONSE_FORMAT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: uv run python -m summaries mode
 
-      - name: Summarise with the Anthropic API
+      - name: Summarise through the API
         if: steps.mode.outputs.mode == 'api'
         env:
+          SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          SUMMARY_REASONING_EFFORT: ${{ vars.SUMMARY_REASONING_EFFORT }}
+          SUMMARY_RESPONSE_FORMAT: ${{ vars.SUMMARY_RESPONSE_FORMAT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: uv run python -m summaries api --days 3
 
       - name: Log the summary path
         if: steps.mode.outputs.mode == 'api' && steps.ingest.outputs.has_new_content == 'true'
-        run: uv run python -m summaries record --date "${{ steps.crawl.outputs.date }}" --path api
+        env:
+          PROVIDER: ${{ vars.SUMMARY_PROVIDER }}
+          DAY: ${{ steps.crawl.outputs.date }}
+        run: uv run python -m summaries record --date "$DAY" --path api --reason "${PROVIDER:-anthropic}"
 
       - name: Summary
         if: always()

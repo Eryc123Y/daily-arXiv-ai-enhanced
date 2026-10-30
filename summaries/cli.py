@@ -20,6 +20,7 @@ from pathlib import Path
 from summaries.blocks import format_chunk, parse_blocks
 from summaries.databranch import DataBranch
 from summaries.mode import resolve_mode
+from summaries.providers import KEY_ENV, resolve_provider
 from summaries.prompting import instructions
 from summaries.records import (
     AI_FIELDS,
@@ -118,7 +119,8 @@ def cmd_ingest(args):
 
 
 def cmd_mode(args):
-    decision = resolve_mode(os.environ.get("SUMMARY_MODE", ""), bool(os.environ.get("ANTHROPIC_API_KEY")))
+    _, problem = resolve_provider(os.environ)
+    decision = resolve_mode(os.environ.get("SUMMARY_MODE", ""), problem)
     if decision.warning:
         print(f"::warning::{decision.warning}")
     emit(mode=decision.mode)
@@ -133,11 +135,17 @@ def recent_days(branch, days):
 
 
 def cmd_api(args):
-    from summaries.anthropic_api import make_client, summarize_all
+    from summaries import providers
+    from summaries.llm import summarize_all
 
+    config, problem = resolve_provider(os.environ)
+    if problem:
+        print(f"::error::Cannot summarise with the API: {problem}.")
+        return 2
+    print(f"Summarising with {config.provider} ({config.model})")
     branch = make_branch(args)
     branch.fetch()
-    client = None
+    call = None
     requested = summarised = 0
     failures = []
     for day in [args.date] if args.date else recent_days(branch, args.days):
@@ -145,10 +153,10 @@ def cmd_api(args):
         todo = pending_papers(raw, read_records(branch, ai_path(day, args.language)))
         if not todo:
             continue
-        client = client or make_client()
+        call = call or providers.make_summarizer(config, os.environ)
         for start in range(0, len(todo), args.batch_size):
             batch = todo[start : start + args.batch_size]
-            outcomes = summarize_all(client, batch, args.language, max_workers=args.max_workers)
+            outcomes = summarize_all(call, batch, args.language, max_workers=args.max_workers)
             new = {o.paper_id: o.ai for o in outcomes if o.ai}
             publish_summaries(branch, day, args.language, new, "api")
             requested += len(batch)
@@ -216,25 +224,59 @@ def cmd_record(args):
     return 0
 
 
+class SettingsUnavailable(RuntimeError):
+    pass
+
+
+def gh_variable(name):
+    """A repository variable's value, "" when it is not set."""
+    try:
+        return gh("variable", "get", name, "-R", REPO).strip()
+    except subprocess.CalledProcessError as error:
+        if "not found" in (error.stderr or ""):
+            return ""
+        raise SettingsUnavailable(f"could not read {name}: {(error.stderr or str(error)).strip()}") from error
+
+
+def remote_api_problem():
+    """What keeps the repository's API job from running, or None.
+
+    Reads the SUMMARY_PROVIDER and SUMMARY_MODEL variables and only the
+    names of the secrets; no key value is ever read.
+    """
+    try:
+        secrets = {s["name"] for s in json.loads(gh("secret", "list", "-R", REPO, "--json", "name") or "[]")}
+        env = {name: gh_variable(name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
+    except subprocess.CalledProcessError as error:
+        return f"could not read the repository secrets: {(error.stderr or str(error)).strip()}"
+    except SettingsUnavailable as error:
+        return str(error)
+    env.update({name: "set" for name in KEY_ENV.values() if name in secrets})
+    return resolve_provider(env)[1]
+
+
 def api_key_configured():
-    names = {s["name"] for s in json.loads(gh("secret", "list", "-R", REPO, "--json", "name") or "[]")}
-    return "ANTHROPIC_API_KEY" in names
+    return remote_api_problem() is None
 
 
 def cmd_handover(args):
     """Usage gate reached: hand the day's remainder to the Actions API job, or pause.
 
-    Only the secret's name is checked; its value never leaves GitHub.
+    Only the secrets' names are checked; key values never leave GitHub.
     """
     merged = merge_outputs(args)
+    problem = None
     if merged["pending"] == 0:
         path = "claude-code"
-    elif api_key_configured():
-        gh("workflow", "run", API_WORKFLOW, "-R", REPO, "-f", f"date={args.date}")
-        path = "api-fallback"
     else:
-        path = "paused-no-key"
-    entry = record_run(make_branch(args), args.date, args.language, path, args.reason)
+        problem = remote_api_problem()
+        if problem is None:
+            gh("workflow", "run", API_WORKFLOW, "-R", REPO, "-f", f"date={args.date}")
+            path = "api-fallback"
+        else:
+            path = "paused-no-key"
+    reason = "; ".join(filter(None, [args.reason, problem])) or None
+    entry = record_run(make_branch(args), args.date, args.language, path, reason)
     emit(**entry, problems=merged["problems"])
     return 0
 
