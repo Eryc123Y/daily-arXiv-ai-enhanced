@@ -21,7 +21,29 @@ class Identity:
     email: str
 
 
-DEFAULT_IDENTITY = Identity("Eryc123Y", "145822832+Eryc123Y@users.noreply.github.com")
+BOT_IDENTITY = Identity("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")
+
+
+def resolve_identity(repo_dir, env):
+    """Who data commits are made as.
+
+    COMMIT_NAME and COMMIT_EMAIL (repository variables in Actions, or the
+    environment locally) win; otherwise Actions commits as the
+    github-actions bot and a local run as the clone's git identity.
+    """
+    name = (env.get("COMMIT_NAME") or "").strip()
+    email = (env.get("COMMIT_EMAIL") or "").strip()
+    if name and email:
+        return Identity(name, email)
+    if env.get("GITHUB_ACTIONS") == "true":
+        return BOT_IDENTITY
+
+    def config(key):
+        result = subprocess.run(["git", "config", key], cwd=str(repo_dir), capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    name, email = config("user.name"), config("user.email")
+    return Identity(name, email) if name and email else BOT_IDENTITY
 
 
 class PublishError(RuntimeError):
@@ -111,7 +133,7 @@ class DataBranch:
         blob = self._git("hash-object", "-w", "--stdin", input=data).stdout.decode().strip()
         self._git("update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=env)
 
-    def publish(self, files, message, identity=DEFAULT_IDENTITY, attempts=4, on_before_push=None):
+    def publish(self, files, message, identity=None, attempts=4, on_before_push=None):
         """Commit `files` on top of the remote branch and push.
 
         `files` is {path: text} or a callable(DataBranch) -> {path: text},
@@ -119,6 +141,7 @@ class DataBranch:
         rebuilt on the newest state. Returns the new commit, or None when the
         branch already had identical content. `on_before_push` is a test seam.
         """
+        identity = identity or resolve_identity(self.repo_dir, os.environ)
         last_error = ""
         for _ in range(attempts):
             self.fetch()

@@ -1,13 +1,34 @@
-# daily-arXiv (Eryc123Y)
+# Daily arXiv
 
 > [!CAUTION]
 > 若您所在法域对学术数据有审查要求，谨慎运行本代码；任何二次分发版本必须履行合规审查（包括但不限于原始论文合规性、AI合规性）义务，否则一切法律后果由下游自行承担。
 >
 > If your jurisdiction has censorship requirements for academic data, run this code with caution; any secondary distribution version must remove the entrance accessible to China and fulfill the content review obligations, otherwise all legal consequences will be borne by the downstream.
 
-A personal fork of [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) (Apache-2.0, see [LICENSE](LICENSE)). Page: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
+A daily arXiv reading page with AI summaries, built on [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) (Apache-2.0, see [LICENSE](LICENSE)). Live instance: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
 
-Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords are grouped into topics (2D-to-3D and stereo; weak supervision and data reuse) in [`js/interest-presets.js`](js/interest-presets.js); the page filters by topic first, with arXiv categories as a secondary filter, and keywords can be changed per browser under "Keywords & authors".
+Every new paper of the day in your arXiv categories (this instance: cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR) (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords are grouped into topics (this instance: 2D-to-3D and stereo; weak supervision and data reuse) in [`js/interest-presets.js`](js/interest-presets.js); the page filters by topic first, with arXiv categories as a secondary filter, and keywords can be changed per browser under "Keywords & authors".
+
+## Deploy your own
+
+Everything runs on GitHub's free tier; the page reads its data from whichever repository serves it, so a fork needs no code changes.
+
+1. Fork this repository (the main branch is enough; the first crawl creates the `data` branch), then clone your fork.
+2. With [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com/) logged in to your account:
+
+   ```bash
+   uv sync
+   ```
+
+   ```bash
+   uv run python -m summaries setup --categories "cs.CV, cs.LG" --run
+   ```
+
+   This sets the repository variables, enables the workflows and GitHub Pages, starts the first crawl and prints your page's address. If GitHub has not enabled workflows on the fork yet, it tells you which button to click on the Actions tab; run it again afterwards. Add `--commit-name` and `--commit-email` (your GitHub noreply address) to make data commits under your name instead of the github-actions bot.
+3. Choose who writes the summaries:
+   - a local coding agent on your machine (default): `uv run python -m summaries run-local --client claude` (or `codex`, `antigravity`), on a cron or launchd schedule; or a Claude Code scheduled task with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md);
+   - an LLM API inside GitHub Actions: add your provider's key with `gh secret set` and set `SUMMARY_MODE` to `api` (see API providers below).
+4. Put your own interests in [`js/interest-presets.js`](js/interest-presets.js) (named topics with keywords), or edit them per browser under "Keywords & authors" on the page.
 
 ## How a day flows
 
@@ -21,7 +42,7 @@ Set by the repository variable `SUMMARY_MODE`.
 
 | Mode | Who summarises | Needs |
 |---|---|---|
-| `claude-code` (default, also when unset) | A local coding agent: the scheduled Claude Code task on Eric's Mac (Haiku subagents), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
+| `claude-code` (default, also when unset) | A local coding agent: a scheduled Claude Code task (Haiku subagents), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
 | `api` | The Actions job, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key secret |
 
 ### API providers
@@ -58,7 +79,7 @@ Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/da
 
 Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local time (MYT), so it starts about an hour after the morning crawl and has two later chances to resume. Each run:
 
-1. checks plan usage before starting and before every wave of subagents (Eric's research autopilot shares the subscription; see the fallback below);
+1. checks plan usage before starting and before every wave of subagents (so the job never crowds out your other work on the same subscription; see the fallback below);
 2. `uv run python -m summaries status` to find recent days with pending papers;
 3. `uv run python -m summaries prepare --date D` writes chunks of 20 pending papers to `.cache/summaries/D/`;
 4. Haiku subagents, three at a time, each turn one chunk into a plain-text block file;

@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
 from conftest import git, seed_data_branch
 
 from summaries import anthropic_api
@@ -10,6 +11,11 @@ from summaries.cli import main
 from summaries.records import dump_jsonl, parse_jsonl
 
 DAY = "2026-10-30"
+
+
+@pytest.fixture(autouse=True)
+def data_repo(monkeypatch):
+    monkeypatch.setenv("DATA_REPO", "alice/my-arxiv")
 AI_FILE = f"data/{DAY}_AI_enhanced_English.jsonl"
 FIELDS = "tldr: 总结{n}\nmotivation: 动机\nmethod: 方法\nresult: 结果\nconclusion: 结论\n"
 
@@ -282,7 +288,7 @@ def test_handover_dispatches_the_api_job_when_the_secret_exists(tmp_path, remote
     result = json.loads(out)
     assert code == 0
     assert result["path"] == "api-fallback" and result["pending"] == 1
-    assert ("workflow", "run", "summarize-api.yml", "-R", cli.REPO, "-f", f"date={DAY}") in calls
+    assert ("workflow", "run", "summarize-api.yml", "-R", "alice/my-arxiv", "-f", f"date={DAY}") in calls
     assert [r["id"] for r in parse_jsonl(branch_file(remote, AI_FILE))] == ["1"]
     entry = log_lines(remote)[-1]
     assert (entry["date"], entry["path"], entry["done"], entry["pending"]) == (DAY, "api-fallback", 1, 1)
