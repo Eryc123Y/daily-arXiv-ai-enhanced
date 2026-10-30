@@ -12,7 +12,7 @@ All run from the repository root with `uv run python -m summaries ...`:
 | `prepare --date D [--chunk-size 20]` | Merges any outputs left by an interrupted run, takes the run lock (`.cache/summaries/LOCK`, exit code 3 while another run holds it, expires after 3 hours), and writes `INSTRUCTIONS.md` plus `chunk-NNN.in.txt` for the pending papers. Prints the chunk list as JSON. |
 | `merge --date D` | Parses every `chunk-*.out.txt`, keeps complete blocks for papers of that day, merges them into `data/D_AI_enhanced_English.jsonl` and pushes. Existing summaries are never overwritten. Prints `done`, `pending` and any problems. |
 | `finish` | Releases the lock and deletes work folders older than 14 days. |
-| `handover --date D [--reason ...]` | Usage gate reached: merges finished outputs, then dispatches the `summarize-api` workflow for D if the `ANTHROPIC_API_KEY` secret exists, otherwise pauses. Logs the path. |
+| `handover --date D [--reason ...]` | Usage gate reached: merges finished outputs, then dispatches the `summarize-api` workflow for D if the configured API provider is ready (key secret by name, model where required), otherwise pauses and logs why. |
 | `record --date D --path P` | Appends a line to `logs/summary-runs.jsonl` on the `data` branch. |
 
 Pushes go through git plumbing on a temporary index: the checkout's branch and working tree are untouched, commits carry the `Eryc123Y` noreply identity, and a push that races the Actions job is rebuilt on top of the newer remote state.

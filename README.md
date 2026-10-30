@@ -22,19 +22,37 @@ Set by the repository variable `SUMMARY_MODE`.
 | Mode | Who summarises | Needs |
 |---|---|---|
 | `claude-code` (default, also when unset) | A scheduled Claude Code task on Eric's Mac, using Haiku subagents | Claude subscription; the Mac awake with the Claude app open |
-| `api` | The Actions job, Claude Haiku 5.5 (`claude-haiku-5-5`, effort low, structured output) | Secret `ANTHROPIC_API_KEY` |
+| `api` | The Actions job, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key secret |
 
-Switch to API mode:
+### API providers
+
+| `SUMMARY_PROVIDER` | Key secret | `SUMMARY_MODEL` | Notes |
+|---|---|---|---|
+| `anthropic` (default) | `ANTHROPIC_API_KEY` | optional, default `claude-haiku-5-5` | Anthropic SDK, low effort, structured output |
+| `openai` | `OPENAI_API_KEY` | required | Chat Completions with a strict JSON schema. Set `OPENAI_BASE_URL` to use any OpenAI-compatible server (DeepSeek, OpenRouter, vLLM, Ollama, ...) |
+| `gemini` | `GEMINI_API_KEY` | required | Gemini's OpenAI-compatible endpoint |
+
+Optional variables for `openai`/`gemini`: `SUMMARY_REASONING_EFFORT` (for example `low`, only for models that accept it) and `SUMMARY_RESPONSE_FORMAT=json_object` for servers without JSON-schema support. All providers share one retry policy: 429, 5xx and network errors are retried with backoff; another 4xx or a refusal leaves that paper pending; a wrong key or model name stops the run.
+
+Switch to API mode, for example with Gemini:
 
 ```bash
-gh secret set ANTHROPIC_API_KEY -R Eryc123Y/daily-arXiv-ai-enhanced
+gh secret set GEMINI_API_KEY -R Eryc123Y/daily-arXiv-ai-enhanced
+```
+
+```bash
+gh variable set SUMMARY_PROVIDER --body gemini -R Eryc123Y/daily-arXiv-ai-enhanced
+```
+
+```bash
+gh variable set SUMMARY_MODEL --body <gemini-model-id> -R Eryc123Y/daily-arXiv-ai-enhanced
 ```
 
 ```bash
 gh variable set SUMMARY_MODE --body api -R Eryc123Y/daily-arXiv-ai-enhanced
 ```
 
-Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/daily-arXiv-ai-enhanced`. If `api` is set without the secret, the job warns and falls back to `claude-code`. In API mode the local task finds nothing pending and only fills papers the API skipped (429/5xx are retried; a 400 or a refusal leaves the paper pending); it can also be paused in the Claude app.
+Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/daily-arXiv-ai-enhanced`. If `api` is set but the provider is not ready (no key secret, no model), the job warns and falls back to `claude-code`. In API mode the local task finds nothing pending and only fills papers the API skipped; it can also be paused in the Claude app.
 
 ### The local task (claude-code mode)
 
@@ -54,7 +72,7 @@ Progress is committed as it goes and finished papers are skipped, so a run that 
 When the 5-hour window or the weekly limit reaches **80%**, the task stops using the subscription and runs `uv run python -m summaries handover --date D`:
 
 - it merges and publishes what the subagents finished;
-- if the repository has an `ANTHROPIC_API_KEY` secret (only its name is checked, with `gh secret list`), it dispatches [`summarize-api.yml`](.github/workflows/summarize-api.yml) for that date. That Actions job summarises the remaining papers with Claude Haiku 5.5 through the same `api` code path, so the day still ends complete;
+- if the configured API provider is ready (its key secret exists, checked by name with `gh secret list`, and `SUMMARY_MODEL` is set where required), it dispatches [`summarize-api.yml`](.github/workflows/summarize-api.yml) for that date. That Actions job summarises the remaining papers through the same `api` code path, so the day still ends complete;
 - without the secret it pauses: the rest of the day stays "summary pending" on the page and the next scheduled run resumes on the subscription.
 
 Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`date`, `path` = `claude-code` / `api` / `api-fallback` / `paused-no-key`, `total`, `done`, `pending`, time, reason). The key lives only in the GitHub secret, never on the Mac.
@@ -78,7 +96,7 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
 
 ## Changes from upstream
 

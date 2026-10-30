@@ -1,6 +1,6 @@
 # API fallback for one day: the local Claude Code task dispatches this when
-# Eric's plan usage reaches its gate, so the rest of the day is summarised
-# with Claude Haiku 5.5 using the ANTHROPIC_API_KEY repository secret.
+# plan usage reaches its gate, so the rest of the day is summarised through
+# SUMMARY_PROVIDER (anthropic, openai or gemini) and its key secret.
 
 name: summarize-api
 
@@ -40,16 +40,22 @@ jobs:
             echo "::error::date must be YYYY-MM-DD, got '$DAY'"
             exit 1
           fi
-          if [ -z "${{ secrets.ANTHROPIC_API_KEY != '' && 'set' || '' }}" ]; then
-            echo "::error::The ANTHROPIC_API_KEY secret is not set."
-            exit 1
-          fi
 
       - name: Summarise the remaining papers
         env:
+          SUMMARY_PROVIDER: ${{ vars.SUMMARY_PROVIDER }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
+          SUMMARY_REASONING_EFFORT: ${{ vars.SUMMARY_REASONING_EFFORT }}
+          SUMMARY_RESPONSE_FORMAT: ${{ vars.SUMMARY_RESPONSE_FORMAT }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: uv run python -m summaries api --date "$DAY"
 
       - name: Log the path
         if: always()
-        run: uv run python -m summaries record --date "$DAY" --path api-fallback --reason "${{ job.status }}"
+        env:
+          PROVIDER: ${{ vars.SUMMARY_PROVIDER }}
+          STATUS: ${{ job.status }}
+        run: uv run python -m summaries record --date "$DAY" --path api-fallback --reason "${PROVIDER:-anthropic} $STATUS"

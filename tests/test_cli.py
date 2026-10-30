@@ -163,7 +163,8 @@ def test_api_command_publishes_summaries_and_leaves_failures_pending(tmp_path, r
 
     client = MagicMock()
     client.messages.create.side_effect = create
-    monkeypatch.setattr(anthropic_api, "make_client", lambda: client)
+    monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     code, out = run(clone, "api", "--date", DAY, capsys=capsys)
 
@@ -183,7 +184,8 @@ def test_api_without_a_date_fills_pending_papers_of_recent_days(tmp_path, remote
     client.messages.create.return_value = SimpleNamespace(
         stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(ai))]
     )
-    monkeypatch.setattr(anthropic_api, "make_client", lambda: client)
+    monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     code, out = run(clone, "api", "--days", "36500", capsys=capsys)
 
@@ -196,7 +198,8 @@ def test_api_exits_non_zero_when_every_paper_fails(tmp_path, remote_and_clone, m
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
     client = MagicMock()
     client.messages.create.return_value = SimpleNamespace(stop_reason="refusal", content=[])
-    monkeypatch.setattr(anthropic_api, "make_client", lambda: client)
+    monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     code, _ = run(clone, "api", "--date", DAY, capsys=capsys)
 
@@ -220,7 +223,8 @@ def test_api_publishes_each_batch_before_a_fatal_error(tmp_path, remote_and_clon
 
     client = MagicMock()
     client.messages.create.side_effect = create
-    monkeypatch.setattr(anthropic_api, "make_client", lambda: client)
+    monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
     with pytest.raises(anthropic.AuthenticationError):
         run(clone, "api", "--date", DAY, "--batch-size", "1", capsys=capsys)
@@ -240,13 +244,20 @@ def test_prepare_releases_the_lock_when_it_fails(tmp_path, remote_and_clone, cap
     assert not (clone / ".cache" / "summaries" / "LOCK").exists()
 
 
-def fake_gh(secrets, calls):
-    """Stand-in for the gh CLI: lists `secrets` and records workflow dispatches."""
+def fake_gh(secrets, calls, variables=None):
+    """Stand-in for the gh CLI: lists `secrets`, reads `variables`, records dispatches."""
+    import subprocess
 
     def gh(*args):
         calls.append(args)
         if args[:2] == ("secret", "list"):
             return json.dumps([{"name": n} for n in secrets])
+        if args[:2] == ("variable", "get"):
+            if variables == "unreachable":
+                raise subprocess.CalledProcessError(1, ["gh", *args], stderr="HTTP 502: Bad Gateway")
+            if args[2] not in (variables or {}):
+                raise subprocess.CalledProcessError(1, ["gh", *args], stderr=f"variable {args[2]} was not found")
+            return variables[args[2]] + "\n"
         return ""
 
     return gh
@@ -319,3 +330,89 @@ def test_record_appends_the_day_path_to_the_run_log(tmp_path, remote_and_clone, 
     assert [e["path"] for e in entries] == ["claude-code", "api-fallback"]
     assert entries[0]["total"] == 1 and "at" in entries[0]
     assert "summary-runs" not in branch_file(remote, "assets/file-list.txt")
+
+
+
+def test_api_command_works_with_an_openai_compatible_provider(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import openai_compat
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+    ai = {k: f"{k} text" for k in ("tldr", "motivation", "method", "result", "conclusion")}
+    client = MagicMock()
+    client.chat.completions.create.return_value = SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(ai), refusal=None), finish_reason="stop")]
+    )
+    seen = {}
+
+    def make_client(api_key, base_url=None):
+        seen.update(api_key=api_key, base_url=base_url)
+        return client
+
+    monkeypatch.setattr(openai_compat, "make_client", make_client)
+    for name, value in {"SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "gemini-test", "GEMINI_API_KEY": "g-key"}.items():
+        monkeypatch.setenv(name, value)
+
+    code, _ = run(clone, "api", "--date", DAY, capsys=capsys)
+
+    assert code == 0
+    assert seen == {"api_key": "g-key", "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/"}
+    assert client.chat.completions.create.call_args.kwargs["model"] == "gemini-test"
+    assert parse_jsonl(branch_file(remote, AI_FILE))[0]["AI"] == ai
+
+
+def test_api_command_refuses_to_start_without_a_ready_provider(tmp_path, remote_and_clone, monkeypatch, capsys):
+    _, clone = remote_and_clone
+    monkeypatch.setenv("SUMMARY_PROVIDER", "openai")
+    monkeypatch.delenv("SUMMARY_MODEL", raising=False)
+
+    code, out = run(clone, "api", "--date", DAY, capsys=capsys)
+
+    assert code == 2
+    assert "SUMMARY_MODEL" in out
+
+
+def test_mode_command_accepts_a_ready_gemini_provider(tmp_path, remote_and_clone, monkeypatch, capsys):
+    _, clone = remote_and_clone
+    gh_output = tmp_path / "gh_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(gh_output))
+    for name, value in {"SUMMARY_MODE": "api", "SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "g", "GEMINI_API_KEY": "x"}.items():
+        monkeypatch.setenv(name, value)
+
+    run(clone, "mode", capsys=capsys)
+
+    assert "mode=api" in gh_output.read_text()
+
+
+def test_handover_checks_the_configured_providers_secret_and_model(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+    calls = []
+    monkeypatch.setattr(cli, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini"}))
+
+    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+    assert json.loads(out)["path"] == "paused-no-key"
+    assert "SUMMARY_MODEL" in log_lines(remote)[-1]["reason"]
+
+    monkeypatch.setattr(cli, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "g"}))
+    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+    assert json.loads(out)["path"] == "api-fallback"
+
+
+
+def test_handover_pauses_when_the_repository_settings_cannot_be_read(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """A failed gh call must not be mistaken for an unset SUMMARY_PROVIDER."""
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+    calls = []
+    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls, "unreachable"))
+
+    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+
+    assert json.loads(out)["path"] == "paused-no-key"
+    assert "could not read" in log_lines(remote)[-1]["reason"]
+    assert not any(c[:2] == ("workflow", "run") for c in calls)
