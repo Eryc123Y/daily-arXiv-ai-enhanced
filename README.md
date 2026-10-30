@@ -7,7 +7,7 @@
 
 A personal fork of [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) (Apache-2.0, see [LICENSE](LICENSE)). Page: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
 
-Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords live in [`js/interest-presets.js`](js/interest-presets.js) and can be changed per browser under "Keywords & authors".
+Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords are grouped into topics (2D-to-3D and stereo; weak supervision and data reuse) in [`js/interest-presets.js`](js/interest-presets.js); the page filters by topic first, with arXiv categories as a secondary filter, and keywords can be changed per browser under "Keywords & authors".
 
 ## How a day flows
 

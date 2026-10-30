@@ -78,3 +78,9 @@ test('interest presets cover both of Eric\'s focus areas without duplicates', ()
   }
   assert.equal(new Set(keywords.map(k => k.toLowerCase())).size, keywords.length);
 });
+
+test('preset topics hold exactly the flat keyword list', () => {
+  const flat = INTEREST_PRESETS.topics.flatMap(t => t.keywords);
+  assert.deepEqual(flat, INTEREST_PRESETS.keywords);
+  assert.ok(INTEREST_PRESETS.topics.length >= 2);
+});
