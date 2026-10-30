@@ -30,3 +30,4 @@ Planned for after the move from GitHub Pages to a self-hosted server (a VPS, or 
 ## Deferred
 
 - Intro video for the README, once the features and UI settle.
+- AI triage from title and abstract (undecided whether it can be done well): relevance to the reader's topics (0-3), contribution type, strength of the evidence the abstract states, whether it explains mechanisms or conditions, code and compute needs, and the model's confidence in each judgement, written in the same call as the summary. Sort only, never hide; pilot on about 50 papers against the reader's own judgement first. No author or venue prestige, no citation forecasts, no novelty verdicts from abstracts.
