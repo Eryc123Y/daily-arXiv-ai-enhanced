@@ -1,6 +1,6 @@
 # Claude Code summary mode
 
-The default mode. GitHub Actions publishes the day's papers; a scheduled Claude Code task on Eric's Mac writes the Chinese summaries with Haiku subagents and pushes them to the `data` branch. No API key is involved.
+The default mode. GitHub Actions publishes the day's papers; a scheduled Claude Code task on Eric's Mac writes the English summaries with Haiku subagents and pushes them to the `data` branch. No API key is involved.
 
 ## Commands
 
@@ -10,7 +10,7 @@ All run from the repository root with `uv run python -m summaries ...`:
 |---|---|
 | `status [--days 4]` | Recent days on the `data` branch with `total`, `done`, `pending`. |
 | `prepare --date D [--chunk-size 20]` | Merges any outputs left by an interrupted run, takes the run lock (`.cache/summaries/LOCK`, exit code 3 while another run holds it, expires after 3 hours), and writes `INSTRUCTIONS.md` plus `chunk-NNN.in.txt` for the pending papers. Prints the chunk list as JSON. |
-| `merge --date D` | Parses every `chunk-*.out.txt`, keeps complete blocks for papers of that day, merges them into `data/D_AI_enhanced_Chinese.jsonl` and pushes. Existing summaries are never overwritten. Prints `done`, `pending` and any problems. |
+| `merge --date D` | Parses every `chunk-*.out.txt`, keeps complete blocks for papers of that day, merges them into `data/D_AI_enhanced_English.jsonl` and pushes. Existing summaries are never overwritten. Prints `done`, `pending` and any problems. |
 | `finish` | Releases the lock and deletes work folders older than 14 days. |
 | `handover --date D [--reason ...]` | Usage gate reached: merges finished outputs, then dispatches the `summarize-api` workflow for D if the `ANTHROPIC_API_KEY` secret exists, otherwise pauses. Logs the path. |
 | `record --date D --path P` | Appends a line to `logs/summary-runs.jsonl` on the `data` branch. |
@@ -27,7 +27,7 @@ title: ...
 abstract: ...
 ```
 
-Output blocks (field names in English, content in Chinese, one line each):
+Output blocks (field names in English, content in English, one line each):
 
 ```
 === 2610.12345

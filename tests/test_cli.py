@@ -10,7 +10,7 @@ from summaries.cli import main
 from summaries.records import dump_jsonl, parse_jsonl
 
 DAY = "2026-10-30"
-AI_FILE = f"data/{DAY}_AI_enhanced_Chinese.jsonl"
+AI_FILE = f"data/{DAY}_AI_enhanced_English.jsonl"
 FIELDS = "tldr: 总结{n}\nmotivation: 动机\nmethod: 方法\nresult: 结果\nconclusion: 结论\n"
 
 
@@ -81,7 +81,7 @@ def test_claude_code_flow_prepare_merge_and_resume(tmp_path, remote_and_clone, c
     assert (plan["total"], plan["pending"], len(plan["chunks"])) == (3, 3, 2)
     first = Path(plan["chunks"][0]["input"]).read_text()
     assert "=== 1" in first and "=== 2" in first and "abstract: S1" in first
-    assert "Chinese" in Path(plan["instructions"]).read_text()
+    assert "English" in Path(plan["instructions"]).read_text()
 
     # Subagent finished chunk 0 only; one block is unusable and one id is foreign.
     Path(plan["chunks"][0]["output"]).write_text(
