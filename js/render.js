@@ -114,5 +114,27 @@
     return `Summaries are ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} papers. The rest show their abstract until theirs is written.`;
   }
 
-  return { formatDay, formatRange, authorLine, matchesFor, renderPaper, renderSection, daySentence, progressText };
+  /** The user's keywords grouped into the preset topics; the rest form one extra topic. */
+  function topicsFor(keywords, presets) {
+    const wanted = new Map(keywords.map(k => [k.toLowerCase(), k]));
+    const used = new Set();
+    const topics = ((presets && presets.topics) || [])
+      .map(topic => ({
+        name: topic.name,
+        keywords: topic.keywords.filter(k => wanted.has(k.toLowerCase())).map(k => {
+          used.add(k.toLowerCase());
+          return wanted.get(k.toLowerCase());
+        }),
+      }))
+      .filter(topic => topic.keywords.length);
+    const others = keywords.filter(k => !used.has(k.toLowerCase()));
+    return others.length ? [...topics, { name: 'Your other keywords', keywords: others }] : topics;
+  }
+
+  function topicNames(match, topics) {
+    const hit = new Set(match.keywords.map(k => k.toLowerCase()));
+    return topics.filter(t => t.keywords.some(k => hit.has(k.toLowerCase()))).map(t => t.name);
+  }
+
+  return { formatDay, formatRange, authorLine, matchesFor, renderPaper, renderSection, daySentence, progressText, topicsFor, topicNames };
 });

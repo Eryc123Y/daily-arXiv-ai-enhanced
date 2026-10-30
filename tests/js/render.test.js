@@ -52,3 +52,19 @@ test('the day sentence counts papers and matches', () => {
   assert.equal(Render.daySentence(1, 1, true), '1 new paper; 1 matches your interests.');
   assert.equal(Render.daySentence(5, 0, false), '5 new papers.');
 });
+
+test('topics come from the presets, with extra keywords in their own topic', () => {
+  const presets = { topics: [{ name: 'Stereo', keywords: ['stereo', 'disparity'] }, { name: 'RL', keywords: ['RLVR'] }] };
+  const topics = Render.topicsFor(['stereo', 'RLVR', 'diffusion'], presets);
+  assert.deepEqual(topics, [
+    { name: 'Stereo', keywords: ['stereo'] },
+    { name: 'RL', keywords: ['RLVR'] },
+    { name: 'Your other keywords', keywords: ['diffusion'] },
+  ]);
+});
+
+test('a paper belongs to every topic one of whose keywords it matches', () => {
+  const topics = [{ name: 'Stereo', keywords: ['stereo'] }, { name: 'RL', keywords: ['RLVR'] }];
+  assert.deepEqual(Render.topicNames({ keywords: ['stereo'], authors: [] }, topics), ['Stereo']);
+  assert.deepEqual(Render.topicNames({ keywords: [], authors: [] }, topics), []);
+});

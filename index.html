@@ -45,15 +45,16 @@
         <span>Put interest matches first</span>
       </label>
 
-      <nav class="categories" aria-label="Categories">
-        <h2 class="rail-heading">Categories</h2>
-        <ul id="categoryList"></ul>
+      <nav class="filter-group topics" aria-label="Topics">
+        <h2 class="rail-heading">Topics</h2>
+        <ul id="topicList"></ul>
+        <p id="interestSummary" class="rail-note"></p>
       </nav>
 
-      <section class="rail-interests" aria-label="Interest keywords">
-        <h2 class="rail-heading">Interests</h2>
-        <p id="interestSummary" class="rail-note"></p>
-      </section>
+      <details class="filter-group categories">
+        <summary>arXiv categories</summary>
+        <ul id="categoryList"></ul>
+      </details>
     </aside>
 
     <main id="papers" tabindex="-1">

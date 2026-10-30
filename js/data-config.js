@@ -22,6 +22,12 @@ const DATA_CONFIG = {
     dataBranch: 'data',
 
     /**
+     * Categories the crawl covers; cross-lists from any other primary
+     * category are grouped as "Other fields" on the page
+     */
+    mainCategories: ['cs.CV', 'cs.AI', 'cs.LG', 'cs.CL', 'stat.ML', 'cs.GR'],
+
+    /**
      * Get the base URL for raw GitHub content from data branch
      * @returns {string} Base URL for raw GitHub content
      */

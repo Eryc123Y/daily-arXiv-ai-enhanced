@@ -14,6 +14,8 @@ const state = {
   languages: new Map(),
   records: [],
   category: 'all',
+  topic: 'all',
+  topics: [],
   query: '',
   keywords: [],
   authors: [],
@@ -45,6 +47,7 @@ function defaultKeywords() {
 
 function loadPreferences() {
   state.keywords = readList(KEYWORDS_KEY, defaultKeywords());
+  state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
   state.authors = readList(AUTHORS_KEY, []);
   state.pullMatches = readList(PULL_KEY, true) !== false;
   $('pullMatches').checked = state.pullMatches;
@@ -90,10 +93,25 @@ function selectedDays() {
   return state.days.filter(d => d >= from && d <= to).sort();
 }
 
+const OTHER_FIELDS = 'other';
+
+function categoryOf(record) {
+  const primary = (record.categories || [])[0];
+  return DATA_CONFIG.mainCategories.includes(primary) ? primary : OTHER_FIELDS;
+}
+
+function inTopic(record) {
+  if (state.topic === 'all') return true;
+  const match = Render.matchesFor(record, state.keywords, state.authors);
+  if (state.topic === 'authors') return match.authors.length > 0;
+  return Render.topicNames(match, state.topics).includes(state.topic);
+}
+
 function visibleRecords() {
   const q = state.query.trim().toLowerCase();
   return state.records.filter(r => {
-    if (state.category !== 'all' && (r.categories || [])[0] !== state.category) return false;
+    if (state.category !== 'all' && categoryOf(r) !== state.category) return false;
+    if (!inTopic(r)) return false;
     if (!q) return true;
     const ai = r.pending ? {} : r.AI || {};
     return [r.title, r.summary, (r.authors || []).join(', '), r.id, ...Object.values(ai)]
@@ -103,17 +121,39 @@ function visibleRecords() {
   });
 }
 
+function filterButton(kind, value, label, count, active) {
+  return `<li><button type="button" data-${kind}="${PaperData.escapeHtml(value)}" aria-pressed="${active === value}">` +
+    `<span>${PaperData.escapeHtml(label)}</span><span class="count">${count}</span></button></li>`;
+}
+
 function renderCategories() {
   const counts = new Map();
+  state.records.forEach(r => counts.set(categoryOf(r), (counts.get(categoryOf(r)) || 0) + 1));
+  const main = DATA_CONFIG.mainCategories.filter(c => counts.has(c)).sort((a, b) => counts.get(b) - counts.get(a));
+  const items = [
+    filterButton('category', 'all', 'All categories', state.records.length, state.category),
+    ...main.map(c => filterButton('category', c, c, counts.get(c), state.category)),
+  ];
+  if (counts.has(OTHER_FIELDS)) {
+    items.push(filterButton('category', OTHER_FIELDS, 'Other fields (cross-lists)', counts.get(OTHER_FIELDS), state.category));
+  }
+  $('categoryList').innerHTML = items.join('');
+}
+
+function renderTopics() {
+  const counts = new Map(state.topics.map(t => [t.name, 0]));
+  let authorCount = 0;
   state.records.forEach(r => {
-    const primary = (r.categories || [])[0];
-    if (primary) counts.set(primary, (counts.get(primary) || 0) + 1);
+    const match = Render.matchesFor(r, state.keywords, state.authors);
+    Render.topicNames(match, state.topics).forEach(name => counts.set(name, counts.get(name) + 1));
+    if (match.authors.length) authorCount += 1;
   });
-  const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const item = (value, label, count) =>
-    `<li><button type="button" data-category="${PaperData.escapeHtml(value)}" aria-pressed="${state.category === value}">` +
-    `<span>${PaperData.escapeHtml(label)}</span><span class="count">${count}</span></button></li>`;
-  $('categoryList').innerHTML = [item('all', 'All categories', state.records.length), ...ordered.map(([c, n]) => item(c, c, n))].join('');
+  const items = [
+    filterButton('topic', 'all', 'All papers', state.records.length, state.topic),
+    ...state.topics.map(t => filterButton('topic', t.name, t.name, counts.get(t.name), state.topic)),
+  ];
+  if (state.authors.length) items.push(filterButton('topic', 'authors', 'Your authors', authorCount, state.topic));
+  $('topicList').innerHTML = items.join('');
 }
 
 function renderInterestSummary(matchedCount) {
@@ -169,6 +209,7 @@ function renderList() {
 
 function render(days) {
   renderHead(days);
+  renderTopics();
   renderCategories();
   renderList();
 }
@@ -225,6 +266,7 @@ async function showSelection() {
   $('paperList').innerHTML = '<p class="empty">Loading papers…</p>';
   state.records = await loadDays(days);
   state.category = 'all';
+  state.topic = 'all';
   render(days);
   const hash = new URLSearchParams({ day: days[days.length - 1], ...(days.length > 1 ? { from: days[0] } : {}) });
   history.replaceState(null, '', `#${hash}`);
@@ -260,6 +302,13 @@ function bindEvents() {
     renderCategories();
     renderList();
   });
+  $('topicList').addEventListener('click', event => {
+    const button = event.target.closest('button[data-topic]');
+    if (!button) return;
+    state.topic = button.dataset.topic;
+    renderTopics();
+    renderList();
+  });
   document.addEventListener('click', event => {
     if (event.target.closest('[data-open-settings]')) openSettings();
   });
@@ -272,6 +321,8 @@ function bindEvents() {
     const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
     state.keywords = lines('keywordsInput');
     state.authors = lines('authorsInput');
+    state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
+    state.topic = 'all';
     writeList(KEYWORDS_KEY, state.keywords);
     writeList(AUTHORS_KEY, state.authors);
     render(selectedDays());
