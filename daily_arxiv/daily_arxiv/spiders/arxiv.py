@@ -1,77 +1,128 @@
-import scrapy
 import os
 import re
+from datetime import date, timedelta
+
+import scrapy
+
+ARXIV_ID = re.compile(r"^(\d{4})\.\d{4,5}$")
+CATEGORY_CODE = re.compile(r"\(([a-z\-]+(?:\.[A-Za-z\-]+)?)\)")
+GITHUB_REPO = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+")
+GITHUB_PAGES = re.compile(r"^https?://[\w-]+\.github\.io(?:/[\w.\-/]*)?")
+
+
+def _text(selector):
+    """Whitespace-normalised text of a selector, without its 'Label:' descriptor."""
+    if not selector:
+        return ""
+    text = " ".join(selector.xpath("string(.)").get().split())
+    return re.sub(r"^(Title|Comments|Subjects):\s*", "", text)
 
 
 class ArxivSpider(scrapy.Spider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        categories = os.environ.get("CATEGORIES", "cs.CV")
-        categories = categories.split(",")
-        # 保存目标分类列表，用于后续验证
-        self.target_categories = set(map(str.strip, categories))
-        self.start_urls = [
-            f"https://arxiv.org/list/{cat}/new" for cat in self.target_categories
-        ]  # 起始URL（计算机科学领域的最新论文）
+    """Read each category's /new listing, which carries every field we need.
 
-    name = "arxiv"  # 爬虫名称
-    allowed_domains = ["arxiv.org"]  # 允许爬取的域名
+    Keeps "New submissions" and "Cross-lists"; skips "Replacements" and
+    late cross-lists of papers numbered before the month of the day's
+    oldest new submission. Titles, authors and abstracts come from the
+    listing itself, so no per-paper arXiv API call is needed.
+    """
+
+    name = "arxiv"
+    allowed_domains = ["arxiv.org"]
+
+    def __init__(self, categories=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        raw = categories or os.environ.get("CATEGORIES", "cs.CV")
+        self.target_categories = {c.strip() for c in raw.split(",") if c.strip()}
+        self.start_urls = [
+            f"https://arxiv.org/list/{cat}/new?show=2000" for cat in self.target_categories
+        ]
+
+    @staticmethod
+    def cross_list_cutoff(new_papers, today=None):
+        """YYMM before which a cross-list counts as late.
+
+        The month of the oldest new submission on the page; for a listing
+        without new submissions, the month of one week ago.
+        """
+        months = [m.group(1) for p in new_papers if (m := ARXIV_ID.match(p["id"]))]
+        if months:
+            return min(months)
+        week_ago = (date.fromisoformat(today) if today else date.today()) - timedelta(days=7)
+        return week_ago.strftime("%y%m")
+
+    @staticmethod
+    def is_late_cross_list(arxiv_id, oldest_new_month):
+        match = ARXIV_ID.match(arxiv_id)
+        return bool(match and oldest_new_month and match.group(1) < oldest_new_month)
+
+    def _sections(self, response):
+        """Item numbers where the cross-list and replacement sections start."""
+        starts = {}
+        for link in response.css("div[id=dlpage] ul li a"):
+            label = (link.css("::text").get() or "").lower()
+            match = re.search(r"#item(\d+)$", link.attrib.get("href") or "")
+            if not match:
+                continue
+            number = int(match.group(1))
+            if "cross" in label:
+                starts["cross"] = number
+            elif "replace" in label:
+                starts["replace"] = number
+        return starts.get("cross"), starts.get("replace")
+
+    def _paper(self, dt, dd):
+        arxiv_id = dt.css("a[title=Abstract]::attr(id)").get() or (
+            dt.css("a[title=Abstract]::attr(href)").get() or ""
+        ).split("/")[-1]
+        primary = CATEGORY_CODE.findall(dd.css(".list-subjects .primary-subject::text").get() or "")
+        listed = CATEGORY_CODE.findall(_text(dd.css(".list-subjects")))
+        categories = list(dict.fromkeys(primary + listed))
+        comment = _text(dd.css(".list-comments")) or None
+        paper = {
+            "id": arxiv_id.strip(),
+            "categories": categories,
+            "pdf": f"https://arxiv.org/pdf/{arxiv_id.strip()}",
+            "abs": f"https://arxiv.org/abs/{arxiv_id.strip()}",
+            "authors": [a.strip() for a in dd.css(".list-authors a::text").getall() if a.strip()],
+            "title": _text(dd.css(".list-title")),
+            "comment": comment,
+            "summary": _text(dd.css("p.mathjax")),
+        }
+        code_url = self._code_url(dd)
+        if code_url:
+            paper["code_url"] = code_url
+        return paper
+
+    @staticmethod
+    def _code_url(dd):
+        links = dd.css("p.mathjax a::attr(href), .list-comments a::attr(href)").getall()
+        for pattern in (GITHUB_REPO, GITHUB_PAGES):
+            for link in links:
+                match = pattern.match(link)
+                if match:
+                    return match.group(0).rstrip(".,)").removesuffix(".git")
+        return None
 
     def parse(self, response):
-        # 提取每篇论文的信息
-        anchors = []
-        for li in response.css("div[id=dlpage] ul li"):
-            href = li.css("a::attr(href)").get()
-            if href and "item" in href:
-                anchors.append(int(href.split("item")[-1]))
+        cross_start, replace_start = self._sections(response)
+        new, cross = [], []
+        for dt in response.css("div[id=dlpage] dl dt"):
+            anchor = dt.css("a[name^='item']::attr(name)").get()
+            dd = dt.xpath("following-sibling::dd[1]")
+            if not anchor or not dd:
+                continue
+            number = int(anchor.split("item")[-1])
+            if replace_start is not None and number >= replace_start:
+                continue
+            section = cross if cross_start is not None and number >= cross_start else new
+            section.append(self._paper(dt, dd))
 
-        # 遍历每篇论文的详细信息
-        for paper in response.css("dl dt"):
-            paper_anchor = paper.css("a[name^='item']::attr(name)").get()
-            if not paper_anchor:
+        oldest_new_month = self.cross_list_cutoff(new)
+        for paper in new:
+            yield paper
+        for paper in cross:
+            if self.is_late_cross_list(paper["id"], oldest_new_month):
+                self.logger.info(f"Skipping late cross-list {paper['id']}")
                 continue
-                
-            paper_id = int(paper_anchor.split("item")[-1])
-            if anchors and paper_id >= anchors[-1]:
-                continue
-
-            # 获取论文ID
-            abstract_link = paper.css("a[title='Abstract']::attr(href)").get()
-            if not abstract_link:
-                continue
-                
-            arxiv_id = abstract_link.split("/")[-1]
-            
-            # 获取对应的论文描述部分 (dd元素)
-            paper_dd = paper.xpath("following-sibling::dd[1]")
-            if not paper_dd:
-                continue
-            
-            # 提取论文分类信息 - 在subjects部分
-            subjects_text = paper_dd.css(".list-subjects .primary-subject::text").get()
-            if not subjects_text:
-                # 如果找不到主分类，尝试其他方式获取分类
-                subjects_text = paper_dd.css(".list-subjects::text").get()
-            
-            if subjects_text:
-                # 解析分类信息，通常格式如 "Computer Vision and Pattern Recognition (cs.CV)"
-                # 提取括号中的分类代码
-                categories_in_paper = re.findall(r'\(([^)]+)\)', subjects_text)
-                
-                # 检查论文分类是否与目标分类有交集
-                paper_categories = set(categories_in_paper)
-                if paper_categories.intersection(self.target_categories):
-                    yield {
-                        "id": arxiv_id,
-                        "categories": list(paper_categories),  # 添加分类信息用于调试
-                    }
-                    self.logger.info(f"Found paper {arxiv_id} with categories {paper_categories}")
-                else:
-                    self.logger.debug(f"Skipped paper {arxiv_id} with categories {paper_categories} (not in target {self.target_categories})")
-            else:
-                # 如果无法获取分类信息，记录警告但仍然返回论文（保持向后兼容）
-                self.logger.warning(f"Could not extract categories for paper {arxiv_id}, including anyway")
-                yield {
-                    "id": arxiv_id,
-                    "categories": [],
-                }
+            yield paper

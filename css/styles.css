@@ -2326,3 +2326,40 @@ footer {
   display: flex;
   align-items: center;
 }
+/* 摘要待生成 / Summaries pending */
+.summary-status {
+  margin: 0 auto 16px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  background: rgba(251, 191, 36, 0.12);
+  color: #92400e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.pending-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.18);
+  color: #92400e;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.pending-paper .paper-card-summary {
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  border-left-color: #d97706;
+}
+
+.pending-note {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(251, 191, 36, 0.12);
+  color: #92400e;
+}

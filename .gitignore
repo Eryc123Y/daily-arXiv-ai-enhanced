@@ -17,3 +17,5 @@ package-lock.json
 yarn.lock
 .DS_Store
 package.json
+# Local summary task work files
+.cache/

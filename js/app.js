@@ -33,8 +33,9 @@ function loadUserKeywords() {
       activeKeywords = [];
     }
   } else {
-    userKeywords = [];
-    activeKeywords = [];
+    // 未保存过关键词时使用研究兴趣预设 / Fall back to the interest presets
+    userKeywords = (window.INTEREST_PRESETS && INTEREST_PRESETS.keywords) ? [...INTEREST_PRESETS.keywords] : [];
+    activeKeywords = [...userKeywords];
   }
   
   // renderKeywordTags();
@@ -293,14 +294,12 @@ function matchPapersByKeywords(papers, keywords) {
 
   return papers.map(paper => {
     const matches = keywords.some(keyword => {
-      const searchText = `${paper.title} ${paper.summary}`.toLowerCase();
-      return searchText.includes(keyword.toLowerCase());
+      return paperMatchesKeyword(paper, keyword);
     });
 
     if (matches) {
       const matchedKeywords = keywords.filter(keyword => {
-        const searchText = `${paper.title} ${paper.summary}`.toLowerCase();
-        return searchText.includes(keyword.toLowerCase());
+        return paperMatchesKeyword(paper, keyword);
       });
       return {
         ...paper,
@@ -393,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function fetchGitHubStats() {
   try {
-    const response = await fetch('https://api.github.com/repos/dw-dengwei/daily-arXiv-ai-enhanced');
+    const response = await fetch(`https://api.github.com/repos/${DATA_CONFIG.repoOwner}/${DATA_CONFIG.repoName}`);
     const data = await response.json();
     const starCount = data.stargazers_count;
     const forkCount = data.forks_count;
@@ -705,30 +704,10 @@ async function fetchAvailableDates() {
       return [];
     }
     const text = await response.text();
-    const files = text.trim().split('\n');
-
-    const dateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
-    const dateLanguageMap = new Map(); // Store date -> available languages
-    const dates = [];
-    
-    files.forEach(file => {
-      const match = file.match(dateRegex);
-      if (match && match[1] && match[2]) {
-        const date = match[1];
-        const language = match[2];
-        
-        if (!dateLanguageMap.has(date)) {
-          dateLanguageMap.set(date, []);
-          dates.push(date);
-        }
-        dateLanguageMap.get(date).push(language);
-      }
-    });
-    
-    // Store the language mapping globally for later use
-    window.dateLanguageMap = dateLanguageMap;
-    availableDates = [...new Set(dates)];
-    availableDates.sort((a, b) => new Date(b) - new Date(a));
+    // 原始抓取文件和摘要文件都算可用日期 / Raw crawl files count as dates too
+    const fileList = PaperData.parseFileList(text);
+    window.dateLanguageMap = fileList.languages;
+    availableDates = fileList.dates;
 
     initDatePicker(); // Assuming this function uses availableDates
 
@@ -826,27 +805,9 @@ async function loadPapersByDate(date) {
   `;
   
   try {
-    const selectedLanguage = selectLanguageForDate(date);
-    // 从 data 分支获取数据文件
-    const dataUrl = DATA_CONFIG.getDataUrl(`data/${date}_AI_enhanced_${selectedLanguage}.jsonl`);
-    const response = await fetch(dataUrl);
-    // 如果文件不存在（例如返回 404），在论文展示区域提示没有论文
-    if (!response.ok) {
-      if (response.status === 404) {
-        container.innerHTML = `
-          <div class="loading-container">
-            <p>No papers found for this date.</p>
-          </div>
-        `;
-        paperData = {};
-        renderCategoryFilter({ sortedCategories: [], categoryCounts: {} });
-        return;
-      }
-      throw new Error(`HTTP ${response.status}`);
-    }
-    const text = await response.text();
-    // 空文件也提示没有论文
-    if (!text || text.trim() === '') {
+    const records = await fetchDayRecords(date);
+    renderSummaryStatus(records);
+    if (records.length === 0) {
       container.innerHTML = `
         <div class="loading-container">
           <p>No papers found for this date.</p>
@@ -856,8 +817,8 @@ async function loadPapersByDate(date) {
       renderCategoryFilter({ sortedCategories: [], categoryCounts: {} });
       return;
     }
-    
-    paperData = parseJsonlData(text, date);
+
+    paperData = groupRecords(records, date);
 
     const categories = getAllCategories(paperData);
 
@@ -894,51 +855,82 @@ async function loadPapersByDate(date) {
   }
 }
 
-function parseJsonlData(jsonlText, date) {
-  const result = {};
-  
-  const lines = jsonlText.trim().split('\n');
-  
-  lines.forEach(line => {
+// 读取某天的原始抓取文件和摘要文件并合并 / Raw crawl + summaries for one day
+async function fetchDayRecords(date) {
+  const language = selectLanguageForDate(date);
+  const fetchText = async path => {
     try {
-      const paper = JSON.parse(line);
-      
-      if (!paper.categories) {
-        return;
-      }
-      
-      let allCategories = Array.isArray(paper.categories) ? paper.categories : [paper.categories];
-      
-      const primaryCategory = allCategories[0];
-      
-      if (!result[primaryCategory]) {
-        result[primaryCategory] = [];
-      }
-      
-      const summary = paper.AI && paper.AI.tldr ? paper.AI.tldr : paper.summary;
-      
-      result[primaryCategory].push({
-        title: paper.title,
-        url: paper.abs || paper.pdf || `https://arxiv.org/abs/${paper.id}`,
-        authors: Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors,
-        category: allCategories,
-        summary: summary,
-        details: paper.summary || '',
-        date: date,
-        id: paper.id,
-        motivation: paper.AI && paper.AI.motivation ? paper.AI.motivation : '',
-        method: paper.AI && paper.AI.method ? paper.AI.method : '',
-        result: paper.AI && paper.AI.result ? paper.AI.result : '',
-        conclusion: paper.AI && paper.AI.conclusion ? paper.AI.conclusion : '',
-        code_url: paper.code_url || '',
-        code_stars: paper.code_stars || 0,
-        code_last_update: paper.code_last_update || ''
-      });
+      const response = await fetch(DATA_CONFIG.getDataUrl(path), { cache: 'no-cache' });
+      return response.ok ? await response.text() : '';
     } catch (error) {
-      console.error('解析JSON行失败:', error, line);
+      console.error('获取数据失败:', path, error);
+      return '';
     }
+  };
+  const [rawText, aiText] = await Promise.all([
+    fetchText(`data/${date}.jsonl`),
+    fetchText(`data/${date}_AI_enhanced_${language}.jsonl`)
+  ]);
+  return PaperData.mergeDay(rawText, aiText);
+}
+
+// 摘要尚未全部生成时在列表上方提示 / Banner while summaries are pending
+function renderSummaryStatus(records) {
+  const status = document.getElementById('summaryStatus');
+  if (!status) return;
+  const pending = records.filter(r => r.pending).length;
+  if (pending === 0) {
+    status.hidden = true;
+    status.textContent = '';
+    return;
+  }
+  const done = records.length - pending;
+  status.hidden = false;
+  status.textContent = done === 0
+    ? `中文摘要生成中：本日 ${records.length} 篇论文暂时显示英文原文摘要。Summaries pending for all ${records.length} papers.`
+    : `中文摘要生成中：已完成 ${done} / ${records.length} 篇，其余 ${pending} 篇暂时显示英文原文摘要。Summaries pending for ${pending} papers.`;
+}
+
+function groupRecords(records, date) {
+  const result = {};
+  const esc = PaperData.escapeHtml;
+
+  records.forEach(paper => {
+    if (!paper.categories) {
+      return;
+    }
+
+    let allCategories = Array.isArray(paper.categories) ? paper.categories : [paper.categories];
+
+    const primaryCategory = allCategories[0];
+
+    if (!result[primaryCategory]) {
+      result[primaryCategory] = [];
+    }
+
+    const ai = paper.pending ? null : paper.AI;
+    const abstract = esc(paper.summary || '');
+
+    result[primaryCategory].push({
+      title: esc(paper.title),
+      url: paper.abs || paper.pdf || `https://arxiv.org/abs/${paper.id}`,
+      authors: esc(Array.isArray(paper.authors) ? paper.authors.join(', ') : paper.authors),
+      category: allCategories,
+      summary: ai ? esc(ai.tldr) : abstract,
+      details: abstract,
+      pending: Boolean(paper.pending),
+      date: date,
+      id: paper.id,
+      motivation: ai ? esc(ai.motivation) : '',
+      method: ai ? esc(ai.method) : '',
+      result: ai ? esc(ai.result) : '',
+      conclusion: ai ? esc(ai.conclusion) : '',
+      code_url: paper.code_url || '',
+      code_stars: paper.code_stars || 0,
+      code_last_update: paper.code_last_update || ''
+    });
   });
-  
+
   return result;
 }
 
@@ -952,8 +944,9 @@ function getAllCategories(data) {
   });
   
   return {
+    // 论文多的类别在前，跨列的小类别排在后面 / Largest categories first
     sortedCategories: categories.sort((a, b) => {
-      return a.localeCompare(b);
+      return (catePaperCount[b] - catePaperCount[a]) || a.localeCompare(b);
     }),
     categoryCounts: catePaperCount
   };
@@ -1023,22 +1016,12 @@ function filterByCategory(category) {
 
 // 帮助函数：高亮文本中的匹配内容
 function highlightMatches(text, terms, className = 'highlight-match') {
-  if (!terms || terms.length === 0 || !text) {
-    return text;
-  }
-  
-  let result = text;
-  
-  // 按照长度排序关键词，从长到短，避免短词先替换导致长词匹配失败
-  const sortedTerms = [...terms].sort((a, b) => b.length - a.length);
-  
-  // 为每个词创建一个正则表达式，使用 'gi' 标志进行全局、不区分大小写的匹配
-  sortedTerms.forEach(term => {
-    const regex = new RegExp(`(${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-    result = result.replace(regex, `<span class="${className}">$1</span>`);
-  });
-  
-  return result;
+  return PaperData.highlight(text, terms, className);
+}
+
+// 关键词按整词匹配标题、英文摘要和 TL;DR / Whole-word keyword match
+function paperMatchesKeyword(paper, keyword) {
+  return PaperData.keywordMatches(`${paper.title} ${paper.details || ''} ${paper.summary || ''}`, keyword);
 }
 
 // 帮助函数：格式化作者列表（用于论文卡片显示）
@@ -1179,9 +1162,7 @@ function renderPapers() {
       filteredPapers.sort((a, b) => {
         const aMatchesKeyword = activeKeywords.length > 0 ? 
           activeKeywords.some(keyword => {
-            // 仅在标题和摘要中搜索关键词
-            const searchText = `${a.title} ${a.summary}`.toLowerCase();
-            return searchText.includes(keyword.toLowerCase());
+            return paperMatchesKeyword(a, keyword);
           }) : false;
           
         const aMatchesAuthor = activeAuthors.length > 0 ?
@@ -1192,9 +1173,7 @@ function renderPapers() {
           
         const bMatchesKeyword = activeKeywords.length > 0 ?
           activeKeywords.some(keyword => {
-            // 仅在标题和摘要中搜索关键词
-            const searchText = `${b.title} ${b.summary}`.toLowerCase();
-            return searchText.includes(keyword.toLowerCase());
+            return paperMatchesKeyword(b, keyword);
           }) : false;
           
         const bMatchesAuthor = activeAuthors.length > 0 ?
@@ -1216,8 +1195,7 @@ function renderPapers() {
       filteredPapers.forEach(paper => {
         const matchesKeyword = activeKeywords.length > 0 ?
           activeKeywords.some(keyword => {
-            const searchText = `${paper.title} ${paper.summary}`.toLowerCase();
-            return searchText.includes(keyword.toLowerCase());
+            return paperMatchesKeyword(paper, keyword);
           }) : false;
           
         const matchesAuthor = activeAuthors.length > 0 ?
@@ -1233,7 +1211,7 @@ function renderPapers() {
           paper.matchReason = [];
           if (matchesKeyword) {
             const matchedKeywords = activeKeywords.filter(keyword => 
-              `${paper.title} ${paper.summary}`.toLowerCase().includes(keyword.toLowerCase())
+              paperMatchesKeyword(paper, keyword)
             );
             if (matchedKeywords.length > 0) {
               paper.matchReason.push(`关键词: ${matchedKeywords.join(', ')}`);
@@ -1258,9 +1236,7 @@ function renderPapers() {
     filteredPapers.sort((a, b) => {
       const aMatchesKeyword = activeKeywords.length > 0 ? 
         activeKeywords.some(keyword => {
-          // 仅在标题和摘要中搜索关键词
-          const searchText = `${a.title} ${a.summary}`.toLowerCase();
-          return searchText.includes(keyword.toLowerCase());
+          return paperMatchesKeyword(a, keyword);
         }) : false;
         
       const aMatchesAuthor = activeAuthors.length > 0 ?
@@ -1271,9 +1247,7 @@ function renderPapers() {
         
       const bMatchesKeyword = activeKeywords.length > 0 ?
         activeKeywords.some(keyword => {
-          // 仅在标题和摘要中搜索关键词
-          const searchText = `${b.title} ${b.summary}`.toLowerCase();
-          return searchText.includes(keyword.toLowerCase());
+          return paperMatchesKeyword(b, keyword);
         }) : false;
         
       const bMatchesAuthor = activeAuthors.length > 0 ?
@@ -1295,8 +1269,7 @@ function renderPapers() {
     filteredPapers.forEach(paper => {
       const matchesKeyword = activeKeywords.length > 0 ?
         activeKeywords.some(keyword => {
-          const searchText = `${paper.title} ${paper.summary}`.toLowerCase();
-          return searchText.includes(keyword.toLowerCase());
+          return paperMatchesKeyword(paper, keyword);
         }) : false;
         
       const matchesAuthor = activeAuthors.length > 0 ?
@@ -1312,7 +1285,7 @@ function renderPapers() {
         paper.matchReason = [];
         if (matchesKeyword) {
           const matchedKeywords = activeKeywords.filter(keyword => 
-            `${paper.title} ${paper.summary}`.toLowerCase().includes(keyword.toLowerCase())
+            paperMatchesKeyword(paper, keyword)
           );
           if (matchedKeywords.length > 0) {
             paper.matchReason.push(`关键词: ${matchedKeywords.join(', ')}`);
@@ -1345,7 +1318,7 @@ function renderPapers() {
   filteredPapers.forEach((paper, index) => {
     const paperCard = document.createElement('div');
     // 添加匹配高亮类
-    paperCard.className = `paper-card ${paper.isMatched ? 'matched-paper' : ''}`;
+    paperCard.className = `paper-card ${paper.isMatched ? 'matched-paper' : ''} ${paper.pending ? 'pending-paper' : ''}`;
     paperCard.dataset.id = paper.id || paper.url;
     
     if (paper.isMatched) {
@@ -1414,6 +1387,7 @@ function renderPapers() {
         <div class="paper-card-footer">
           <div class="footer-left">
             <span class="paper-card-date">${formatDate(paper.date)}</span>
+            ${paper.pending ? '<span class="pending-badge" title="Chinese summary pending; showing the English abstract">摘要生成中</span>' : ''}
           </div>
           <span class="paper-card-link">Details</span>
         </div>
@@ -1506,8 +1480,10 @@ function showPaperDetails(paper, paperIndex) {
       <p><strong>Date: </strong>${formatDate(paper.date)}</p>
       
       
-      <h3>TL;DR</h3>
-      <p>${highlightedSummary}</p>
+      ${paper.pending
+        ? '<div class="pending-note">中文摘要生成中，下面是英文原文摘要。Summary pending: the Chinese summary for this paper has not been generated yet.</div>'
+        : `<h3>TL;DR</h3>
+      <p>${highlightedSummary}</p>`}
       
       <div class="paper-sections">
         ${paper.motivation ? `<div class="paper-section"><h4>Motivation</h4><p>${highlightedMotivation}</p></div>` : ''}
@@ -1709,14 +1685,11 @@ async function loadPapersByDateRange(startDate, endDate) {
     // 加载所有日期的论文数据
     const allPaperData = {};
     
-    for (const date of validDatesInRange) {
-      const selectedLanguage = selectLanguageForDate(date);
-      // 从 data 分支获取数据文件
-      const dataUrl = DATA_CONFIG.getDataUrl(`data/${date}_AI_enhanced_${selectedLanguage}.jsonl`);
-      const response = await fetch(dataUrl);
-      const text = await response.text();
-      const dataPapers = parseJsonlData(text, date);
-      
+    const dayRecords = await Promise.all(validDatesInRange.map(date => fetchDayRecords(date)));
+    renderSummaryStatus(dayRecords.flat());
+    validDatesInRange.forEach((date, index) => {
+      const dataPapers = groupRecords(dayRecords[index], date);
+
       // 合并数据
       Object.keys(dataPapers).forEach(category => {
         if (!allPaperData[category]) {
@@ -1724,7 +1697,7 @@ async function loadPapersByDateRange(startDate, endDate) {
         }
         allPaperData[category] = allPaperData[category].concat(dataPapers[category]);
       });
-    }
+    });
     
     paperData = allPaperData;
 
