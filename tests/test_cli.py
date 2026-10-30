@@ -238,3 +238,84 @@ def test_prepare_releases_the_lock_when_it_fails(tmp_path, remote_and_clone, cap
         run(clone, "prepare", "--date", DAY, capsys=capsys)
 
     assert not (clone / ".cache" / "summaries" / "LOCK").exists()
+
+
+def fake_gh(secrets, calls):
+    """Stand-in for the gh CLI: lists `secrets` and records workflow dispatches."""
+
+    def gh(*args):
+        calls.append(args)
+        if args[:2] == ("secret", "list"):
+            return json.dumps([{"name": n} for n in secrets])
+        return ""
+
+    return gh
+
+
+def log_lines(remote):
+    return parse_jsonl(git(remote, "show", "data:logs/summary-runs.jsonl"))
+
+
+def test_handover_dispatches_the_api_job_when_the_secret_exists(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
+    run(clone, "prepare", "--date", DAY, capsys=capsys)
+    (clone / ".cache" / "summaries" / DAY / "chunk-000.out.txt").write_text("=== 1\n" + FIELDS.format(n=1))
+    calls = []
+    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
+
+    code, out = run(clone, "handover", "--date", DAY, "--reason", "weekly 81%", capsys=capsys)
+
+    result = json.loads(out)
+    assert code == 0
+    assert result["path"] == "api-fallback" and result["pending"] == 1
+    assert ("workflow", "run", "summarize-api.yml", "-R", cli.REPO, "-f", f"date={DAY}") in calls
+    assert [r["id"] for r in parse_jsonl(branch_file(remote, AI_FILE))] == ["1"]
+    entry = log_lines(remote)[-1]
+    assert (entry["date"], entry["path"], entry["done"], entry["pending"]) == (DAY, "api-fallback", 1, 1)
+    assert entry["reason"] == "weekly 81%"
+
+
+def test_handover_without_a_key_pauses_and_logs_it(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+    calls = []
+    monkeypatch.setattr(cli, "gh", fake_gh([], calls))
+
+    code, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+
+    assert json.loads(out)["path"] == "paused-no-key"
+    assert not any(c[:2] == ("workflow", "run") for c in calls)
+    assert log_lines(remote)[-1]["path"] == "paused-no-key"
+
+
+def test_handover_with_nothing_pending_needs_no_fallback(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    ai = [{**paper("1"), "AI": {k: "x" for k in ("tldr", "motivation", "method", "result", "conclusion")}}]
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")]), AI_FILE: dump_jsonl(ai)})
+    calls = []
+    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
+
+    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+
+    assert json.loads(out)["path"] == "claude-code"
+    assert calls == []
+
+
+def test_record_appends_the_day_path_to_the_run_log(tmp_path, remote_and_clone, capsys):
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+
+    run(clone, "record", "--date", DAY, "--path", "claude-code", capsys=capsys)
+    run(clone, "record", "--date", DAY, "--path", "api-fallback", capsys=capsys)
+
+    entries = log_lines(remote)
+    assert [e["path"] for e in entries] == ["claude-code", "api-fallback"]
+    assert entries[0]["total"] == 1 and "at" in entries[0]
+    assert "summary-runs" not in branch_file(remote, "assets/file-list.txt")

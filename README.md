@@ -40,7 +40,7 @@ Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/da
 
 Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local time (MYT), so it starts about an hour after the morning crawl and has two later chances to resume. Each run:
 
-1. checks plan usage and stops if the 5-hour window or the weekly limit is at 70% or more (Eric's research autopilot shares the subscription);
+1. checks plan usage before starting and before every wave of subagents (Eric's research autopilot shares the subscription; see the fallback below);
 2. `uv run python -m summaries status` to find recent days with pending papers;
 3. `uv run python -m summaries prepare --date D` writes chunks of 20 pending papers to `.cache/summaries/D/`;
 4. Haiku subagents, three at a time, each turn one chunk into a plain-text block file;
@@ -49,11 +49,22 @@ Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local ti
 
 Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off on the next run. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md).
 
+### Fallback at the usage gate
+
+When the 5-hour window or the weekly limit reaches **80%**, the task stops using the subscription and runs `uv run python -m summaries handover --date D`:
+
+- it merges and publishes what the subagents finished;
+- if the repository has an `ANTHROPIC_API_KEY` secret (only its name is checked, with `gh secret list`), it dispatches [`summarize-api.yml`](.github/workflows/summarize-api.yml) for that date. That Actions job summarises the remaining papers with Claude Haiku 5.5 through the same `api` code path, so the day still ends complete;
+- without the secret it pauses: the rest of the day stays "summary pending" on the page and the next scheduled run resumes on the subscription.
+
+Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`date`, `path` = `claude-code` / `api` / `api-fallback` / `paused-no-key`, `total`, `done`, `pending`, time, reason). The key lives only in the GitHub secret, never on the Mac.
+
 ## Data branch
 
 - `data/<date>.jsonl`: one paper per line (`id`, `title`, `authors`, `categories` with the primary first, `summary` = abstract, `comment`, `abs`, `pdf`, optional `code_url`).
 - `data/<date>_AI_enhanced_Chinese.jsonl`: the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
 - `assets/file-list.txt`: every jsonl file on the branch, rebuilt on each commit.
+- `logs/summary-runs.jsonl`: which summary path ran for each day.
 
 Raw URL pattern: `https://raw.githubusercontent.com/Eryc123Y/daily-arXiv-ai-enhanced/data/data/<date>.jsonl`.
 
