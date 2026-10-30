@@ -308,7 +308,7 @@ function openSettings() {
 }
 
 function isTyping(target) {
-  return target.closest('input, textarea, select, dialog[open]');
+  return target instanceof Element && Boolean(target.closest('input, textarea, select, dialog[open]'));
 }
 
 function bindEvents() {
