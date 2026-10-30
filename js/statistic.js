@@ -114,12 +114,7 @@ function initEventListeners() {
 
 // Function to detect preferred language based on browser settings
 function getPreferredLanguage() {
-  const browserLang = navigator.language || navigator.userLanguage;
-  // Check if browser is set to Chinese variants
-  if (browserLang.startsWith('zh')) {
-    return 'Chinese';
-  }
-  // Default to English for all other languages
+  // This site's summaries are written in English; older days fall back to Chinese.
   return 'English';
 }
 

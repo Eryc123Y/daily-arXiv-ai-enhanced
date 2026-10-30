@@ -2,7 +2,7 @@
 #
 # Summaries depend on the SUMMARY_MODE repository variable:
 #   claude-code (default)  this job only crawls and publishes; a local Claude
-#                          Code task writes the Chinese summaries afterwards.
+#                          Code task writes the summaries afterwards.
 #   api                    this job also summarises with Claude Haiku 5.5;
 #                          needs the ANTHROPIC_API_KEY secret.
 # The site shows papers as "summary pending" until their summary exists.
@@ -31,7 +31,7 @@ jobs:
     timeout-minutes: 90
     env:
       CATEGORIES: ${{ vars.CATEGORIES || 'cs.CV, cs.AI, cs.LG, cs.CL, stat.ML' }}
-      LANGUAGE: ${{ vars.LANGUAGE || 'Chinese' }}
+      LANGUAGE: ${{ vars.LANGUAGE || 'English' }}
       # Only the files we touch are downloaded from the large data branch.
       DATA_FETCH_ARGS: "--depth=1 --filter=blob:none"
 

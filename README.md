@@ -7,12 +7,12 @@
 
 A personal fork of [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) (Apache-2.0, see [LICENSE](LICENSE)). Page: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
 
-Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part Chinese summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords are highlighted and listed first. The defaults live in [`js/interest-presets.js`](js/interest-presets.js) and can be changed per browser on the Settings page.
+Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords live in [`js/interest-presets.js`](js/interest-presets.js) and can be changed per browser under "Keywords & authors".
 
 ## How a day flows
 
 1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), 01:30 UTC plus a 07:30 UTC catch-up) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
-2. **Summaries** are written to `data/<date>_AI_enhanced_Chinese.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its English abstract with a "摘要生成中" badge and a progress banner.
+2. **Summaries** are written to `data/<date>_AI_enhanced_English.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its abstract, says the summary is not written yet, and a progress bar shows how many are ready.
 3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
 
 ## Summary modes
@@ -62,7 +62,7 @@ Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`da
 ## Data branch
 
 - `data/<date>.jsonl`: one paper per line (`id`, `title`, `authors`, `categories` with the primary first, `summary` = abstract, `comment`, `abs`, `pdf`, optional `code_url`).
-- `data/<date>_AI_enhanced_Chinese.jsonl`: the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
+- `data/<date>_AI_enhanced_English.jsonl` (`LANGUAGE` variable; older days also have upstream's `_Chinese` files): the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
 - `assets/file-list.txt`: every jsonl file on the branch, rebuilt on each commit.
 - `logs/summary-runs.jsonl`: which summary path ran for each day.
 
@@ -78,7 +78,7 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `js/` and `*.html` (the site). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `index.html`, `css/site.css` and `js/{app,render,paper-data,interest-presets}.js` (the reading page; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
 
 ## Changes from upstream
 
@@ -88,3 +88,4 @@ Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-br
 - `assets/file-list.txt` lists every day, which fixes the date-range view (upstream #136).
 - Summaries are produced by Claude (two modes above); papers without one are shown as pending instead of being dropped.
 - Keyword matching uses whole words over title, abstract and TL;DR.
+- A new single-page reading layout (date, paper count, interest matches first, expandable summaries, light and dark, phone width); keyword and author settings are a dialog on the same page.

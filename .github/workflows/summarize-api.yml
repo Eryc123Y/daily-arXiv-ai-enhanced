@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      LANGUAGE: ${{ vars.LANGUAGE || 'Chinese' }}
+      LANGUAGE: ${{ vars.LANGUAGE || 'English' }}
       DATA_FETCH_ARGS: "--depth=1 --filter=blob:none"
       DAY: ${{ inputs.date }}
     steps:

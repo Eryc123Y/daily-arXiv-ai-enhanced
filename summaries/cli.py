@@ -394,7 +394,7 @@ When the file is written, reply with only: done <number of blocks written>
 def build_parser():
     parser = argparse.ArgumentParser(prog="python -m summaries")
     parser.add_argument("--repo", default=".", help="git checkout whose remote holds the data branch")
-    parser.add_argument("--language", default=os.environ.get("LANGUAGE") or "Chinese")
+    parser.add_argument("--language", default=os.environ.get("LANGUAGE") or "English")
     parser.add_argument("--work-dir", default=".cache/summaries")
     sub = parser.add_subparsers(dest="command", required=True)
 
