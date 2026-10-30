@@ -27,6 +27,9 @@ function loadKeywordPreferences() {
     } catch (e) {
       console.error('解析保存的关键词失败:', e);
     }
+  } else if (window.INTEREST_PRESETS) {
+    // 未保存过时显示研究兴趣预设 / Show the interest presets until saved
+    keywords = [...INTEREST_PRESETS.keywords];
   }
   
   // 显示保存的关键词
@@ -483,7 +486,7 @@ function showNotification(message, type = 'success') {
 // 获取GitHub统计数据
 async function fetchGitHubStats() {
   try {
-    const response = await fetch('https://api.github.com/repos/dw-dengwei/daily-arXiv-ai-enhanced');
+    const response = await fetch(`https://api.github.com/repos/${DATA_CONFIG.repoOwner}/${DATA_CONFIG.repoName}`);
     const data = await response.json();
     const starCount = data.stargazers_count;
     const forkCount = data.forks_count;

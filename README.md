@@ -1,147 +1,79 @@
-# 🚀 daily-arXiv-ai-enhanced
+# daily-arXiv (Eryc123Y)
 
 > [!CAUTION]
 > 若您所在法域对学术数据有审查要求，谨慎运行本代码；任何二次分发版本必须履行合规审查（包括但不限于原始论文合规性、AI合规性）义务，否则一切法律后果由下游自行承担。
-
-> [!CAUTION]
+>
 > If your jurisdiction has censorship requirements for academic data, run this code with caution; any secondary distribution version must remove the entrance accessible to China and fulfill the content review obligations, otherwise all legal consequences will be borne by the downstream.
 
+A personal fork of [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) (Apache-2.0, see [LICENSE](LICENSE)). Page: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
 
-This innovative tool transforms how you stay updated with arXiv papers by combining automated crawling with AI-powered summarization.
+Every new paper of the day in cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR (new submissions and same-period cross-lists, not replacements), each with a five-part Chinese summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords are highlighted and listed first. The defaults live in [`js/interest-presets.js`](js/interest-presets.js) and can be changed per browser on the Settings page.
 
+## How a day flows
 
-## ✨ Key Features
+1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), 01:30 UTC plus a 07:30 UTC catch-up) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
+2. **Summaries** are written to `data/<date>_AI_enhanced_Chinese.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its English abstract with a "摘要生成中" badge and a progress banner.
+3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
 
-🎯 **Zero Infrastructure Required**
-- Leverages GitHub Actions and Pages - no server needed
-- Completely free to deploy and use
+## Summary modes
 
-🤖 **Smart AI Summarization**
-- Daily paper crawling with DeepSeek-powered summaries
-- Cost-effective: Only ~0.2 CNY per day
+Set by the repository variable `SUMMARY_MODE`.
 
-💫 **Smart Reading Experience**
-- Personalized paper highlighting based on your interests
-- Cross-device compatibility (desktop & mobile)
-- Local preference storage for privacy
-- Flexible date range filtering
+| Mode | Who summarises | Needs |
+|---|---|---|
+| `claude-code` (default, also when unset) | A scheduled Claude Code task on Eric's Mac, using Haiku subagents | Claude subscription; the Mac awake with the Claude app open |
+| `api` | The Actions job, Claude Haiku 5.5 (`claude-haiku-5-5`, effort low, structured output) | Secret `ANTHROPIC_API_KEY` |
 
-🧩 **SKILL System**
-- Plug-and-play skill modules for customizing paper filtering
+Switch to API mode:
 
-⚙️ **Easy Preference Export & Integration**
-- One-click copy in Settings to export your keywords and authors configuration
-- Seamlessly combine exported preferences with SKILL for reproducible and shareable setups
+```bash
+gh secret set ANTHROPIC_API_KEY -R Eryc123Y/daily-arXiv-ai-enhanced
+```
 
-👉 **[Try it now!](https://dw-dengwei.github.io/daily-arXiv-ai-enhanced/)** - No installation required
+```bash
+gh variable set SUMMARY_MODE --body api -R Eryc123Y/daily-arXiv-ai-enhanced
+```
 
+Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/daily-arXiv-ai-enhanced`. If `api` is set without the secret, the job warns and falls back to `claude-code`. In API mode the local task finds nothing pending and only fills papers the API skipped (429/5xx are retried; a 400 or a refusal leaves the paper pending); it can also be paused in the Claude app.
 
+### The local task (claude-code mode)
 
-https://github.com/user-attachments/assets/b25712a4-fb8d-484f-863d-e8da6922f9d7
+Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local time (MYT), so it starts about an hour after the morning crawl and has two later chances to resume. Each run:
 
+1. checks plan usage and stops if the 5-hour window or the weekly limit is at 70% or more (Eric's research autopilot shares the subscription);
+2. `uv run python -m summaries status` to find recent days with pending papers;
+3. `uv run python -m summaries prepare --date D` writes chunks of 20 pending papers to `.cache/summaries/D/`;
+4. Haiku subagents, three at a time, each turn one chunk into a plain-text block file;
+5. `uv run python -m summaries merge --date D` validates the blocks, merges them into the day's summary file and pushes it to the `data` branch, after every few chunks;
+6. `uv run python -m summaries finish` releases the run's lock.
 
+Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off on the next run. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md).
 
+## Data branch
 
-# How to use
-This repo will daily crawl arXiv papers about **cs.CV, cs.GR, cs.CL, cs.AI, cs.CE, cs.GT, cs.IT, cs.LG**, and use **DeepSeek** to summarize the papers in **Chinese**.
-If you wish to crawl other arXiv categories, use other LLMs, or other languages, please follow the instructions.
-Otherwise, you can watch the video above first and directly use this repo in https://dw-dengwei.github.io/daily-arXiv-ai-enhanced/. Please star it if you like :)
+- `data/<date>.jsonl`: one paper per line (`id`, `title`, `authors`, `categories` with the primary first, `summary` = abstract, `comment`, `abs`, `pdf`, optional `code_url`).
+- `data/<date>_AI_enhanced_Chinese.jsonl`: the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
+- `assets/file-list.txt`: every jsonl file on the branch, rebuilt on each commit.
 
-<details>
-   <summary> If you want to customize categories, LLMs, or languages, click here.  </summary>
+Raw URL pattern: `https://raw.githubusercontent.com/Eryc123Y/daily-arXiv-ai-enhanced/data/data/<date>.jsonl`.
 
-## Instructions
-1. Fork this repo to your own account and delete my own information in [buy-me-a-coffee](./buy-me-a-coffee/README.md).
-2. Go to: your-own-repo -> Settings -> Secrets and variables -> Actions
-3. Go to Secrets. Secrets are encrypted and used for sensitive data
-4. Create two repository secrets named `OPENAI_API_KEY` and `OPENAI_BASE_URL`, and input corresponding values.
-5. [Optional] Set a password in `secrets.ACCESS_PASSWORD` if you do not wish others to access your page. (see https://github.com/dw-dengwei/daily-arXiv-ai-enhanced/pull/64)
-6. Go to Variables. Variables are shown as plain text and are used for non-sensitive data
-7. Create the following repository variables:
-   1. `CATEGORIES`: separate the categories with ",", such as "cs.CL, cs.CV"
-   2. `LANGUAGE`: such as "Chinese" or "English"
-   3. `MODEL_NAME`: such as "deepseek-chat"
-   4. `EMAIL`: your email for push to GitHub
-   5. `NAME`: your name for push to GitHub
-8. Go to your-own-repo -> Actions -> arXiv-daily-ai-enhanced
-9. You can manually click **Run workflow** to test if it works well (it may take about one hour). By default, this action will automatically run every day. You can modify it in `.github/workflows/run.yml`
-10. Set up GitHub pages: Go to your own repo -> Settings -> Pages. In `Build and deployment`, set `Source="Deploy from a branch"`, `Branch="main", "/(root)"`. Wait for a few minutes, go to https://\<username\>.github.io/daily-arXiv-ai-enhanced/. Please see this [issue](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced/issues/14) for more precise instructions.
-</details>
+## Development
 
-# Contributors
-Thanks to the following special contributors for contributing code, discovering bugs, and sharing useful ideas for this project!!!
-If you find that I missed your contribution below, please feel free to contact me through email.
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="top">
-        <a href="https://github.com/JianGuanTHU"><img src="https://avatars.githubusercontent.com/u/44895708?v=4" width="100px;" alt="JianGuanTHU"/><br /><sub><b>JianGuanTHU</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/Chi-hong22"><img src="https://avatars.githubusercontent.com/u/75403952?v=4" width="100px;" alt="Chi-hong22"/><br /><sub><b>Chi-hong22</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/chaozg"><img src="https://avatars.githubusercontent.com/u/69794131?v=4" width="100px;" alt="chaozg"/><br /><sub><b>chaozg</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/quantum-ctrl"><img src="https://avatars.githubusercontent.com/u/16505311?v=4" width="100px;" alt="quantum-ctrl"/><br /><sub><b>quantum-ctrl</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/Zhao2z"><img src="https://avatars.githubusercontent.com/u/141019403?v=4" width="100px;" alt="Zhao2z"/><br /><sub><b>Zhao2z</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/eclipse0922"><img src="https://avatars.githubusercontent.com/u/6214316?v=4" width="100px;" alt="eclipse0922"/><br /><sub><b>eclipse0922</b></sub></a><br />
-      </td>
-    </tr>
+```bash
+uv sync && uv run pytest -q
+```
 
+```bash
+node --test tests/js/*.test.js
+```
 
-  </tbody>
-  <tbody>
-   <tr>
-      <td align="center" valign="top">
-        <a href="https://github.com/xuemian168"><img src="https://avatars.githubusercontent.com/u/38741078?v=4" width="100px;" alt="xuemian168"/><br /><sub><b>xuemian168</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/Lrrrr549"><img src="https://avatars.githubusercontent.com/u/71866027?v=4" width="100px;" alt="Lrrrr549"/><br /><sub><b>Lrrrr549</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/AinzRimuru"><img src="https://avatars.githubusercontent.com/u/59441476?v=4" width="100px;" alt="AinzRimuru"/><br /><sub><b>AinzRimuru</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/fengxueguiren"><img src="https://avatars.githubusercontent.com/u/153522370?v=4" width="100px;" alt="fengxueguiren"/><br /><sub><b>fengxueguiren</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://github.com/zerocpp"><img src="https://avatars.githubusercontent.com/u/2630297?v=4" width="100px;" alt="fengxueguiren"/><br /><sub><b>zerocpp</b></sub></a><br />
-      </td>
-   </tr>
-  </tbody>
-</table>
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `js/` and `*.html` (the site). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
 
-# Acknowledgement
-We sincerely thank the following individuals and organizations for their promotion and support!!!
-<table>
-  <tbody>
-    <tr>
-      <td align="center" valign="top">
-        <a href="https://x.com/GitHub_Daily/status/1930610556731318781"><img src="https://pbs.twimg.com/profile_images/1660876795347111937/EIo6fIr4_400x400.jpg" width="100px;" alt="Github_Daily"/><br /><sub><b>Github_Daily</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://x.com/aigclink/status/1930897858963853746"><img src="https://pbs.twimg.com/profile_images/1729450995850027008/gllXr6bh_400x400.jpg" width="100px;" alt="AIGCLINK"/><br /><sub><b>AIGCLINK</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://www.ruanyifeng.com/blog/2025/06/weekly-issue-353.html"><img src="https://avatars.githubusercontent.com/u/905434" width="100px;" alt="阮一峰的网络日志"/><br /><sub><b>阮一峰的网络日志 <br> 科技爱好者周刊 <br> （第 353 期）</b></sub></a><br />
-      </td>
-      <td align="center" valign="top">
-        <a href="https://hellogithub.com/periodical/volume/111"><img src="https://github.com/user-attachments/assets/eff6b6dd-0323-40c4-9db6-444a51bbc80a" width="100px;" alt="《HelloGitHub》第 111 期"/><br /><sub><b>《HelloGitHub》<br> 月刊第 111 期</b></sub></a><br />
-      </td>
-    </tr>
-  </tbody>
-</table>
+## Changes from upstream
 
-
-# Star history
-
-[![Stargazers over time](https://starchart.cc/dw-dengwei/daily-arXiv-ai-enhanced.svg?variant=adaptive)](https://starchart.cc/dw-dengwei/daily-arXiv-ai-enhanced)
-
-# Buy me a coffee
-[here](./buy-me-a-coffee/README.md)
+- Metadata comes from the listing page itself, not one arXiv API call per paper; cross-lists are included.
+- Deduplication against the past week of the `data` branch, so weekend reruns do not republish Friday.
+- The workflow no longer commits to `main`, and has the `contents: write` permission it needs.
+- `assets/file-list.txt` lists every day, which fixes the date-range view (upstream #136).
+- Summaries are produced by Claude (two modes above); papers without one are shown as pending instead of being dropped.
+- Keyword matching uses whole words over title, abstract and TL;DR.

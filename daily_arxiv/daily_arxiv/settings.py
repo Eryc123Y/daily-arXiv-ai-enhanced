@@ -64,10 +64,9 @@ ROBOTSTXT_OBEY = True
 # See https://docs.scrapy.org/en/latest/topics/item-pipeline.html
 # 配置数据处理管道 / Configure item processing pipelines
 # 数字越小优先级越高 / Lower numbers have higher priority
-ITEM_PIPELINES = {
-    # 主要数据保存管道 / Main data saving pipeline
-    "daily_arxiv.pipelines.DailyArxivPipeline": 300,
-}
+# The spider reads every field from the listing page, so no per-paper
+# arXiv API lookup pipeline is needed.
+ITEM_PIPELINES = {}
 
 # Enable and configure the AutoThrottle extension (disabled by default)
 # See https://docs.scrapy.org/en/latest/topics/autothrottle.html
