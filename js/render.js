@@ -115,10 +115,14 @@
 </button></li>`;
   }
 
-  function links(paper) {
+  function links(paper, primaryLink = 'alphaxiv') {
     const abs = paper.abs || `https://arxiv.org/abs/${paper.id}`;
+    const alphaxiv = `https://www.alphaxiv.org/abs/${encodeURIComponent(paper.id)}`;
+    const sites = primaryLink === 'arxiv'
+      ? [[abs, 'Open on arXiv', 'button-solid'], [alphaxiv, 'alphaXiv', 'button-outline']]
+      : [[alphaxiv, 'Open on alphaXiv', 'button-solid'], [abs, 'arXiv', 'button-outline']];
     const items = [
-      [abs, 'Open on arXiv', 'button-solid'],
+      ...sites,
       [paper.pdf || abs.replace('/abs/', '/pdf/'), 'PDF', 'button-outline'],
       [abs.replace('/abs/', '/html/'), 'HTML', 'button-outline'],
     ];
@@ -128,7 +132,7 @@
       .join('');
   }
 
-  function renderReader(paper, info, terms) {
+  function renderReader(paper, info, terms, options = {}) {
     const ai = paper.pending ? null : paper.AI;
     const topicLine = info.topics
       .map(t => `<span class="reader-topic topic-${t.index}"><span class="dot"></span>${esc(t.name)}</span>`)
@@ -148,7 +152,7 @@
 <h2 class="reader-title" id="readerTitle">${mark(paper.title, terms)}</h2>
 <p class="reader-authors">${PaperData.highlight(esc(authorLine(paper.authors, 12)), info.match.authors, 'hl')}</p>
 <p class="reader-meta"><span>${esc((paper.categories || []).join(', '))}</span><span>arXiv ${esc(paper.id)}</span>${paper.comment ? `<span>${esc(paper.comment)}</span>` : ''}</p>
-<p class="reader-links">${links(paper)}</p>
+<p class="reader-links">${links(paper, options.primaryLink)}</p>
 ${body}
 </article>`;
   }

@@ -185,7 +185,7 @@ function renderReader() {
     $('nextPaper').disabled = true;
     return;
   }
-  $('readerContent').innerHTML = Render.renderReader(entry.record, entry.info, state.keywords);
+  $('readerContent').innerHTML = Render.renderReader(entry.record, entry.info, state.keywords, { primaryLink: DATA_CONFIG.primaryLink });
   $('prevPaper').disabled = position <= 0;
   $('nextPaper').disabled = position >= state.visible.length - 1;
   $('reader').scrollTop = 0;
