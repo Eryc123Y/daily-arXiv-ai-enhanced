@@ -1,6 +1,7 @@
 /**
- * HTML for the reading page. Pure functions over merged day records
- * (see PaperData.mergeDay); loaded as the global `Render`, and by node for tests.
+ * HTML for the three-pane reading page: list rows and the reading pane.
+ * Pure functions over merged day records (PaperData.mergeDay); loaded as the
+ * global `Render`, and by node for tests.
  */
 (function (root, factory) {
   const api = factory(root.PaperData || (typeof require === 'function' ? require('./paper-data.js') : null));
@@ -17,7 +18,6 @@
     ['result', 'Result'],
     ['conclusion', 'Conclusion'],
   ];
-  const MAX_AUTHORS = 6;
 
   function parseDay(day) {
     const [y, m, d] = day.split('-').map(Number);
@@ -37,14 +37,14 @@
     return Array.isArray(authors) ? authors : String(authors || '').split(',').map(a => a.trim()).filter(Boolean);
   }
 
-  function authorLine(authors) {
+  function authorLine(authors, max = 6) {
     const list = authorList(authors);
-    if (list.length <= MAX_AUTHORS) return list.join(', ');
-    const rest = list.length - MAX_AUTHORS;
-    return `${list.slice(0, MAX_AUTHORS).join(', ')} and ${rest} other${rest === 1 ? '' : 's'}`;
+    if (list.length <= max) return list.join(', ');
+    const rest = list.length - max;
+    return `${list.slice(0, max).join(', ')} and ${rest} other${rest === 1 ? '' : 's'}`;
   }
 
-  /** Which of the interest keywords and authors a paper matches. */
+  /** Which interest keywords and authors a paper matches. */
   function matchesFor(paper, keywords, authors) {
     const ai = paper.pending ? null : paper.AI;
     const text = [paper.title, paper.summary, ai && ai.tldr].filter(Boolean).join(' ');
@@ -53,65 +53,6 @@
       keywords: keywords.filter(k => PaperData.keywordMatches(text, k)),
       authors: authors.filter(a => a.trim() && names.includes(a.trim().toLowerCase())),
     };
-  }
-
-  function mark(text, terms) {
-    return PaperData.highlight(esc(text || ''), terms, 'hl');
-  }
-
-  function paperLinks(paper) {
-    const abs = paper.abs || `https://arxiv.org/abs/${paper.id}`;
-    const links = [
-      [abs, 'arXiv'],
-      [paper.pdf || abs.replace('/abs/', '/pdf/'), 'PDF'],
-      [abs.replace('/abs/', '/html/'), 'HTML'],
-    ];
-    if (paper.code_url) links.push([paper.code_url, 'Code']);
-    return links.map(([href, label]) => `<a href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`).join('');
-  }
-
-  function renderPaper(paper, match, terms) {
-    const ai = paper.pending ? null : paper.AI;
-    const matched = match.keywords.length + match.authors.length > 0;
-    const reasons = [...match.keywords, ...match.authors].map(esc).join(', ');
-    const authorTerms = match.authors;
-    const categories = (paper.categories || []).map(esc).join(', ');
-    const lead = ai
-      ? `<p class="paper-tldr">${mark(ai.tldr, terms)}</p>`
-      : `<p class="paper-abstract is-clamped">${mark(paper.summary, terms)}</p><p class="paper-pending">Summary not written yet; this is the abstract.</p>`;
-    const fields = ai
-      ? `<dl class="paper-fields">${FIELDS.map(([key, label]) => `<dt>${label}</dt><dd>${mark(ai[key], terms)}</dd>`).join('')}</dl>`
-      : '';
-    const more = ai
-      ? `<details class="paper-more"><summary>Full summary and abstract</summary>${fields}<h4>Abstract</h4><p class="paper-abstract">${mark(paper.summary, terms)}</p></details>`
-      : '';
-    return `<article class="paper${matched ? ' is-match' : ''}${paper.pending ? ' is-pending' : ''}" id="paper-${esc(paper.id)}">
-  ${matched ? `<p class="paper-match">Matches ${reasons}</p>` : ''}
-  <h3 class="paper-title"><a href="${esc(paper.abs || `https://arxiv.org/abs/${paper.id}`)}" target="_blank" rel="noopener">${mark(paper.title, terms)}</a></h3>
-  <p class="paper-meta"><span class="paper-authors">${PaperData.highlight(esc(authorLine(paper.authors)), authorTerms, 'hl')}</span><span class="paper-cats">${categories}</span><span class="paper-id">${esc(paper.id)}</span></p>
-  ${lead}
-  ${more}
-  <nav class="paper-links" aria-label="Links for ${esc(paper.id)}">${paperLinks(paper)}</nav>
-</article>`;
-  }
-
-  function renderSection(title, entries, terms) {
-    if (!entries.length) return '';
-    return `<section class="paper-section"><h2 class="section-title">${esc(title)} <span class="count">${entries.length}</span></h2>${entries
-      .map(e => renderPaper(e.paper, e.match, terms))
-      .join('')}</section>`;
-  }
-
-  function daySentence(total, matched, hasInterests) {
-    const papers = `${total.toLocaleString('en-GB')} new paper${total === 1 ? '' : 's'}`;
-    if (!hasInterests) return `${papers}.`;
-    if (matched === 0) return `${papers}; none match your interests.`;
-    return `${papers}; ${matched} match${matched === 1 ? 'es' : ''} your interests.`;
-  }
-
-  function progressText(done, total) {
-    if (done === 0) return `Summaries for these ${total.toLocaleString('en-GB')} papers are still being written. Each paper shows its abstract until its summary is ready.`;
-    return `Summaries are ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')} papers. The rest show their abstract until theirs is written.`;
   }
 
   /** The user's keywords grouped into the preset topics; the rest form one extra topic. */
@@ -136,5 +77,104 @@
     return topics.filter(t => t.keywords.some(k => hit.has(k.toLowerCase()))).map(t => t.name);
   }
 
-  return { formatDay, formatRange, authorLine, matchesFor, renderPaper, renderSection, daySentence, progressText, topicsFor, topicNames };
+  /** Everything the views need to know about a paper's relation to the user's interests. */
+  function describe(paper, keywords, authors, topics) {
+    const match = matchesFor(paper, keywords, authors);
+    const names = new Set(topicNames(match, topics));
+    return {
+      match,
+      matched: match.keywords.length + match.authors.length > 0,
+      score: match.keywords.length + 2 * match.authors.length,
+      topics: topics.map((t, index) => ({ name: t.name, index })).filter(t => names.has(t.name)),
+    };
+  }
+
+  function mark(text, terms) {
+    return PaperData.highlight(esc(text || ''), terms, 'hl');
+  }
+
+  function topicLabel(info, paper) {
+    if (info.topics.length) {
+      const first = info.topics[0];
+      const more = info.topics.length > 1 ? ` <span class="row-more">+${info.topics.length - 1}</span>` : '';
+      return `<span class="row-topic topic-${first.index}"><span class="dot"></span>${esc(first.name)}${more}</span>`;
+    }
+    if (info.match.authors.length) return `<span class="row-topic topic-author"><span class="dot"></span>Your authors</span>`;
+    return `<span class="row-topic">${esc((paper.categories || [])[0] || '')}</span>`;
+  }
+
+  function renderRow(paper, info, selected) {
+    const ai = paper.pending ? null : paper.AI;
+    const lead = ai ? ai.tldr : paper.summary;
+    return `<li><button type="button" class="row${selected ? ' is-selected' : ''}" data-id="${esc(paper.id)}"${selected ? ' aria-current="true"' : ''}>
+  <span class="row-head">${topicLabel(info, paper)}${paper.pending ? '<span class="row-pending">Summary pending</span>' : ''}</span>
+  <span class="row-title">${esc(paper.title)}</span>
+  <span class="row-authors">${esc(authorLine(paper.authors, 3))}</span>
+  <span class="row-lead">${esc(lead || '')}</span>
+  <span class="row-meta"><span>${esc((paper.categories || []).slice(0, 2).join(', '))}</span><span>${esc(paper.id)}</span></span>
+</button></li>`;
+  }
+
+  function links(paper) {
+    const abs = paper.abs || `https://arxiv.org/abs/${paper.id}`;
+    const items = [
+      [abs, 'Open on arXiv', 'button-solid'],
+      [paper.pdf || abs.replace('/abs/', '/pdf/'), 'PDF', 'button-outline'],
+      [abs.replace('/abs/', '/html/'), 'HTML', 'button-outline'],
+    ];
+    if (paper.code_url) items.push([paper.code_url, 'Code', 'button-outline']);
+    return items
+      .map(([href, label, cls]) => `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`)
+      .join('');
+  }
+
+  function renderReader(paper, info, terms) {
+    const ai = paper.pending ? null : paper.AI;
+    const topicLine = info.topics
+      .map(t => `<span class="reader-topic topic-${t.index}"><span class="dot"></span>${esc(t.name)}</span>`)
+      .join('');
+    const reasons = [...info.match.keywords, ...info.match.authors];
+    const matches = reasons.length
+      ? `<span class="reader-matches">matches ${reasons.map(r => `<mark class="hl">${esc(r)}</mark>`).join(' ')}</span>`
+      : '';
+    const body = ai
+      ? `<section class="tldr" aria-labelledby="tldrHeading"><h3 id="tldrHeading">TL;DR</h3><p>${mark(ai.tldr, terms)}</p></section>
+<div class="fields">${FIELDS.map(([key, label]) => `<section><h3>${label}</h3><p>${mark(ai[key], terms)}</p></section>`).join('')}</div>
+<details class="abstract"><summary>Show the abstract</summary><p>${mark(paper.summary, terms)}</p></details>`
+      : `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>
+<section class="abstract-open"><h3>Abstract</h3><p>${mark(paper.summary, terms)}</p></section>`;
+    return `<article class="reader-body" aria-labelledby="readerTitle">
+<p class="reader-kicker">${topicLine}${matches}</p>
+<h2 class="reader-title" id="readerTitle">${mark(paper.title, terms)}</h2>
+<p class="reader-authors">${PaperData.highlight(esc(authorLine(paper.authors, 12)), info.match.authors, 'hl')}</p>
+<p class="reader-meta"><span>${esc((paper.categories || []).join(', '))}</span><span>arXiv ${esc(paper.id)}</span>${paper.comment ? `<span>${esc(paper.comment)}</span>` : ''}</p>
+<p class="reader-links">${links(paper)}</p>
+${body}
+</article>`;
+  }
+
+  function daySentence(total, matched, hasInterests) {
+    const papers = `${total.toLocaleString('en-GB')} new paper${total === 1 ? '' : 's'}`;
+    if (!hasInterests) return `${papers}.`;
+    return `${papers}, ${matched === 0 ? 'none' : matched} matching your interests.`;
+  }
+
+  function progressText(done, total) {
+    if (done === 0) return `Summaries are being written. Each paper shows its abstract until its summary is ready.`;
+    return `Summaries ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}. The rest show their abstract for now.`;
+  }
+
+  return {
+    formatDay,
+    formatRange,
+    authorLine,
+    matchesFor,
+    topicsFor,
+    topicNames,
+    describe,
+    renderRow,
+    renderReader,
+    daySentence,
+    progressText,
+  };
 });

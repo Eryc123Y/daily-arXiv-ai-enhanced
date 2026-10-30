@@ -10,56 +10,45 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
-  <link rel="stylesheet" href="css/site.css?v=3">
-  <script src="js/data-config.js"></script>
-  <script src="js/paper-data.js?v=3"></script>
-  <script src="js/interest-presets.js?v=3"></script>
+  <link rel="stylesheet" href="css/site.css?v=5">
+  <script src="js/data-config.js?v=5"></script>
+  <script src="js/paper-data.js?v=5"></script>
+  <script src="js/interest-presets.js?v=5"></script>
+  <script src="js/data-source.js?v=5"></script>
 </head>
 <body>
-  <a class="skip-link" href="#papers">Skip to papers</a>
+  <a class="skip-link" href="#paperList">Skip to the paper list</a>
 
   <header class="topbar">
     <a class="brand" href="./">Daily arXiv</a>
-    <form class="day-picker" id="dayForm" aria-label="Choose a day">
+    <form class="day-nav" id="dayForm" aria-label="Choose a day">
+      <button type="button" class="icon-button" id="prevDay" aria-label="Previous day">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      </button>
       <span class="range-start" id="rangeStart" hidden>
-        <label for="daySelectStart">From</label>
+        <label class="visually-hidden" for="daySelectStart">First day</label>
         <select id="daySelectStart"></select>
-        <label for="daySelect">to</label>
+        <span>to</span>
       </span>
-      <label for="daySelect" id="dayLabel">Day</label>
+      <label class="visually-hidden" for="daySelect">Day</label>
       <select id="daySelect"></select>
+      <button type="button" class="icon-button" id="nextDay" aria-label="Next day">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+      </button>
       <label class="range-toggle"><input type="checkbox" id="rangeToggle"> Several days</label>
     </form>
-    <button class="text-button" type="button" id="openSettings">Keywords &amp; authors</button>
+    <label class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+      <span class="visually-hidden">Search titles, authors and summaries</span>
+      <input type="search" id="search" placeholder="Search titles, authors, summaries" autocomplete="off">
+    </label>
+    <button type="button" class="button-outline" id="openSettings">Keywords &amp; authors</button>
   </header>
 
-  <div class="layout">
-    <aside class="rail" aria-label="Filters">
-      <label class="search">
-        <span class="visually-hidden">Search titles, authors and summaries</span>
-        <input type="search" id="search" placeholder="Search titles, authors, summaries" autocomplete="off">
-      </label>
-
-      <label class="switch">
-        <input type="checkbox" id="pullMatches" checked>
-        <span>Put interest matches first</span>
-      </label>
-
-      <nav class="filter-group topics" aria-label="Topics">
-        <h2 class="rail-heading">Topics</h2>
-        <ul id="topicList"></ul>
-        <p id="interestSummary" class="rail-note"></p>
-      </nav>
-
-      <details class="filter-group categories">
-        <summary>arXiv categories</summary>
-        <ul id="categoryList"></ul>
-      </details>
-    </aside>
-
-    <main id="papers" tabindex="-1">
-      <section class="day-head" aria-live="polite">
-        <h1 id="dayTitle">Loading the latest day</h1>
+  <div class="app">
+    <nav class="nav" aria-label="Day and filters">
+      <section class="day" aria-live="polite">
+        <h1 id="dayTitle">Loading</h1>
         <p id="daySentence" class="day-sentence"></p>
         <div id="progress" class="progress" hidden>
           <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
@@ -67,33 +56,62 @@
         </div>
       </section>
 
-      <div id="paperList" class="paper-list"></div>
-    </main>
+      <section class="filter" aria-labelledby="topicsHeading">
+        <h2 id="topicsHeading">Topics</h2>
+        <ul class="topic-list" id="topicList"></ul>
+      </section>
+
+      <section class="filter" aria-labelledby="categoriesHeading">
+        <h2 id="categoriesHeading">arXiv categories</h2>
+        <ul class="chip-list" id="categoryList"></ul>
+      </section>
+
+      <p class="nav-foot">
+        <a href="statistic.html">Keyword trends</a>
+        <a href="https://github.com/Eryc123Y/daily-arXiv-ai-enhanced">Source and data</a>
+      </p>
+    </nav>
+
+    <section class="list" aria-labelledby="listHeading">
+      <div class="list-head">
+        <h2 id="listHeading">Papers</h2>
+        <span id="listNote" class="list-note"></span>
+      </div>
+      <ul class="rows" id="paperList" tabindex="-1"></ul>
+    </section>
+
+    <section class="reader" id="reader" aria-label="Selected paper">
+      <div class="reader-bar">
+        <button type="button" class="button-outline" id="closeReader">Back to the list</button>
+      </div>
+      <div id="readerContent"></div>
+      <nav class="reader-nav" aria-label="Move between papers">
+        <button type="button" class="link-button" id="prevPaper">Previous paper</button>
+        <span class="reader-hint">j and k move through the list</span>
+        <button type="button" class="link-button" id="nextPaper">Next paper</button>
+      </nav>
+      <p class="reader-foot">Summaries are written by Claude from each paper's abstract; check the paper before relying on them. Built on <a href="https://github.com/dw-dengwei/daily-arXiv-ai-enhanced">dw-dengwei/daily-arXiv-ai-enhanced</a>.</p>
+    </section>
   </div>
 
-  <footer class="site-footer">
-    <p>Summaries are written by Claude from each paper's abstract; check the paper before relying on them. Built on <a href="https://github.com/dw-dengwei/daily-arXiv-ai-enhanced">dw-dengwei/daily-arXiv-ai-enhanced</a>.</p>
-    <p><a href="https://github.com/Eryc123Y/daily-arXiv-ai-enhanced">Source and data</a> <a href="statistic.html">Keyword trends</a></p>
-  </footer>
-
   <dialog id="settings" class="settings" aria-labelledby="settingsTitle">
-    <form method="dialog" id="settingsForm">
+    <form method="dialog">
       <h2 id="settingsTitle">Keywords and authors</h2>
-      <p class="settings-note">Papers whose title, abstract or summary contain one of these keywords, or with one of these authors, are marked and can be listed first. One per line. Saved in this browser only.</p>
+      <p class="settings-note">Papers whose title, abstract or summary contain one of these keywords, or with one of these authors, are marked and grouped under Topics. One per line; keywords from the default topics stay in their topic. Saved in this browser only.</p>
       <label for="keywordsInput">Keywords</label>
       <textarea id="keywordsInput" rows="10" spellcheck="false"></textarea>
       <label for="authorsInput">Authors</label>
       <textarea id="authorsInput" rows="3" spellcheck="false"></textarea>
       <div class="settings-actions">
-        <button type="button" class="text-button" id="resetSettings">Restore default keywords</button>
+        <button type="button" class="button-outline" id="resetSettings">Restore default keywords</button>
         <span class="spacer"></span>
-        <button value="cancel" class="text-button">Cancel</button>
-        <button value="save" class="solid-button">Save</button>
+        <button value="cancel" class="button-outline">Cancel</button>
+        <button value="save" class="button-solid">Save</button>
       </div>
     </form>
   </dialog>
 
-  <script src="js/render.js?v=3"></script>
-  <script src="js/app.js?v=3"></script>
+  <script src="js/render.js?v=5"></script>
+  <script src="js/app.js?v=5"></script>
 </body>
 </html>

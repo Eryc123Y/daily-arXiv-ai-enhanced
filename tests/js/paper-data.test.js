@@ -62,7 +62,7 @@ test('highlight wraps matches once and keeps surrounding text', () => {
   const html = PaperData.highlight('Stereo video and stereo-matching, not stereotypes', ['stereo', 'stereo matching'], 'hl');
   assert.equal(
     html,
-    '<span class="hl">Stereo</span> video and <span class="hl">stereo-matching</span>, not stereotypes'
+    '<mark class="hl">Stereo</mark> video and <mark class="hl">stereo-matching</mark>, not stereotypes'
   );
   assert.equal(PaperData.highlight('plain', [], 'hl'), 'plain');
 });

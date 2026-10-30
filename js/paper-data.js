@@ -109,7 +109,7 @@
   function highlight(text, terms, className) {
     const regex = text && terms && terms.length ? keywordRegex(terms, 'gi') : null;
     if (!regex) return text;
-    return text.replace(regex, (match, before, word) => `${before}<span class="${className}">${word}</span>`);
+    return text.replace(regex, (match, before, word) => `${before}<mark class="${className}">${word}</mark>`);
   }
 
   function escapeHtml(text) {
