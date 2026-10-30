@@ -73,6 +73,10 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: uv run python -m summaries api --days 3
 
+      - name: Log the summary path
+        if: steps.mode.outputs.mode == 'api' && steps.ingest.outputs.has_new_content == 'true'
+        run: uv run python -m summaries record --date "${{ steps.crawl.outputs.date }}" --path api
+
       - name: Summary
         if: always()
         run: |

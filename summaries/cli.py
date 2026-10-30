@@ -1,7 +1,8 @@
 """Command line for the daily pipeline.
 
 Actions:      ingest (crawl -> data branch), mode, api (API-mode summaries)
-Claude Code:  status, prepare, merge, finish (local summary task)
+Claude Code:  status, prepare, merge, finish (local summary task),
+              handover (usage gate reached: API job or pause), record (run log)
 """
 
 import argparse
@@ -10,6 +11,7 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -28,6 +30,9 @@ from summaries.records import (
     pending_papers,
 )
 
+REPO = os.environ.get("DATA_REPO", "Eryc123Y/daily-arXiv-ai-enhanced")
+RUN_LOG = "logs/summary-runs.jsonl"
+API_WORKFLOW = "summarize-api.yml"
 RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
 LOCK_TTL_SECONDS = 3 * 3600
 
@@ -175,6 +180,63 @@ def publish_summaries(branch, day, language, new, source):
         branch.fetch()
         build(branch)
     return stats
+
+
+# --- Run log and API fallback ------------------------------------------------
+
+
+def gh(*args):
+    """Run the GitHub CLI (authenticated as Eryc123Y on Eric's Mac)."""
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+
+
+def record_run(branch, day, language, path, reason=None):
+    """Append which summary path ran for `day` to logs/summary-runs.jsonl."""
+    entry = {}
+
+    def build(current):
+        stats = counts(read_records(current, raw_path(day)), read_records(current, ai_path(day, language)))
+        entry.clear()
+        entry.update(
+            date=day,
+            path=path,
+            at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            **stats,
+            **({"reason": reason} if reason else {}),
+        )
+        return {RUN_LOG: (current.read(RUN_LOG) or "") + dump_jsonl([entry])}
+
+    branch.publish(build, f"log: {day} {path}")
+    return entry
+
+
+def cmd_record(args):
+    branch = make_branch(args)
+    emit(**record_run(branch, args.date, args.language, args.path, args.reason))
+    return 0
+
+
+def api_key_configured():
+    names = {s["name"] for s in json.loads(gh("secret", "list", "-R", REPO, "--json", "name") or "[]")}
+    return "ANTHROPIC_API_KEY" in names
+
+
+def cmd_handover(args):
+    """Usage gate reached: hand the day's remainder to the Actions API job, or pause.
+
+    Only the secret's name is checked; its value never leaves GitHub.
+    """
+    merged = merge_outputs(args)
+    if merged["pending"] == 0:
+        path = "claude-code"
+    elif api_key_configured():
+        gh("workflow", "run", API_WORKFLOW, "-R", REPO, "-f", f"date={args.date}")
+        path = "api-fallback"
+    else:
+        path = "paused-no-key"
+    entry = record_run(make_branch(args), args.date, args.language, path, args.reason)
+    emit(**entry, problems=merged["problems"])
+    return 0
 
 
 # --- Claude Code local task ---------------------------------------------------
@@ -367,6 +429,17 @@ def build_parser():
     merge.set_defaults(func=cmd_merge)
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
+
+    handover = sub.add_parser("handover", help="usage gate reached: start the API job or pause")
+    handover.add_argument("--date", required=True)
+    handover.add_argument("--reason", help="why, e.g. 'weekly 81%%'")
+    handover.set_defaults(func=cmd_handover)
+
+    record = sub.add_parser("record", help="log which summary path ran for a day")
+    record.add_argument("--date", required=True)
+    record.add_argument("--path", required=True, help="claude-code, api, api-fallback, paused-usage, ...")
+    record.add_argument("--reason")
+    record.set_defaults(func=cmd_record)
     return parser
 
 
