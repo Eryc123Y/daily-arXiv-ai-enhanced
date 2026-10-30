@@ -78,7 +78,7 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `index.html`, `css/site.css` and `js/{app,render,paper-data,interest-presets}.js` (the reading page; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
 
 ## Changes from upstream
 
@@ -88,4 +88,4 @@ Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-br
 - `assets/file-list.txt` lists every day, which fixes the date-range view (upstream #136).
 - Summaries are produced by Claude (two modes above); papers without one are shown as pending instead of being dropped.
 - Keyword matching uses whole words over title, abstract and TL;DR.
-- A new single-page reading layout (date, paper count, interest matches first, expandable summaries, light and dark, phone width); keyword and author settings are a dialog on the same page.
+- A three-pane reading layout (topics and filters, paper list, reading pane with the full summary), light and dark, phone width; `j`/`k` move through the list and `/` searches; keyword and author settings are a dialog on the same page. Data access is isolated in `js/data-source.js` so a server or database can replace the static files later.
