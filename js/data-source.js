@@ -3,7 +3,8 @@
  * through raw.githubusercontent.com; a server or database backend only has
  * to provide the same two methods.
  *
- *   listDays()      -> { days: ['2026-10-30', ...] newest first, languages: Map(day -> ['English', ...]) }
+ *   listDays()      -> { days: ['2026-10-30', ...] newest first, languages: Map(day -> ['English', ...]),
+ *                        categories: crawled categories from assets/site.json, or null }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay)
  */
 (function (root) {
@@ -29,9 +30,16 @@
 
     return {
       async listDays() {
-        const list = PaperData.parseFileList(await fetchText('assets/file-list.txt'));
+        const [listText, siteText] = await Promise.all([fetchText('assets/file-list.txt'), fetchText('assets/site.json')]);
+        const list = PaperData.parseFileList(listText);
         languages = list.languages;
-        return { days: list.dates, languages };
+        let categories = null;
+        try {
+          categories = siteText ? JSON.parse(siteText).categories || null : null;
+        } catch (error) {
+          console.error('Ignoring an unreadable assets/site.json:', error);
+        }
+        return { days: list.dates, languages, categories };
       },
       async loadDay(day) {
         const [raw, ai] = await Promise.all([

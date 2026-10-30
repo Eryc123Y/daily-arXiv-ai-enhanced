@@ -34,6 +34,9 @@ jobs:
       LANGUAGE: ${{ vars.LANGUAGE || 'English' }}
       # Only the files we touch are downloaded from the large data branch.
       DATA_FETCH_ARGS: "--depth=1 --filter=blob:none"
+      # Data commits are made as these (repository variables); unset, as the github-actions bot.
+      COMMIT_NAME: ${{ vars.COMMIT_NAME }}
+      COMMIT_EMAIL: ${{ vars.COMMIT_EMAIL }}
 
     steps:
       - uses: actions/checkout@v4

@@ -31,11 +31,39 @@ from summaries.records import (
     pending_papers,
 )
 
-REPO = os.environ.get("DATA_REPO", "Eryc123Y/daily-arXiv-ai-enhanced")
+GITHUB_REMOTE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
+SITE_SETTINGS = "assets/site.json"
 RUN_LOG = "logs/summary-runs.jsonl"
 API_WORKFLOW = "summarize-api.yml"
 RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
 LOCK_TTL_SECONDS = 3 * 3600
+
+
+def parse_repo_slug(url):
+    match = GITHUB_REMOTE.search(url.strip())
+    return f"{match.group(1)}/{match.group(2)}" if match else None
+
+
+def repo_slug(repo_dir):
+    """owner/name of the GitHub repository: DATA_REPO, GITHUB_REPOSITORY, else the origin remote."""
+    for name in ("DATA_REPO", "GITHUB_REPOSITORY"):
+        if os.environ.get(name, "").strip():
+            return os.environ[name].strip()
+    url = subprocess.run(
+        ["git", "remote", "get-url", "origin"], cwd=str(repo_dir), capture_output=True, text=True
+    ).stdout
+    slug = parse_repo_slug(url)
+    if not slug:
+        raise SystemExit("Cannot tell which GitHub repository this is; set DATA_REPO=owner/name.")
+    return slug
+
+
+def site_settings(language):
+    """Published to the data branch so the page knows the crawled categories."""
+    categories = [c.strip() for c in os.environ.get("CATEGORIES", "").split(",") if c.strip()]
+    if not categories:
+        return {}
+    return {SITE_SETTINGS: json.dumps({"categories": categories, "language": language}, indent=2) + "\n"}
 
 
 def raw_path(day):
@@ -98,7 +126,7 @@ def cmd_ingest(args):
         existing = read_records(current, raw_path(args.date))
         combined = dedupe_by_id(existing + fresh)
         result.update(added=len(combined) - len(existing), papers=len(combined))
-        return {raw_path(args.date): dump_jsonl(combined)}
+        return {raw_path(args.date): dump_jsonl(combined), **site_settings(args.language)}
 
     content = build(branch)
     if result["added"] == 0:
@@ -194,7 +222,7 @@ def publish_summaries(branch, day, language, new, source):
 
 
 def gh(*args):
-    """Run the GitHub CLI (authenticated as Eryc123Y on Eric's Mac)."""
+    """Run the GitHub CLI as the user it is logged in as."""
     return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
 
 
@@ -228,25 +256,25 @@ class SettingsUnavailable(RuntimeError):
     pass
 
 
-def gh_variable(name):
+def gh_variable(slug, name):
     """A repository variable's value, "" when it is not set."""
     try:
-        return gh("variable", "get", name, "-R", REPO).strip()
+        return gh("variable", "get", name, "-R", slug).strip()
     except subprocess.CalledProcessError as error:
         if "not found" in (error.stderr or ""):
             return ""
         raise SettingsUnavailable(f"could not read {name}: {(error.stderr or str(error)).strip()}") from error
 
 
-def remote_api_problem():
+def remote_api_problem(slug):
     """What keeps the repository's API job from running, or None.
 
     Reads the SUMMARY_PROVIDER and SUMMARY_MODEL variables and only the
     names of the secrets; no key value is ever read.
     """
     try:
-        secrets = {s["name"] for s in json.loads(gh("secret", "list", "-R", REPO, "--json", "name") or "[]")}
-        env = {name: gh_variable(name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
+        secrets = {s["name"] for s in json.loads(gh("secret", "list", "-R", slug, "--json", "name") or "[]")}
+        env = {name: gh_variable(slug, name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
     except subprocess.CalledProcessError as error:
         return f"could not read the repository secrets: {(error.stderr or str(error)).strip()}"
     except SettingsUnavailable as error:
@@ -255,8 +283,8 @@ def remote_api_problem():
     return resolve_provider(env)[1]
 
 
-def api_key_configured():
-    return remote_api_problem() is None
+def api_key_configured(slug):
+    return remote_api_problem(slug) is None
 
 
 def cmd_handover(args):
@@ -269,9 +297,10 @@ def cmd_handover(args):
     if merged["pending"] == 0:
         path = "claude-code"
     else:
-        problem = remote_api_problem()
+        slug = repo_slug(args.repo)
+        problem = remote_api_problem(slug)
         if problem is None:
-            gh("workflow", "run", API_WORKFLOW, "-R", REPO, "-f", f"date={args.date}")
+            gh("workflow", "run", API_WORKFLOW, "-R", slug, "-f", f"date={args.date}")
             path = "api-fallback"
         else:
             path = "paused-no-key"
@@ -468,9 +497,10 @@ def build_parser():
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
 
-    from summaries import local_runner
+    from summaries import local_runner, setup
 
     local_runner.add_parser(sub)
+    setup.add_parser(sub)
 
     handover = sub.add_parser("handover", help="usage gate reached: start the API job or pause")
     handover.add_argument("--date", required=True)

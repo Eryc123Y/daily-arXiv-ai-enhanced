@@ -19,6 +19,7 @@ const state = {
   category: 'all',
   query: '',
   selectedId: null,
+  mainCategories: [],
   visible: [],
 };
 
@@ -62,7 +63,7 @@ function describeAll() {
 
 function categoryOf(record) {
   const primary = (record.categories || [])[0];
-  return DATA_CONFIG.mainCategories.includes(primary) ? primary : OTHER_FIELDS;
+  return state.mainCategories.includes(primary) ? primary : OTHER_FIELDS;
 }
 
 function inTopic(record, topic) {
@@ -128,7 +129,7 @@ function renderNav(days) {
 
   const counts = new Map();
   state.records.forEach(r => counts.set(categoryOf(r), (counts.get(categoryOf(r)) || 0) + 1));
-  const main = DATA_CONFIG.mainCategories.filter(c => counts.has(c)).sort((a, b) => counts.get(b) - counts.get(a));
+  const main = state.mainCategories.filter(c => counts.has(c)).sort((a, b) => counts.get(b) - counts.get(a));
   const chips = [filterItem('category', 'all', 'All', total, state.category)];
   main.forEach(c => chips.push(filterItem('category', c, c, counts.get(c), state.category)));
   if (counts.has(OTHER_FIELDS)) chips.push(filterItem('category', OTHER_FIELDS, 'Other fields', counts.get(OTHER_FIELDS), state.category));
@@ -381,11 +382,12 @@ function bindEvents() {
 
 async function init() {
   loadPreferences();
-  const { days } = await DataSource.listDays();
+  const { days, categories } = await DataSource.listDays();
   state.days = days;
+  state.mainCategories = categories || DATA_CONFIG.mainCategories;
   if (!days.length) {
-    $('dayTitle').textContent = 'No days available';
-    $('paperList').innerHTML = '<li class="empty">The list of days could not be loaded from GitHub. Check your connection and reload the page.</li>';
+    $('dayTitle').textContent = 'No papers yet';
+    $('paperList').innerHTML = `<li class="empty">Nothing has been published to the data branch of ${esc(DATA_CONFIG.repoOwner)}/${esc(DATA_CONFIG.repoName)} yet, or it could not be reached. On a new fork, run the arXiv-daily-ai-enhanced workflow from the Actions tab; the first day appears a few minutes after it finishes.</li>`;
     return;
   }
   const params = jsonParams();
