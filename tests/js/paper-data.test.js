@@ -73,7 +73,7 @@ test('escapeHtml neutralises markup in abstracts', () => {
 
 test('interest presets cover both of Eric\'s focus areas without duplicates', () => {
   const keywords = INTEREST_PRESETS.keywords;
-  for (const expected of ['stereo', '2D-to-3D', 'disparity', 'novel view', 'view synthesis', 'RLVR', 'data reuse', 'repeated epochs', 'weak supervision', 'sample efficiency']) {
+  for (const expected of ['stereo', '2D-to-3D', 'disparity estimation', 'novel view', 'view synthesis', 'monocular depth', 'RLVR', 'data reuse', 'repeated epochs', 'weak supervision', 'continual learning', 'loss of plasticity', 'tokenizer', 'data-constrained']) {
     assert.ok(keywords.includes(expected), expected);
   }
   assert.equal(new Set(keywords.map(k => k.toLowerCase())).size, keywords.length);
@@ -82,5 +82,33 @@ test('interest presets cover both of Eric\'s focus areas without duplicates', ()
 test('preset topics hold exactly the flat keyword list', () => {
   const flat = INTEREST_PRESETS.topics.flatMap(t => t.keywords);
   assert.deepEqual(flat, INTEREST_PRESETS.keywords);
-  assert.ok(INTEREST_PRESETS.topics.length >= 2);
+  assert.deepEqual(INTEREST_PRESETS.topics.map(t => t.name), [
+    '2D-to-3D and stereo',
+    'Weak supervision and data reuse',
+    'Continual learning',
+    'Data and representation',
+  ]);
+  for (const noisy of ['disparity', 'off-policy', 'information-theoretic', 'sample efficiency', 'PPO', 'data quality']) {
+    assert.ok(!INTEREST_PRESETS.keywords.includes(noisy), `${noisy} matches mostly unrelated papers`);
+  }
+});
+
+const { keywordsFor } = require('../../js/interest-presets.js');
+
+test('nothing saved means the current defaults', () => {
+  assert.deepEqual(keywordsFor(null), { keywords: INTEREST_PRESETS.keywords, clearSaved: false });
+});
+
+test('a saved copy of an earlier default list follows the new defaults', () => {
+  const earlier = [...INTEREST_PRESETS.previousDefaults[0]].reverse();
+  assert.deepEqual(keywordsFor(earlier), { keywords: INTEREST_PRESETS.keywords, clearSaved: true });
+});
+
+test('a customised list is kept as it is', () => {
+  const custom = ['stereo', 'my own topic'];
+  assert.deepEqual(keywordsFor(custom), { keywords: custom, clearSaved: false });
+});
+
+test('saving exactly the defaults clears the saved list', () => {
+  assert.equal(keywordsFor([...INTEREST_PRESETS.keywords]).clearSaved, true);
 });
