@@ -37,6 +37,9 @@
      */
     mainCategories: ['cs.CV', 'cs.AI', 'cs.LG', 'cs.CL', 'stat.ML', 'cs.GR'],
 
+    /** Main "Open on ..." button in the reading pane: 'alphaxiv' or 'arxiv' */
+    primaryLink: 'alphaxiv',
+
     getDataBaseUrl() {
       return `https://raw.githubusercontent.com/${this.repoOwner}/${this.repoName}/${this.dataBranch}`;
     },

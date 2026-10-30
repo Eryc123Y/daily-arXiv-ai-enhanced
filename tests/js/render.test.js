@@ -87,3 +87,14 @@ test('topics come from the presets, with extra keywords in their own topic', () 
     { name: 'Your other keywords', keywords: ['diffusion'] },
   ]);
 });
+
+test('the main button opens alphaXiv by default, with arXiv kept as a link', () => {
+  const p = paper({ AI, pending: false });
+  const info = Render.describe(p, [], [], TOPICS);
+  const html = Render.renderReader(p, info, []);
+  assert.match(html, /<a class="button-solid" href="https:\/\/www.alphaxiv.org\/abs\/2610.00001"[^>]*>Open on alphaXiv<\/a>/);
+  assert.match(html, /<a class="button-outline" href="https:\/\/arxiv.org\/abs\/2610.00001"[^>]*>arXiv<\/a>/);
+  const arxivFirst = Render.renderReader(p, info, [], { primaryLink: 'arxiv' });
+  assert.match(arxivFirst, /<a class="button-solid" href="https:\/\/arxiv.org\/abs\/2610.00001"[^>]*>Open on arXiv<\/a>/);
+  assert.match(arxivFirst, /<a class="button-outline" href="https:\/\/www.alphaxiv.org\/abs\/2610.00001"[^>]*>alphaXiv<\/a>/);
+});
