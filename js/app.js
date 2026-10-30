@@ -49,8 +49,24 @@ function defaultKeywords() {
   return window.INTEREST_PRESETS ? [...INTEREST_PRESETS.keywords] : [];
 }
 
+function forgetList(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch (error) {
+    console.error('Could not update localStorage:', error);
+  }
+}
+
+/** Saved keywords, unless they are an unchanged copy of a default list. */
+function resolveKeywords(saved) {
+  if (!window.keywordsFor) return saved || defaultKeywords();
+  const { keywords, clearSaved } = keywordsFor(saved);
+  if (clearSaved) forgetList(KEYWORDS_KEY);
+  return [...keywords];
+}
+
 function loadPreferences() {
-  state.keywords = readList(KEYWORDS_KEY, defaultKeywords());
+  state.keywords = resolveKeywords(readList(KEYWORDS_KEY, null));
   state.authors = readList(AUTHORS_KEY, []);
   state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
 }
@@ -370,10 +386,10 @@ function bindEvents() {
   $('settings').addEventListener('close', () => {
     if ($('settings').returnValue !== 'save') return;
     const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
-    state.keywords = lines('keywordsInput');
+    writeList(KEYWORDS_KEY, lines('keywordsInput'));
+    state.keywords = resolveKeywords(lines('keywordsInput'));
     state.authors = lines('authorsInput');
     state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
-    writeList(KEYWORDS_KEY, state.keywords);
     writeList(AUTHORS_KEY, state.authors);
     describeAll();
     renderAll(selectedDays());
