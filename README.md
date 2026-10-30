@@ -32,7 +32,7 @@ Everything runs on GitHub's free tier; the page reads its data from whichever re
 
 ## How a day flows
 
-1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), 01:30 UTC plus a 07:30 UTC catch-up) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
+1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), Monday to Friday at 01:30 UTC plus a 07:30 UTC catch-up) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
 2. **Summaries** are written to `data/<date>_AI_enhanced_English.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its abstract, says the summary is not written yet, and a progress bar shows how many are ready.
 3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
 
