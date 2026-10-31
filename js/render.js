@@ -189,6 +189,7 @@ ${body}
     formatDay,
     formatRange,
     authorLine,
+    CODE_ICON,
     codeKind,
     matchesFor,
     topicsFor,

@@ -465,6 +465,21 @@ textarea {
   color: var(--pill-ink);
 }
 
+.chip-list button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* "Has code" sits on its own line above the categories */
+.chip-list .chip-code {
+  flex-basis: 100%;
+}
+
+.chip-code svg {
+  width: 14px;
+  height: 14px;
+}
+
 .chip-list button[aria-pressed="true"] .count {
   color: inherit;
   opacity: 0.75;
@@ -492,7 +507,6 @@ textarea {
   z-index: 2;
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
   gap: 12px;
   padding: 16px 20px 12px;
   background: var(--surface);
@@ -511,8 +525,13 @@ textarea {
 }
 
 .list-note {
+  margin-left: auto;
   font-size: 13px;
   color: var(--muted);
+}
+
+.list-head .link-button {
+  font-size: 13px;
 }
 
 .row {
@@ -965,6 +984,10 @@ textarea {
   .topic-list li,
   .chip-list li {
     flex: none;
+  }
+
+  .chip-list .chip-code {
+    flex-basis: auto;
   }
 
   .list {
