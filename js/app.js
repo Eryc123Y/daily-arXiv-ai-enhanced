@@ -5,7 +5,6 @@
  */
 const KEYWORDS_KEY = 'preferredKeywords';
 const AUTHORS_KEY = 'preferredAuthors';
-const OTHER_FIELDS = 'other';
 const PHONE = window.matchMedia('(max-width: 760px)');
 
 const state = {
@@ -78,36 +77,16 @@ function describeAll() {
 
 // --- Filtering ----------------------------------------------------------------
 
-function categoryOf(record) {
-  const primary = (record.categories || [])[0];
-  return state.mainCategories.includes(primary) ? primary : OTHER_FIELDS;
+function activeFilters() {
+  return { topic: state.topic, category: state.category, codeOnly: state.codeOnly, query: state.query };
 }
 
-function inTopic(record, topic) {
-  const info = state.info.get(record.id);
-  if (topic === 'all') return true;
-  if (topic === 'matches') return info.matched;
-  if (topic === 'authors') return info.match.authors.length > 0;
-  return info.topics.some(t => t.name === topic);
-}
-
-function matchesQuery(record, query) {
-  if (!query) return true;
-  const ai = record.pending ? {} : record.AI || {};
-  return [record.title, record.summary, (record.authors || []).join(', '), record.id, ...Object.values(ai)]
-    .join(' ')
-    .toLowerCase()
-    .includes(query);
+function entries() {
+  return state.records.map((record, index) => ({ record, index, info: state.info.get(record.id) }));
 }
 
 function computeVisible() {
-  const query = state.query.trim().toLowerCase();
-  state.visible = state.records
-    .map((record, index) => ({ record, index, info: state.info.get(record.id) }))
-    .filter(e => inTopic(e.record, state.topic))
-    .filter(e => state.category === 'all' || categoryOf(e.record) === state.category)
-    .filter(e => !state.codeOnly || Render.codeKind(e.record) === 'code')
-    .filter(e => matchesQuery(e.record, query))
+  state.visible = Filters.apply(entries(), activeFilters(), state.mainCategories)
     .sort((a, b) => b.info.score - a.info.score || a.index - b.index);
 }
 
@@ -138,31 +117,45 @@ function renderNav(days) {
     $('progressText').textContent = Render.progressText(done, total);
   }
 
-  const count = topic => state.records.filter(r => inTopic(r, topic)).length;
-  const topics = [filterItem('topic', 'matches', 'Interest matches', matched, state.topic)];
+  const counts = Filters.counts(entries(), activeFilters(), state.mainCategories, state.topics.map(t => t.name));
+  const count = topic => counts.topics.get(topic);
+  const topics = [filterItem('topic', 'matches', 'Interest matches', count('matches'), state.topic)];
   state.topics.forEach((t, i) => topics.push(filterItem('topic', t.name, t.name, count(t.name), state.topic, i)));
   if (state.authors.length) topics.push(filterItem('topic', 'authors', 'Your authors', count('authors'), state.topic, 'author'));
-  topics.push(filterItem('topic', 'all', 'All papers', total, state.topic));
+  topics.push(filterItem('topic', 'all', 'All papers', count('all'), state.topic));
   $('topicList').innerHTML = topics.join('');
+  renderRefine(counts);
+}
 
-  const counts = new Map();
-  state.records.forEach(r => counts.set(categoryOf(r), (counts.get(categoryOf(r)) || 0) + 1));
-  const main = state.mainCategories.filter(c => counts.has(c)).sort((a, b) => counts.get(b) - counts.get(a));
-  const chips = [filterItem('category', 'all', 'All', total, state.category)];
-  main.forEach(c => chips.push(filterItem('category', c, c, counts.get(c), state.category)));
-  if (counts.has(OTHER_FIELDS)) chips.push(filterItem('category', OTHER_FIELDS, 'Other fields', counts.get(OTHER_FIELDS), state.category));
-  $('categoryList').innerHTML = chips.join('');
-
-  const withCode = state.records.filter(r => Render.codeKind(r) === 'code').length;
-  $('codeList').innerHTML = `<li><button type="button" data-code aria-pressed="${state.codeOnly}" title="Papers whose abstract or comments link a code repository. Links that appear only in the PDF are not seen."><span class="label">Has code</span><span class="count">${withCode}</span></button></li>`;
+/** "Has code" and the arXiv categories: refinements applied on top of the topic. */
+function renderRefine(counts) {
+  const totals = new Map();
+  state.records.forEach(r => {
+    const key = Filters.categoryOf(r, state.mainCategories);
+    totals.set(key, (totals.get(key) || 0) + 1);
+  });
+  const chip = (key, label) => {
+    const n = counts.categories.get(key) || 0;
+    const disabled = n === 0 && state.category !== key ? ' disabled' : '';
+    return `<li><button type="button" data-category="${esc(key)}" aria-pressed="${state.category === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${n}</span></button></li>`;
+  };
+  const main = state.mainCategories.filter(c => totals.has(c)).sort((a, b) => totals.get(b) - totals.get(a));
+  const items = [
+    `<li class="chip-code"><button type="button" data-code aria-pressed="${state.codeOnly}" title="Papers whose abstract or comments link a code repository. Links that appear only in the PDF are not seen.">${Render.CODE_ICON}<span class="label">Has code</span><span class="count">${counts.code}</span></button></li>`,
+    chip('all', 'All fields'),
+    ...main.map(c => chip(c, c)),
+  ];
+  if (totals.has(Filters.OTHER_FIELDS)) items.push(chip(Filters.OTHER_FIELDS, 'Other fields'));
+  $('refineList').innerHTML = items.join('');
 }
 
 function renderList() {
   computeVisible();
-  const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === OTHER_FIELDS ? 'other fields' : state.category}`;
+  const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === Filters.OTHER_FIELDS ? 'other fields' : state.category}`;
   const scope = state.codeOnly ? `${place}, with code` : place;
   $('listHeading').innerHTML = `${esc(scope)} <span class="count">${state.visible.length}</span>`;
   $('listNote').textContent = state.topic === 'all' && state.visible.length ? 'Interest matches first' : '';
+  $('clearFilters').hidden = !Filters.isRefined(activeFilters());
   if (!state.records.length) {
     $('paperList').innerHTML = '<li class="empty">No papers were published for this day. arXiv makes no announcement on Friday and Saturday nights or on holidays; choose another day above.</li>';
     renderReader();
@@ -171,8 +164,8 @@ function renderList() {
   if (!state.visible.length) {
     $('paperList').innerHTML = state.query
       ? `<li class="empty">No papers match "${esc(state.query)}" here. Clear the search or choose All papers.</li>`
-      : state.codeOnly
-        ? '<li class="empty">No papers here link their code. Turn off Has code to see the rest.</li>'
+      : Filters.isRefined(activeFilters())
+        ? '<li class="empty">No papers in this topic match these refinements. Clear filters to see the whole topic.</li>'
         : '<li class="empty">No papers in this topic today. Choose All papers to see everything.</li>';
     renderReader();
     return;
@@ -355,6 +348,7 @@ function bindEvents() {
   });
   $('search').addEventListener('input', event => {
     state.query = event.target.value;
+    renderNav(selectedDays());
     renderList();
   });
   $('topicList').addEventListener('click', event => {
@@ -365,16 +359,19 @@ function bindEvents() {
     renderList();
     writeHash();
   });
-  $('categoryList').addEventListener('click', event => {
-    const button = event.target.closest('button[data-category]');
+  $('refineList').addEventListener('click', event => {
+    const button = event.target.closest('button');
     if (!button) return;
-    state.category = button.dataset.category;
+    if (button.hasAttribute('data-code')) state.codeOnly = !state.codeOnly;
+    else if (button.dataset.category) state.category = button.dataset.category;
+    else return;
     renderNav(selectedDays());
     renderList();
+    writeHash();
   });
-  $('codeList').addEventListener('click', event => {
-    if (!event.target.closest('button[data-code]')) return;
-    state.codeOnly = !state.codeOnly;
+  $('clearFilters').addEventListener('click', () => {
+    state.category = 'all';
+    state.codeOnly = false;
     renderNav(selectedDays());
     renderList();
     writeHash();
