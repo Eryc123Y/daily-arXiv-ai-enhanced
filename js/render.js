@@ -159,7 +159,7 @@
       ? `<span class="reader-matches">matches ${reasons.map(r => `<mark class="hl">${esc(r)}</mark>`).join(' ')}</span>`
       : '';
     const body = ai
-      ? `<section class="tldr" aria-labelledby="tldrHeading"><h3 id="tldrHeading">TL;DR</h3><p>${mark(ai.tldr, terms)}</p></section>
+      ? `<section class="tldr" aria-labelledby="tldrHeading"><h3 id="tldrHeading">TL;DR</h3><p class="provenance">AI summary of the title and abstract, not the full paper</p><p>${mark(ai.tldr, terms)}</p></section>
 <div class="fields">${FIELDS.map(([key, label]) => `<section><h3>${label}</h3><p>${mark(ai[key], terms)}</p></section>`).join('')}</div>
 <details class="abstract"><summary>Show the abstract</summary><p>${mark(paper.summary, terms)}</p></details>`
       : `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>

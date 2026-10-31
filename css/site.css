@@ -642,6 +642,10 @@ textarea {
   color: var(--muted);
 }
 
+.load-error .button-outline {
+  margin-top: 12px;
+}
+
 /* Right: the reading pane */
 
 .reader {
@@ -723,6 +727,12 @@ textarea {
 
 .tldr h3 {
   font-size: 13px;
+  color: var(--muted);
+}
+
+.tldr .provenance {
+  margin: -2px 0 8px;
+  font-size: 12.5px;
   color: var(--muted);
 }
 

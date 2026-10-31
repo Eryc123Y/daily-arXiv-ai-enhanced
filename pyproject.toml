@@ -19,7 +19,8 @@ dependencies = [
     "scrapy>=2.12.0",
     "tqdm>=4.67.1",
 ]
-license = "Apache-2.0"
+license = "LicenseRef-Modified-Apache-2.0"
+license-files = ["LICENSE"]
 
 [dependency-groups]
 dev = [
