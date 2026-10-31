@@ -568,6 +568,25 @@ textarea {
   color: var(--pending);
 }
 
+.row-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.row-code svg {
+  width: 14px;
+  height: 14px;
+}
+
+.row-code.is-page {
+  font-weight: 400;
+  color: var(--muted);
+}
+
 .row > .row-title {
   margin-top: 4px;
   font: 500 17.5px / 1.3 var(--serif);

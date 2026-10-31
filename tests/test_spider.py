@@ -76,3 +76,22 @@ def test_cross_list_cutoff_falls_back_to_last_week_when_a_listing_has_no_new_pap
     assert cutoff == "2610"
     assert spider.is_late_cross_list("2609.00001", cutoff)
     assert not spider.is_late_cross_list("2610.40001", cutoff)
+
+
+def code_url_of(*hrefs):
+    links = "".join(f'<a href="{h}">this https URL</a> ' for h in hrefs)
+    html = f'<dl><dd><p class="mathjax">Abstract {links}</p></dd></dl>'
+    response = HtmlResponse(url=URL, body=html.encode(), encoding="utf-8", request=Request(URL))
+    return ArxivSpider._code_url(response.css("dd"))
+
+
+def test_gitlab_codeberg_and_anonymous_review_repos_count_as_code():
+    assert code_url_of("https://gitlab.com/group/tool/-/tree/main") == "https://gitlab.com/group/tool"
+    assert code_url_of("https://codeberg.org/me/proj.git") == "https://codeberg.org/me/proj"
+    assert code_url_of("https://anonymous.4open.science/r/Model-1A2B/") == "https://anonymous.4open.science/r/Model-1A2B"
+
+
+def test_a_repo_link_wins_over_a_project_page():
+    assert code_url_of("https://me.github.io/proj", "https://github.com/me/proj") == "https://github.com/me/proj"
+    assert code_url_of("https://me.gitlab.io/proj/") == "https://me.gitlab.io/proj/"
+    assert code_url_of("https://example.com/proj") is None

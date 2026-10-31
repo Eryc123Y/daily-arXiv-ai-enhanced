@@ -98,3 +98,24 @@ test('the main button opens alphaXiv by default, with arXiv kept as a link', () 
   assert.match(arxivFirst, /<a class="button-solid" href="https:\/\/arxiv.org\/abs\/2610.00001"[^>]*>Open on arXiv<\/a>/);
   assert.match(arxivFirst, /<a class="button-outline" href="https:\/\/www.alphaxiv.org\/abs\/2610.00001"[^>]*>alphaXiv<\/a>/);
 });
+
+test('code links are a repository or a project page, and absent otherwise', () => {
+  assert.equal(Render.codeKind(paper({ code_url: 'https://github.com/a/b' })), 'code');
+  assert.equal(Render.codeKind(paper({ code_url: 'https://anonymous.4open.science/r/x' })), 'code');
+  assert.equal(Render.codeKind(paper({ code_url: 'https://a.github.io/proj' })), 'page');
+  assert.equal(Render.codeKind(paper({ code_url: 'https://a.gitlab.io/proj/' })), 'page');
+  assert.equal(Render.codeKind(paper({})), null);
+});
+
+test('a row marks linked code or a project page, and nothing when there is none', () => {
+  const info = Render.describe(paper({}), [], [], TOPICS);
+  assert.match(Render.renderRow(paper({ code_url: 'https://github.com/a/b' }), info, false), /<span class="row-code"[^>]*>.*Code<\/span>/);
+  assert.match(Render.renderRow(paper({ code_url: 'https://a.github.io/p' }), info, false), /<span class="row-code is-page"[^>]*>.*Project page<\/span>/);
+  assert.doesNotMatch(Render.renderRow(paper({}), info, false), /row-code/);
+});
+
+test('the reading pane names the link as code or a project page', () => {
+  const info = Render.describe(paper({}), [], [], TOPICS);
+  assert.match(Render.renderReader(paper({ code_url: 'https://github.com/a/b' }), info, []), />Code<\/a>/);
+  assert.match(Render.renderReader(paper({ code_url: 'https://a.github.io/p' }), info, []), />Project page<\/a>/);
+});
