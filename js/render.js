@@ -19,6 +19,22 @@
     ['conclusion', 'Conclusion'],
   ];
 
+  const PROJECT_PAGE = /^https?:\/\/[\w-]+\.git(?:hub|lab)\.io(?:\/|$)/i;
+  const CODE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5.5 4 1.5 8l4 4M10.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  /** 'code' for a linked repository, 'page' for a project page, null when the paper links neither. */
+  function codeKind(paper) {
+    if (!paper.code_url) return null;
+    return PROJECT_PAGE.test(paper.code_url) ? 'page' : 'code';
+  }
+
+  function codeMark(paper) {
+    const kind = codeKind(paper);
+    if (kind === 'code') return `<span class="row-code" title="Links its code">${CODE_ICON}Code</span>`;
+    if (kind === 'page') return `<span class="row-code is-page" title="Links a project page">Project page</span>`;
+    return '';
+  }
+
   function parseDay(day) {
     const [y, m, d] = day.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d));
@@ -107,7 +123,7 @@
     const ai = paper.pending ? null : paper.AI;
     const lead = ai ? ai.tldr : paper.summary;
     return `<li><button type="button" class="row${selected ? ' is-selected' : ''}" data-id="${esc(paper.id)}"${selected ? ' aria-current="true"' : ''}>
-  <span class="row-head">${topicLabel(info, paper)}${paper.pending ? '<span class="row-pending">Summary pending</span>' : ''}</span>
+  <span class="row-head">${topicLabel(info, paper)}${paper.pending ? '<span class="row-pending">Summary pending</span>' : ''}${codeMark(paper)}</span>
   <span class="row-title">${esc(paper.title)}</span>
   <span class="row-authors">${esc(authorLine(paper.authors, 3))}</span>
   <span class="row-lead">${esc(lead || '')}</span>
@@ -126,7 +142,8 @@
       [paper.pdf || abs.replace('/abs/', '/pdf/'), 'PDF', 'button-outline'],
       [abs.replace('/abs/', '/html/'), 'HTML', 'button-outline'],
     ];
-    if (paper.code_url) items.push([paper.code_url, 'Code', 'button-outline']);
+    const kind = codeKind(paper);
+    if (kind) items.push([paper.code_url, kind === 'code' ? 'Code' : 'Project page', 'button-outline']);
     return items
       .map(([href, label, cls]) => `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`)
       .join('');
@@ -172,6 +189,7 @@ ${body}
     formatDay,
     formatRange,
     authorLine,
+    codeKind,
     matchesFor,
     topicsFor,
     topicNames,

@@ -17,6 +17,7 @@ const state = {
   authors: [],
   topic: null,
   category: 'all',
+  codeOnly: false,
   query: '',
   selectedId: null,
   mainCategories: [],
@@ -105,6 +106,7 @@ function computeVisible() {
     .map((record, index) => ({ record, index, info: state.info.get(record.id) }))
     .filter(e => inTopic(e.record, state.topic))
     .filter(e => state.category === 'all' || categoryOf(e.record) === state.category)
+    .filter(e => !state.codeOnly || Render.codeKind(e.record) === 'code')
     .filter(e => matchesQuery(e.record, query))
     .sort((a, b) => b.info.score - a.info.score || a.index - b.index);
 }
@@ -150,11 +152,15 @@ function renderNav(days) {
   main.forEach(c => chips.push(filterItem('category', c, c, counts.get(c), state.category)));
   if (counts.has(OTHER_FIELDS)) chips.push(filterItem('category', OTHER_FIELDS, 'Other fields', counts.get(OTHER_FIELDS), state.category));
   $('categoryList').innerHTML = chips.join('');
+
+  const withCode = state.records.filter(r => Render.codeKind(r) === 'code').length;
+  $('codeList').innerHTML = `<li><button type="button" data-code aria-pressed="${state.codeOnly}" title="Papers whose abstract or comments link a code repository. Links that appear only in the PDF are not seen."><span class="label">Has code</span><span class="count">${withCode}</span></button></li>`;
 }
 
 function renderList() {
   computeVisible();
-  const scope = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === OTHER_FIELDS ? 'other fields' : state.category}`;
+  const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === OTHER_FIELDS ? 'other fields' : state.category}`;
+  const scope = state.codeOnly ? `${place}, with code` : place;
   $('listHeading').innerHTML = `${esc(scope)} <span class="count">${state.visible.length}</span>`;
   $('listNote').textContent = state.topic === 'all' && state.visible.length ? 'Interest matches first' : '';
   if (!state.records.length) {
@@ -165,7 +171,9 @@ function renderList() {
   if (!state.visible.length) {
     $('paperList').innerHTML = state.query
       ? `<li class="empty">No papers match "${esc(state.query)}" here. Clear the search or choose All papers.</li>`
-      : '<li class="empty">No papers in this topic today. Choose All papers to see everything.</li>';
+      : state.codeOnly
+        ? '<li class="empty">No papers here link their code. Turn off Has code to see the rest.</li>'
+        : '<li class="empty">No papers in this topic today. Choose All papers to see everything.</li>';
     renderReader();
     return;
   }
@@ -243,6 +251,7 @@ function writeHash() {
   const params = new URLSearchParams({ day: days[days.length - 1] });
   if (days.length > 1) params.set('from', days[0]);
   if (state.topic && state.topic !== 'matches') params.set('topic', state.topic);
+  if (state.codeOnly) params.set('code', '1');
   if (state.selectedId) params.set('paper', state.selectedId);
   history.replaceState(null, '', `#${params}`);
 }
@@ -258,6 +267,7 @@ function readHash() {
     $('rangeStart').hidden = false;
   }
   state.topic = params.get('topic');
+  state.codeOnly = params.get('code') === '1';
   state.selectedId = params.get('paper');
 }
 
@@ -361,6 +371,13 @@ function bindEvents() {
     state.category = button.dataset.category;
     renderNav(selectedDays());
     renderList();
+  });
+  $('codeList').addEventListener('click', event => {
+    if (!event.target.closest('button[data-code]')) return;
+    state.codeOnly = !state.codeOnly;
+    renderNav(selectedDays());
+    renderList();
+    writeHash();
   });
   $('paperList').addEventListener('click', event => {
     const button = event.target.closest('button.row');

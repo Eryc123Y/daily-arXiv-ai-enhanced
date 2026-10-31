@@ -6,8 +6,12 @@ import scrapy
 
 ARXIV_ID = re.compile(r"^(\d{4})\.\d{4,5}$")
 CATEGORY_CODE = re.compile(r"\(([a-z\-]+(?:\.[A-Za-z\-]+)?)\)")
-GITHUB_REPO = re.compile(r"^https?://github\.com/[\w.-]+/[\w.-]+")
-GITHUB_PAGES = re.compile(r"^https?://[\w-]+\.github\.io(?:/[\w.\-/]*)?")
+# A code repository beats a project page when a paper links both.
+CODE_REPO = re.compile(
+    r"^https?://(?:(?:github\.com|gitlab\.com|codeberg\.org)/[\w.-]+/[\w.-]+"
+    r"|anonymous\.4open\.science/r/[\w.-]+)"
+)
+PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/[\w.\-/]*)?")
 
 
 def _text(selector):
@@ -97,7 +101,7 @@ class ArxivSpider(scrapy.Spider):
     @staticmethod
     def _code_url(dd):
         links = dd.css("p.mathjax a::attr(href), .list-comments a::attr(href)").getall()
-        for pattern in (GITHUB_REPO, GITHUB_PAGES):
+        for pattern in (CODE_REPO, PROJECT_PAGE):
             for link in links:
                 match = pattern.match(link)
                 if match:
