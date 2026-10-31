@@ -119,3 +119,9 @@ test('the reading pane names the link as code or a project page', () => {
   assert.match(Render.renderReader(paper({ code_url: 'https://github.com/a/b' }), info, []), />Code<\/a>/);
   assert.match(Render.renderReader(paper({ code_url: 'https://a.github.io/p' }), info, []), />Project page<\/a>/);
 });
+
+test('a summary says it was written from the title and abstract', () => {
+  const p = paper({ AI, pending: false });
+  const html = Render.renderReader(p, Render.describe(p, [], [], TOPICS), []);
+  assert.match(html, /class="provenance">AI summary of the title and abstract, not the full paper</);
+});

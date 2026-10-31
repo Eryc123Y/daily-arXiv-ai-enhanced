@@ -270,12 +270,40 @@ function updateDayButtons() {
   $('nextDay').disabled = index <= 0;
 }
 
+/** A failed download, shown as a failure with a way to try again, never as an empty day. */
+function showLoadError(error, retry) {
+  console.error('Could not load data:', error);
+  const status = error && error.status;
+  const message = !status
+    ? "The papers could not be loaded because GitHub's file server could not be reached. Check your connection and try again."
+    : status === 404
+      ? `The papers could not be loaded: ${error.path} is missing from the data branch (HTTP 404). Choose another day, or try again after the next crawl.`
+      : `The papers could not be loaded: GitHub's file server answered HTTP ${status}. Try again in a minute.`;
+  state.records = [];
+  state.visible = [];
+  $('daySentence').textContent = '';
+  $('progress').hidden = true;
+  $('topicList').innerHTML = '';
+  $('refineList').innerHTML = '';
+  $('listHeading').textContent = 'Papers';
+  $('listNote').textContent = '';
+  $('clearFilters').hidden = true;
+  $('paperList').innerHTML = `<li class="empty load-error" role="alert">${esc(message)}<br><button type="button" class="button-outline" id="loadRetry">Try again</button></li>`;
+  $('loadRetry').addEventListener('click', retry, { once: true });
+  renderReader();
+}
+
 async function showSelection({ keepTopic = false } = {}) {
   const days = selectedDays();
   updateDayButtons();
   if (!days.length) return;
   $('paperList').innerHTML = '<li class="empty">Loading papers…</li>';
-  state.records = (await Promise.all(days.map(d => DataSource.loadDay(d)))).flat();
+  try {
+    state.records = (await Promise.all(days.map(d => DataSource.loadDay(d)))).flat();
+  } catch (error) {
+    showLoadError(error, () => showSelection({ keepTopic: true }));
+    return;
+  }
   describeAll();
   const anyMatch = state.records.some(r => state.info.get(r.id).matched);
   const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
@@ -412,7 +440,15 @@ function bindEvents() {
 
 async function init() {
   loadPreferences();
-  const { days, categories } = await DataSource.listDays();
+  let listing;
+  try {
+    listing = await DataSource.listDays();
+  } catch (error) {
+    $('dayTitle').textContent = 'Papers unavailable';
+    showLoadError(error, init);
+    return;
+  }
+  const { days, categories } = listing;
   state.days = days;
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
   if (!days.length) {
