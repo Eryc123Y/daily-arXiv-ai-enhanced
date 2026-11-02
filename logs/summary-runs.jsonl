@@ -1,1 +1,2 @@
 {"date": "2026-10-30", "path": "claude-code", "at": "2026-10-30T11:42:32+00:00", "total": 910, "done": 910, "pending": 0}
+{"date": "2026-11-02", "path": "paused-no-key", "at": "2026-11-02T08:44:28+00:00", "total": 450, "done": 0, "pending": 450, "reason": "5h 15%, weekly 96%; the ANTHROPIC_API_KEY secret is not set"}
