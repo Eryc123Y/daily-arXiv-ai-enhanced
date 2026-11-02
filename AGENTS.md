@@ -5,7 +5,7 @@ Daily arXiv: GitHub Actions crawls arXiv's `/new` listings into the `data` branc
 ## Layout
 
 - `daily_arxiv/` Scrapy spider for the listings.
-- `summaries/` Python package and CLI (`uv run python -m summaries --help`): data-branch publishing (`databranch.py`), summary merge rules (`records.py`), the local job (`cli.py`, `local_runner.py`), API providers (`providers.py`, `anthropic_api.py`, `openai_compat.py`, `llm.py`).
+- `summaries/` Python package and CLI (`uv run python -m summaries --help`): data-branch publishing (`databranch.py`), summary merge rules (`records.py`), the local job (`cli.py`, `local_runner.py`), the daily Chinese report (`digest.py`, topic matching in `interests.py`), API providers (`providers.py`, `anthropic_api.py`, `openai_compat.py`, `llm.py`). Design and measurements of the daily pipeline: `docs/daily-pipeline.md`.
 - `index.html`, `css/site.css`, `js/` the reading page. Data access goes through `js/data-source.js` only; which papers the list shows is `js/filters.js`.
 - `tests/` pytest suite and `tests/js/` node tests.
 

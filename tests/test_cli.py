@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -422,3 +423,141 @@ def test_handover_pauses_when_the_repository_settings_cannot_be_read(tmp_path, r
     assert json.loads(out)["path"] == "paused-no-key"
     assert "could not read" in log_lines(remote)[-1]["reason"]
     assert not any(c[:2] == ("workflow", "run") for c in calls)
+
+
+def crawl_gh(calls, on_dispatch=None, runs=None, conclusion="success", flaky=0):
+    """GitHub CLI stand-in: records calls, lists `runs`, runs `on_dispatch` for `workflow run`.
+
+    The first `flaky` run listings after a dispatch fail as an offline `gh` would.
+    """
+    runs = runs if runs is not None else [{"databaseId": 1, "status": "completed", "conclusion": "success"}]
+    failures = [flaky]
+
+    def gh(*args):
+        calls.append(args)
+        if args[:2] == ("workflow", "run"):
+            if on_dispatch:
+                on_dispatch()
+            runs.insert(0, {"databaseId": 100 + len(runs), "status": "completed", "conclusion": conclusion})
+            return ""
+        if args[:2] == ("run", "list"):
+            if any(c[:2] == ("workflow", "run") for c in calls) and failures[0] > 0:
+                failures[0] -= 1
+                raise subprocess.CalledProcessError(1, ["gh"], stderr="connection reset")
+            return json.dumps(runs)
+        raise AssertionError(args)
+
+    return gh
+
+
+def test_ensure_day_does_nothing_when_the_crawl_already_published(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-11-02.jsonl": dump_jsonl([paper("A")])})
+    calls = []
+    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    assert code == 0 and json.loads(out)["status"] == "present" and calls == []
+
+
+def test_ensure_day_skips_weekends(remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    _, clone = remote_and_clone
+    calls = []
+    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-01", capsys=capsys)
+
+    assert json.loads(out)["status"] == "weekend" and calls == []
+
+
+def test_ensure_day_starts_the_crawl_and_waits_for_it(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
+
+    def crawl():
+        work = tmp_path / "data-seed"
+        (work / "data" / "2026-11-02.jsonl").write_text(dump_jsonl([paper("B")]))
+        git(work, "add", ".")
+        git(work, "commit", "-m", "crawl")
+        git(work, "push", str(remote), "HEAD:refs/heads/data")
+
+    calls = []
+    monkeypatch.setattr(cli, "gh", crawl_gh(calls, on_dispatch=crawl))
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    report = json.loads(out)
+    assert (report["status"], report["dispatched"], report["total"]) == ("present", True, 1)
+    assert ("workflow", "run", "run.yml", "-R", "alice/my-arxiv") in calls
+
+
+def test_ensure_day_reports_a_crawl_that_found_nothing(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
+    calls = []
+    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    assert json.loads(out)["status"] == "missing"
+
+
+def test_ensure_day_does_not_start_a_second_crawl_while_one_runs(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
+    runs = [{"databaseId": 7, "status": "in_progress", "conclusion": ""}]
+
+    def finish(seconds):
+        runs[0]["status"] = "completed"
+
+    calls = []
+    monkeypatch.setattr(cli, "gh", crawl_gh(calls, runs=runs))
+    monkeypatch.setattr(cli.time, "sleep", finish)
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    assert not any(c[:2] == ("workflow", "run") for c in calls)
+    assert json.loads(out)["dispatched"] is False
+
+
+def test_ensure_day_reports_a_failed_crawl(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
+    monkeypatch.setattr(cli, "gh", crawl_gh([], conclusion="failure", flaky=2))
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    assert json.loads(out)["status"] == "crawl-failed"
+
+
+def test_ensure_day_reports_a_dispatch_it_could_not_make(tmp_path, remote_and_clone, monkeypatch, capsys):
+    from summaries import cli
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
+
+    def offline(*args):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="error connecting to api.github.com")
+
+    monkeypatch.setattr(cli, "gh", offline)
+
+    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 1 and report["status"] == "error" and "api.github.com" in report["reason"]

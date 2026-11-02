@@ -1,7 +1,9 @@
 """Command line for the daily pipeline.
 
 Actions:      ingest (crawl -> data branch), mode, api (API-mode summaries)
-Claude Code:  status, prepare, merge, finish (local summary task),
+Local task:   ensure-day (start a skipped crawl), run-local (summaries through
+              a headless coding agent), digest (the short Chinese report),
+              status, prepare, merge, finish (subagent summaries),
               handover (usage gate reached: API job or pause), record (run log)
 """
 
@@ -35,6 +37,10 @@ GITHUB_REMOTE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
 SITE_SETTINGS = "assets/site.json"
 RUN_LOG = "logs/summary-runs.jsonl"
 API_WORKFLOW = "summarize-api.yml"
+CRAWL_WORKFLOW = "run.yml"
+ACTIVE_RUN = {"queued", "in_progress", "waiting", "pending", "requested"}
+POLL_SECONDS = 20
+GH_TIMEOUT = 120
 RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
 LOCK_TTL_SECONDS = 3 * 3600
 
@@ -223,7 +229,7 @@ def publish_summaries(branch, day, language, new, source):
 
 def gh(*args):
     """Run the GitHub CLI as the user it is logged in as."""
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True).stdout
+    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True, timeout=GH_TIMEOUT).stdout
 
 
 def record_run(branch, day, language, path, reason=None):
@@ -275,8 +281,8 @@ def remote_api_problem(slug):
     try:
         secrets = {s["name"] for s in json.loads(gh("secret", "list", "-R", slug, "--json", "name") or "[]")}
         env = {name: gh_variable(slug, name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
-    except subprocess.CalledProcessError as error:
-        return f"could not read the repository secrets: {(error.stderr or str(error)).strip()}"
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        return f"could not read the repository secrets: {(getattr(error, 'stderr', None) or str(error)).strip()}"
     except SettingsUnavailable as error:
         return str(error)
     env.update({name: "set" for name in KEY_ENV.values() if name in secrets})
@@ -307,6 +313,64 @@ def cmd_handover(args):
     reason = "; ".join(filter(None, [args.reason, problem])) or None
     entry = record_run(make_branch(args), args.date, args.language, path, reason)
     emit(**entry, problems=merged["problems"])
+    return 0
+
+
+def crawl_runs(slug):
+    fields = "databaseId,status,conclusion"
+    return json.loads(gh("run", "list", "--workflow", CRAWL_WORKFLOW, "-R", slug, "-L", "5", "--json", fields) or "[]")
+
+
+def wait_for_crawl(slug, seen, watch, wait):
+    """Poll until the watched runs have finished: the ones in `watch`, or else the first new run.
+
+    Returns their conclusions, or None if the wait ran out. A failed listing is retried.
+    """
+    deadline = time.monotonic() + wait
+    while time.monotonic() < deadline:
+        time.sleep(POLL_SECONDS)
+        try:
+            runs = crawl_runs(slug)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+        mine = [r for r in runs if r["databaseId"] in watch] if watch else [r for r in runs if r["databaseId"] not in seen]
+        if mine and not any(r["status"] in ACTIVE_RUN for r in mine):
+            return [r.get("conclusion") or "" for r in mine]
+    return None
+
+
+def cmd_ensure_day(args):
+    """Make sure a weekday's crawl ran: start it from here when GitHub's schedule skipped it."""
+    day = args.date or datetime.now(timezone.utc).date().isoformat()
+    if date.fromisoformat(day).weekday() >= 5:
+        emit(date=day, status="weekend")
+        return 0
+    branch = make_branch(args)
+    branch.fetch()
+    raw = read_records(branch, raw_path(day))
+    if raw:
+        emit(date=day, status="present", dispatched=False, total=len(dedupe_by_id(raw)))
+        return 0
+    slug = repo_slug(args.repo)
+    try:
+        runs = crawl_runs(slug)
+        running = {r["databaseId"] for r in runs if r["status"] in ACTIVE_RUN}
+        if not running:
+            gh("workflow", "run", CRAWL_WORKFLOW, "-R", slug)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        detail = (getattr(error, "stderr", None) or str(error)).strip() or str(error)
+        emit(date=day, status="error", reason=detail.splitlines()[-1][:200])
+        return 1
+    conclusions = wait_for_crawl(slug, {r["databaseId"] for r in runs}, running, args.wait)
+    branch.fetch()
+    raw = read_records(branch, raw_path(day))
+    if raw:
+        status = "present"
+    elif conclusions is None:
+        status = "waiting"
+    else:
+        status = "crawl-failed" if "failure" in conclusions else "missing"
+    emit(date=day, status=status, dispatched=not running, total=len(dedupe_by_id(raw)))
     return 0
 
 
@@ -497,15 +561,21 @@ def build_parser():
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
 
-    from summaries import local_runner, setup
+    from summaries import digest, local_runner, setup
 
     local_runner.add_parser(sub)
     setup.add_parser(sub)
+    digest.add_parser(sub)
 
     handover = sub.add_parser("handover", help="usage gate reached: start the API job or pause")
     handover.add_argument("--date", required=True)
     handover.add_argument("--reason", help="why, e.g. 'weekly 81%%'")
     handover.set_defaults(func=cmd_handover)
+
+    ensure = sub.add_parser("ensure-day", help="start the crawl if a weekday's papers are not published yet")
+    ensure.add_argument("--date", help="UTC day, default today")
+    ensure.add_argument("--wait", type=int, default=480, help="seconds to wait for the crawl")
+    ensure.set_defaults(func=cmd_ensure_day)
 
     record = sub.add_parser("record", help="log which summary path ran for a day")
     record.add_argument("--date", required=True)

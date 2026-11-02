@@ -31,7 +31,8 @@ def chunk_prompt(instructions, input_path, output_path):
 def client_argv(client, prompt, model=None, command=None):
     """The headless command line for one chunk."""
     if client == "claude":
-        return ["claude", "-p", prompt, "--model", model or "haiku", "--allowedTools", "Read,Write"]
+        # Only the two file tools and no MCP servers: a full tool list costs ~60k tokens per call.
+        return ["claude", "-p", prompt, "--model", model or "haiku", "--tools", "Read,Write", "--allowedTools", "Read,Write", "--strict-mcp-config"]
     if client == "codex":
         return ["codex", "exec", "--sandbox", "workspace-write", *(["-m", model] if model else []), prompt]
     if client == "antigravity":
@@ -49,7 +50,7 @@ def run_chunk(chunk, plan, args):
     name = Path(chunk["input"]).name
     argv = client_argv(args.client, chunk_prompt(plan["instructions"], chunk["input"], chunk["output"]), args.model, args.command)
     try:
-        result = run_command(argv, cwd=args.repo, capture_output=True, text=True, timeout=CHUNK_TIMEOUT)
+        result = run_command(argv, cwd=args.repo, capture_output=True, text=True, timeout=CHUNK_TIMEOUT, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return f"{name}: no answer within {CHUNK_TIMEOUT // 60} minutes"
     if result.returncode != 0:
@@ -117,6 +118,6 @@ def add_parser(sub):
     run.add_argument("--parallel", type=int, default=2, help="chunks run at the same time")
     run.add_argument("--max-chunks", type=int, help="stop after this many chunks (usage budget)")
     run.add_argument("--merge-every", type=int, default=3, help="merge and push after this many chunks")
-    run.add_argument("--chunk-size", type=int, default=20)
+    run.add_argument("--chunk-size", type=int, default=40, help="papers per call (40 costs about what 20 does)")
     run.add_argument("--days", type=int, default=4)
     run.set_defaults(func=cmd_run_local)

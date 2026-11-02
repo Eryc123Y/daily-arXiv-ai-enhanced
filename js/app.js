@@ -313,6 +313,16 @@ async function showSelection({ keepTopic = false } = {}) {
   writeHash();
 }
 
+/** A link to one paper (the daily report's links) opens it, under All papers if its topic hides it. */
+function openLinkedPaper(id) {
+  if (!id || !state.records.some(r => r.id === id)) return;
+  if (!state.visible.some(e => e.record.id === id)) {
+    state.topic = 'all';
+    renderAll(selectedDays());
+  }
+  select(id);
+}
+
 // --- URL JSON mode (used by SKILL/scripts/fetch.sh) -------------------------
 
 function jsonParams() {
@@ -468,8 +478,10 @@ async function init() {
   $('daySelectStart').innerHTML = options;
   $('daySelectStart').value = days[Math.min(4, days.length - 1)];
   readHash();
+  const linkedPaper = state.selectedId;
   bindEvents();
   await showSelection({ keepTopic: Boolean(state.topic) });
+  openLinkedPaper(linkedPaper);
 }
 
 document.addEventListener('DOMContentLoaded', init);
