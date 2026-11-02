@@ -125,3 +125,10 @@ test('a summary says it was written from the title and abstract', () => {
   const html = Render.renderReader(p, Render.describe(p, [], [], TOPICS), []);
   assert.match(html, /class="provenance">AI summary of the title and abstract, not the full paper</);
 });
+
+test('Hugging Face upvotes show in the row and link from the reader', () => {
+  const info = Render.describe(paper({ AI, pending: false, hf: 23 }), [], [], TOPICS);
+  assert.match(Render.renderRow(paper({ AI, pending: false, hf: 23 }), info, false), /class="row-hf"[^>]*>▲ 23</);
+  assert.doesNotMatch(Render.renderRow(paper({ AI, pending: false }), info, false), /row-hf/);
+  assert.match(Render.links(paper({ hf: 23 })), /href="https:\/\/huggingface\.co\/papers\/2610\.00001"[^>]*>Hugging Face ▲ 23</);
+});

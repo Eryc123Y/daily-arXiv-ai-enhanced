@@ -35,6 +35,11 @@
     return '';
   }
 
+  /** Upvotes on Hugging Face Daily Papers, when the paper was listed there. */
+  function hfMark(paper) {
+    return paper.hf ? `<span class="row-hf" title="Upvotes on Hugging Face Daily Papers">▲ ${Number(paper.hf)}</span>` : '';
+  }
+
   function parseDay(day) {
     const [y, m, d] = day.split('-').map(Number);
     return new Date(Date.UTC(y, m - 1, d));
@@ -123,7 +128,7 @@
     const ai = paper.pending ? null : paper.AI;
     const lead = ai ? ai.tldr : paper.summary;
     return `<li><button type="button" class="row${selected ? ' is-selected' : ''}" data-id="${esc(paper.id)}"${selected ? ' aria-current="true"' : ''}>
-  <span class="row-head">${topicLabel(info, paper)}${paper.pending ? '<span class="row-pending">Summary pending</span>' : ''}${codeMark(paper)}</span>
+  <span class="row-head">${topicLabel(info, paper)}${paper.pending ? '<span class="row-pending">Summary pending</span>' : ''}${hfMark(paper)}${codeMark(paper)}</span>
   <span class="row-title">${esc(paper.title)}</span>
   <span class="row-authors">${esc(authorLine(paper.authors, 3))}</span>
   <span class="row-lead">${esc(lead || '')}</span>
@@ -144,6 +149,7 @@
     ];
     const kind = codeKind(paper);
     if (kind) items.push([paper.code_url, kind === 'code' ? 'Code' : 'Project page', 'button-outline']);
+    if (paper.hf) items.push([`https://huggingface.co/papers/${encodeURIComponent(paper.id)}`, `Hugging Face ▲ ${Number(paper.hf)}`, 'button-outline']);
     return items
       .map(([href, label, cls]) => `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`)
       .join('');
@@ -196,6 +202,7 @@ ${body}
     topicNames,
     describe,
     renderRow,
+    links,
     renderReader,
     daySentence,
     progressText,

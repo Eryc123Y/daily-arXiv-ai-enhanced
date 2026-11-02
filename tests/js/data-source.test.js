@@ -39,3 +39,16 @@ test('a fork with no data yet lists no days, but an unreachable list is an error
   assert.deepEqual((await source({}).listDays()).days, []);
   await assert.rejects(source({ 'assets/file-list.txt': new TypeError('offline') }).listDays(), LoadError);
 });
+
+test('Hugging Face upvotes are attached when the day has them', async () => {
+  const day = await source({ 'data/2026-10-30.jsonl': [200, RAW], 'data/2026-10-30_hf.json': [200, '{"2610.00001": 23}'] }).loadDay('2026-10-30');
+  assert.equal(day[0].hf, 23);
+});
+
+test('upvotes are optional: a missing, broken or unreachable file leaves the day as it is', async () => {
+  for (const answer of [404, 503, [200, '{not json'], new TypeError('offline')]) {
+    const day = await source({ 'data/2026-10-30.jsonl': [200, RAW], 'data/2026-10-30_hf.json': answer }).loadDay('2026-10-30');
+    assert.equal(day.length, 1);
+    assert.equal(day[0].hf, undefined);
+  }
+});

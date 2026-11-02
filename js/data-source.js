@@ -5,7 +5,8 @@
  *
  *   listDays()      -> { days: ['2026-10-30', ...] newest first, languages: Map(day -> ['English', ...]),
  *                        categories: crawled categories from assets/site.json, or null }
- *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay)
+ *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
+ *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
  *
  * Both reject with a LoadError when a file that should be there cannot be
  * read, so a failed download is never shown as a day without papers. Files
@@ -40,6 +41,16 @@
       throw new LoadError(path, response.status);
     }
 
+    /** Optional extras such as upvotes: any failure just means none. */
+    async function fetchSignals(path) {
+      try {
+        const parsed = JSON.parse((await fetchText(path, { optional: true })) || '{}');
+        return parsed && typeof parsed === 'object' ? parsed : {};
+      } catch (error) {
+        return {};
+      }
+    }
+
     function summaryLanguage(day) {
       const available = languages.get(day) || [];
       return PREFERRED_LANGUAGES.find(l => available.includes(l)) || available[0] || PREFERRED_LANGUAGES[0];
@@ -62,11 +73,12 @@
         return { days: list.dates, languages, categories };
       },
       async loadDay(day) {
-        const [raw, ai] = await Promise.all([
+        const [raw, ai, hf] = await Promise.all([
           fetchText(`data/${day}.jsonl`),
           fetchText(`data/${day}_AI_enhanced_${summaryLanguage(day)}.jsonl`, { optional: true }),
+          fetchSignals(`data/${day}_hf.json`),
         ]);
-        return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day }));
+        return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
       },
     };
   }

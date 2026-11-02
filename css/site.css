@@ -596,6 +596,17 @@ textarea {
   color: var(--ink);
 }
 
+.row-hf {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-hf + .row-code {
+  margin-left: 10px;
+}
+
 .row-code svg {
   width: 14px;
   height: 14px;

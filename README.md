@@ -117,6 +117,7 @@ Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`da
 
 - `data/<date>.jsonl`: one paper per line (`id`, `title`, `authors`, `categories` with the primary first, `summary` = abstract, `comment`, `abs`, `pdf`, optional `code_url`).
 - `data/<date>_AI_enhanced_English.jsonl` (`LANGUAGE` variable; older days also have upstream's `_Chinese` files): the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
+- `data/<date>_hf.json`: upvotes on Hugging Face Daily Papers for that day's papers that were listed there (`{arXiv id: upvotes}`), refreshed every four hours by [`signals.yml`](.github/workflows/signals.yml) (`uv run python -m summaries hf-signals`); the page shows them as ▲ badges.
 - `assets/file-list.txt`: every jsonl file on the branch, rebuilt on each commit.
 - `logs/summary-runs.jsonl`: which summary path ran for each day.
 
