@@ -1,5 +1,6 @@
 import json
 import re
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,7 +21,10 @@ def paper(paper_id):
 
 
 def test_claude_runs_headless_with_haiku_and_only_file_tools():
-    assert client_argv("claude", PROMPT) == ["claude", "-p", PROMPT, "--model", "haiku", "--allowedTools", "Read,Write"]
+    """Only Read and Write are loaded, and no MCP servers: their definitions would cost ~60k tokens per call."""
+    assert client_argv("claude", PROMPT) == [
+        "claude", "-p", PROMPT, "--model", "haiku", "--tools", "Read,Write", "--allowedTools", "Read,Write", "--strict-mcp-config",
+    ]
     assert client_argv("claude", PROMPT, model="sonnet")[4] == "sonnet"
 
 
@@ -55,7 +59,8 @@ FIELDS = "tldr: t\nmotivation: m\nmethod: x\nresult: r\nconclusion: c\n"
 def fake_client(calls, fail=()):
     """Acts like a coding agent: reads the chunk named in the prompt and writes blocks."""
 
-    def run(argv, cwd, capture_output, text, timeout):
+    def run(argv, cwd, capture_output, text, timeout, stdin):
+        assert stdin is subprocess.DEVNULL
         calls.append(argv)
         prompt = next(a for a in argv if "Input file:" in a)
         source = re.search(r"Input file: (\S+?)\.(?:\s|$)", prompt).group(1)
