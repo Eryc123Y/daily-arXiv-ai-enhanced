@@ -27,12 +27,14 @@ import requests
 from summaries import cli
 from summaries.interests import load_topics, topics_for
 from summaries.records import dedupe_by_id, has_summary
+from summaries.signals import read_signals
 
 WEEKDAYS = "一二三四五六日"
 LEVELS = {"高": "高", "high": "高", "中": "中", "medium": "中", "可借鉴": "可借鉴", "borrow": "可借鉴", "无": None, "none": None}
 LEVEL_ORDER = {"高": 0, "中": 1, "可借鉴": 2}
 MAX_PER_TOPIC, MAX_RADAR, MAX_OTHER, MAX_DEEP = 3, 3, 2, 2
 SNIPPET_CHARS, TITLE_CHARS = 160, 90
+HOT_UPVOTES, HOT_PAPERS = 10, 2  # the previous batch's Hugging Face favourites named in the report
 SUMMARISED_ENOUGH = 0.95  # --wait-summaries: a few papers left pending by failed chunks do not hold the report
 ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b")
 RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
@@ -373,11 +375,17 @@ def _paper_link(site, day, found, paper_id, topic=None):
     return f"[{title}]({day_link(site, day, topic=chosen, paper=paper_id)})"
 
 
-def render_report(day, today, found, picks, topics, site):
+def render_report(day, today, found, picks, topics, site, hot=()):
+    """`hot`: (day, id, title, upvotes) of the previous batch's most upvoted papers on Hugging Face."""
     shown = {item["id"] for item in picks["radar"]}
     lines = [f"# arXiv 日报 · {today}（周{weekday(today)}）", ""]
     batch = "" if day == today else f"（arXiv {day} 批次）"
     lines += [f"**{found.total} 篇新论文**{batch}（摘要 {found.done}/{found.total}）· [打开当天]({day_link(site, day)})", ""]
+    if hot:
+        liked = "；".join(
+            f"[{shorten(title, TITLE_CHARS)}]({day_link(site, d, topic='all', paper=pid)}) ▲{count}" for d, pid, title, count in hot
+        )
+        lines += [f"**HF 热门**（{hot[0][0][5:]} 那批）：{liked}", ""]
     if picks["radar"]:
         lines.append("**雷达**：")
         for item in sorted(picks["radar"], key=lambda i: LEVEL_ORDER[i["level"]]):
@@ -470,6 +478,18 @@ def _read(path):
     return path.read_text(encoding="utf-8") if path.exists() else ""
 
 
+def previous_hot(branch, day):
+    """The most upvoted papers of the batch before `day`, from its data/<day>_hf.json."""
+    earlier = sorted(d for p in branch.list_files("data/") if (m := cli.RAW_FILE.match(p)) and (d := m.group(1)) < day)
+    if not earlier:
+        return []
+    prev = earlier[-1]
+    upvotes = read_signals(branch, prev)
+    titles = {r["id"]: r.get("title", "") for r in cli.read_records(branch, cli.raw_path(prev))}
+    ranked = sorted(((n, pid) for pid, n in upvotes.items() if pid in titles and n >= HOT_UPVOTES), reverse=True)
+    return [(prev, pid, titles[pid], n) for n, pid in ranked[:HOT_PAPERS]]
+
+
 def newest_day(branch, today, days):
     start = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
     found = (m.group(1) for p in branch.list_files("data/") if (m := cli.RAW_FILE.match(p)))
@@ -545,7 +565,7 @@ def cmd_digest(args):
 
     # The ledger entry marks the day as reported, so it is written last.
     append_radar_rows(vault / "project-radar.md", today, found, picks)
-    report = render_report(day, today, found, picks, topics, site)
+    report = render_report(day, today, found, picks, topics, site, hot=previous_hot(branch, day))
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)

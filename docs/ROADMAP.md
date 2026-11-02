@@ -45,6 +45,7 @@ Today the pipeline reads one source, arXiv's `/new` listings. The long-term plan
 ## Done since the roadmap was written
 
 - 2026-11-03: one daily pipeline (crawl check from the Mac, headless Haiku summaries, a short Chinese report with deep links; docs/daily-pipeline.md).
+- 2026-11-03: first second source, Hugging Face Daily Papers upvotes (`signals.yml`, ▲ badges on the page, a line in the report).
 
 ## Deferred
 

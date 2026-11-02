@@ -30,7 +30,7 @@ Cron for the task: `20 10,21 * * 0-5`.
 
 ## Report format
 
-About one screen in Chinese: the day's count and a link to the day on the page; one radar line per possible collision (level, whether the full text was read, the reason); up to three picks per interest topic with title, a one-line gist and a link that opens that paper (`#day=<date>&topic=<topic>&paper=<id>`; the page now opens a linked paper on phones and falls back to All papers when the topic would hide it); up to two other papers; an optional one-line note. A radar paper is not repeated under its topic. Rendered by `summaries/digest.py`; the model only writes plain picks lines, so links and layout cannot drift.
+About one screen in Chinese: the day's count and a link to the day on the page; one radar line per possible collision (level, whether the full text was read, the reason); up to three picks per interest topic with title, a one-line gist and a link that opens that paper (`#day=<date>&topic=<topic>&paper=<id>`; the page now opens a linked paper on phones and falls back to All papers when the topic would hide it); up to two other papers; an optional one-line note. When the previous batch has papers with at least 10 upvotes on Hugging Face Daily Papers (`data/<day>_hf.json`, refreshed every four hours by `signals.yml` with no model), a line names the top two: the morning report is too early for today's upvotes, so it reports what the community picked from the last batch. A radar paper is not repeated under its topic. Rendered by `summaries/digest.py`; the model only writes plain picks lines, so links and layout cannot drift.
 
 ## Measurements
 

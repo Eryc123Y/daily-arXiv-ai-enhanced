@@ -355,3 +355,29 @@ def test_a_broken_picks_file_does_not_stop_the_week(tmp_path, monkeypatch, capsy
     code = main(["digest-week", "--dir", str(vault), "--today", "2026-11-03", "--cache", str(cache), "--site", SITE])
 
     assert code == 0 and json.loads(capsys.readouterr().out)["status"] == "no-reports"
+
+
+def test_report_names_the_previous_batchs_hugging_face_favourites():
+    found = digest.build_candidates([paper("3", "Cats", "x")], [], TOPICS, {}, known=set())
+    empty = {"topics": {}, "radar": [], "other": [], "note": ""}
+    hot = [("2026-10-30", "2610.5", "Popular paper", 40), ("2026-10-30", "2610.6", "Also liked", 12)]
+    text = digest.render_report(DAY, DAY, found, empty, TOPICS, SITE, hot=hot)
+    assert f"**HF 热门**（10-30 那批）：[Popular paper]({SITE}#day=2026-10-30&topic=all&paper=2610.5) ▲40；[Also liked]" in text
+
+
+def test_digest_reads_upvotes_of_the_previous_batch(tmp_path, remote_and_clone, monkeypatch, capsys):
+    remote, clone = remote_and_clone
+    seed_data_branch(
+        tmp_path,
+        remote,
+        {
+            "data/2026-10-30.jsonl": dump_jsonl([paper("2610.5", "Popular paper"), paper("2610.6", "Quiet paper")]),
+            "data/2026-10-30_hf.json": json.dumps({"2610.5": 40, "2610.6": 3}),
+            f"data/{DAY}.jsonl": dump_jsonl([paper("2611.1", "Stereo video", "A stereo method.")]),
+        },
+    )
+    vault = make_vault(tmp_path)
+
+    code, out, _ = run_digest(clone, vault, monkeypatch, capsys, ["note | n\n"])
+
+    assert code == 0 and "[Popular paper]" in out["report"] and "Quiet paper" not in out["report"]
