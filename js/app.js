@@ -406,16 +406,28 @@ function outputJson(params, records) {
 
 // --- Events -------------------------------------------------------------------
 
-function themeOption(theme, current) {
+function themeOption(theme, name, current) {
   const checked = theme.id === current ? ' checked' : '';
-  return `<label class="theme-option"><input type="radio" name="theme" value="${theme.id}"${checked}>
+  return `<label class="theme-option"><input type="radio" name="${name}" value="${theme.id}"${checked}>
 <span class="swatch" data-swatch="${theme.id}" aria-hidden="true"><i></i><i></i><i></i></span>
 <span class="theme-text"><span class="theme-name">${esc(theme.name)}</span><span class="theme-note">${esc(theme.note)}</span></span></label>`;
 }
 
+function modeOption(mode, current) {
+  const checked = mode.id === current ? ' checked' : '';
+  return `<label><input type="radio" name="mode" value="${mode.id}"${checked}><span>${esc(mode.name)}</span></label>`;
+}
+
+/** The theme choices currently ticked in the dialog. */
+function themeChoices(form) {
+  return { mode: form.elements.mode.value, light: form.elements.lightTheme.value, dark: form.elements.darkTheme.value };
+}
+
 function openSettings() {
-  const current = Theme.read(localStorage);
-  $('themeOptions').innerHTML = Theme.THEMES.map(theme => themeOption(theme, current)).join('');
+  const prefs = Theme.read(localStorage);
+  $('modeOptions').innerHTML = Theme.MODES.map(mode => modeOption(mode, prefs.mode)).join('');
+  $('lightOptions').innerHTML = Theme.LIGHT.map(theme => themeOption(theme, 'lightTheme', prefs.light)).join('');
+  $('darkOptions').innerHTML = Theme.DARK.map(theme => themeOption(theme, 'darkTheme', prefs.dark)).join('');
   const openOn = primaryLink();
   document.querySelectorAll('input[name="openOn"]').forEach(input => {
     input.checked = input.value === openOn;
@@ -429,10 +441,11 @@ function openSettings() {
 function closeSettings() {
   const form = $('settings').querySelector('form');
   if ($('settings').returnValue !== 'save') {
-    Theme.apply(document, Theme.read(localStorage));
+    Theme.show();
     return;
   }
-  Theme.save(localStorage, form.elements.theme.value);
+  Theme.save(localStorage, themeChoices(form));
+  Theme.show();
   writeList(OPEN_ON_KEY, form.elements.openOn.value || DATA_CONFIG.primaryLink);
   const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
   writeList(KEYWORDS_KEY, lines('keywordsInput'));
@@ -515,9 +528,7 @@ function bindEvents() {
     $('keywordsInput').value = defaultKeywords().join('\n');
   });
   $('settings').addEventListener('close', closeSettings);
-  $('themeOptions').addEventListener('change', event => {
-    if (event.target.name === 'theme') Theme.apply(document, event.target.value);
-  });
+  $('appearance').addEventListener('change', () => Theme.show(themeChoices($('settings').querySelector('form'))));
 }
 
 async function init() {

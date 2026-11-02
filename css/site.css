@@ -2,8 +2,9 @@
    The material is the arXiv preprint itself: white paper, blue-black ink,
    arXiv red for actions, a highlighter for keywords, and the grey margin
    stamp of every arXiv PDF beside the reading pane. Four palettes share the
-   same tokens; js/theme.js sets data-theme, and without it the system
-   decides (Preprint by day, Lamplight by night). */
+   same tokens; js/theme.js sets data-theme from the reader's light and dark
+   choices, and without it the system decides (Preprint by day, Lilac by
+   night). */
 
 :root {
   --serif: "STIX Two Text", "STIX Two", "Iowan Old Style", Georgia, serif;
@@ -49,45 +50,83 @@
   color-scheme: light;
 }
 
-/* Lamplight: warm dark, amber links, for reading at night. */
+/* Without the theme script, the system decides: Preprint by day, Lilac by night. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --chrome: #151311;
-    --surface: #1d1a17;
-    --ink: #ece5da;
-    --muted: #a79e92;
-    --line: #34302a;
-    --line-soft: #28241f;
-    --accent: #e9b260;
-    --accent-hover: #f3c882;
-    --accent-ink: #151311;
-    --button: #a8322b;
-    --button-hover: #be3e35;
-    --button-ink: #ffffff;
-    --pill: #2c2823;
-    --pill-ink: #ece5da;
-    --pill-edge: #4a433a;
-    --hover: #24211d;
-    --select: #2a2621;
-    --tldr: #24201c;
-    --mark-bg: linear-gradient(transparent 58%, rgba(233, 178, 96, 0.38) 58%);
-    --marker-ink: #f8e2b6;
-    --progress: #d9a62e;
-    --pending: #e2b45e;
-    --focus: #9db7ff;
-    --stamp: #5e574e;
-    --ok: #7fb98c;
-    --warn: #e2b45e;
-    --error: #e5776c;
-    --t0: #6fcdbd;
-    --t1: #aeacf2;
-    --t2: #e7b45c;
-    --t3: #e89cc0;
-    --t-author: #82c3ec;
+    --chrome: #1d1c26;
+    --surface: #262533;
+    --ink: #f1eef8;
+    --muted: #a5a1bf;
+    --line: #3a3850;
+    --line-soft: #302e42;
+    --accent: #cbb4ff;
+    --accent-hover: #ddcdff;
+    --accent-ink: #1d1c26;
+    --button: #a58bf0;
+    --button-hover: #b9a3f6;
+    --button-ink: #16151e;
+    --pill: #34324a;
+    --pill-ink: #f1eef8;
+    --pill-edge: #514c72;
+    --hover: #2d2c3c;
+    --select: #312e47;
+    --tldr: #2d2b3d;
+    --mark-bg: linear-gradient(transparent 56%, rgba(203, 180, 255, 0.36) 56%);
+    --marker-ink: #f4eeff;
+    --progress: #cbb4ff;
+    --pending: #f3c07c;
+    --focus: #8adcf0;
+    --stamp: #5b5775;
+    --ok: #7fe0a3;
+    --warn: #f3c07c;
+    --error: #ff7d89;
+    --t0: #8adcf0;
+    --t1: #ff92d0;
+    --t2: #f3c07c;
+    --t3: #7fe0a3;
+    --t-author: #a9c8ff;
     color-scheme: dark;
   }
 }
 
+/* Lilac: deep violet with lilac links and soft pastel topics. */
+:root[data-theme="lilac"] {
+  --chrome: #1d1c26;
+  --surface: #262533;
+  --ink: #f1eef8;
+  --muted: #a5a1bf;
+  --line: #3a3850;
+  --line-soft: #302e42;
+  --accent: #cbb4ff;
+  --accent-hover: #ddcdff;
+  --accent-ink: #1d1c26;
+  --button: #a58bf0;
+  --button-hover: #b9a3f6;
+  --button-ink: #16151e;
+  --pill: #34324a;
+  --pill-ink: #f1eef8;
+  --pill-edge: #514c72;
+  --hover: #2d2c3c;
+  --select: #312e47;
+  --tldr: #2d2b3d;
+  --mark-bg: linear-gradient(transparent 56%, rgba(203, 180, 255, 0.36) 56%);
+  --marker-ink: #f4eeff;
+  --progress: #cbb4ff;
+  --pending: #f3c07c;
+  --focus: #8adcf0;
+  --stamp: #5b5775;
+  --ok: #7fe0a3;
+  --warn: #f3c07c;
+  --error: #ff7d89;
+  --t0: #8adcf0;
+  --t1: #ff92d0;
+  --t2: #f3c07c;
+  --t3: #7fe0a3;
+  --t-author: #a9c8ff;
+  color-scheme: dark;
+}
+
+/* Lamplight: warm dark, amber links. */
 :root[data-theme="lamplight"] {
   --chrome: #151311;
   --surface: #1d1a17;
@@ -1112,6 +1151,48 @@ textarea {
   font-size: 14px;
 }
 
+.settings-sub {
+  margin: 16px 0 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.segmented label {
+  cursor: pointer;
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+}
+
+.segmented span {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 14px;
+}
+
+.segmented input:checked + span {
+  background: var(--pill);
+  color: var(--pill-ink);
+}
+
+.segmented input:focus-visible + span {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
 .theme-options {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
@@ -1180,7 +1261,7 @@ textarea {
 [data-swatch="lamplight"] { --sw-paper: #1d1a17; --sw-ink: #ece5da; --sw-accent: #e9b260; }
 [data-swatch="anaglyph"] { --sw-paper: #111a24; --sw-ink: #d9363e; --sw-accent: #4fd3df; }
 [data-swatch="graphite"] { --sw-paper: #fcfcfc; --sw-ink: #202124; --sw-accent: #2b59c3; }
-[data-swatch="auto"] { --sw-paper: linear-gradient(#ffffff 50%, #1d1a17 50%); --sw-ink: linear-gradient(#1c2430 50%, #ece5da 50%); --sw-accent: linear-gradient(#b31b1b 50%, #e9b260 50%); }
+[data-swatch="lilac"] { --sw-paper: #262533; --sw-ink: #f1eef8; --sw-accent: #cbb4ff; }
 
 .choices {
   display: grid;

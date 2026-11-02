@@ -1,56 +1,86 @@
 /**
- * Colour themes. Loaded in <head> so the saved theme applies before the page
- * paints. "auto" sets no attribute and follows the system: Preprint by day,
- * Lamplight by night. The palettes themselves live in css/site.css under
+ * Colour themes. A reader picks a light theme, a dark theme, and whether the
+ * page follows the system or stays light or dark. Loaded in <head> so the
+ * theme applies before the page paints, and it follows a system switch while
+ * the page is open. The palettes live in css/site.css under
  * :root[data-theme="..."].
  */
 (function (root) {
-  const KEY = 'daily-arxiv-theme';
-  const THEMES = [
-    { id: 'auto', name: 'Match the system', note: 'Preprint by day, Lamplight by night' },
+  const KEYS = { mode: 'daily-arxiv-appearance', light: 'daily-arxiv-light-theme', dark: 'daily-arxiv-dark-theme' };
+  const MODES = [
+    { id: 'system', name: 'Follow the system' },
+    { id: 'light', name: 'Always light' },
+    { id: 'dark', name: 'Always dark' },
+  ];
+  const LIGHT = [
     { id: 'preprint', name: 'Preprint', note: 'White paper, blue-black ink, arXiv red' },
-    { id: 'lamplight', name: 'Lamplight', note: 'Warm dark with amber links, for late reading' },
-    { id: 'anaglyph', name: 'Anaglyph', note: 'Blue-black with the red and cyan of stereo glasses' },
     { id: 'graphite', name: 'Graphite', note: 'Quiet greys and one cobalt accent' },
   ];
+  const DARK = [
+    { id: 'lilac', name: 'Lilac', note: 'Deep violet with lilac links and soft pastels' },
+    { id: 'lamplight', name: 'Lamplight', note: 'Warm dark with amber links' },
+    { id: 'anaglyph', name: 'Anaglyph', note: 'Blue-black with the red and cyan of stereo glasses' },
+  ];
+  const DEFAULTS = { mode: 'system', light: 'preprint', dark: 'lilac' };
+  const CHOICES = { mode: MODES, light: LIGHT, dark: DARK };
 
-  function valid(id) {
-    return THEMES.some(theme => theme.id === id) ? id : 'auto';
+  function pick(list, id, fallback) {
+    return list.some(item => item.id === id) ? id : fallback;
   }
 
   function read(storage) {
-    try {
-      return valid(storage.getItem(KEY));
-    } catch (error) {
-      return 'auto';
+    const prefs = {};
+    for (const slot of Object.keys(DEFAULTS)) {
+      let saved = null;
+      try {
+        saved = storage.getItem(KEYS[slot]);
+      } catch (error) {
+        saved = null;
+      }
+      prefs[slot] = pick(CHOICES[slot], saved, DEFAULTS[slot]);
     }
+    return prefs;
   }
 
-  function save(storage, id) {
+  function save(storage, prefs) {
     try {
-      if (valid(id) === 'auto') storage.removeItem(KEY);
-      else storage.setItem(KEY, id);
+      for (const slot of Object.keys(DEFAULTS)) {
+        const value = pick(CHOICES[slot], prefs[slot], DEFAULTS[slot]);
+        if (value === DEFAULTS[slot]) storage.removeItem(KEYS[slot]);
+        else storage.setItem(KEYS[slot], value);
+      }
     } catch (error) {
       console.error('Could not save the theme:', error);
     }
   }
 
-  function apply(doc, id) {
-    if (valid(id) === 'auto') delete doc.documentElement.dataset.theme;
-    else doc.documentElement.dataset.theme = id;
+  /** The theme the page shows for these choices, given whether the system is dark. */
+  function resolve(prefs, systemDark) {
+    const dark = prefs.mode === 'dark' || (prefs.mode === 'system' && systemDark);
+    return dark ? prefs.dark : prefs.light;
   }
 
-  const api = { KEY, THEMES, valid, read, save, apply };
+  function apply(doc, id) {
+    doc.documentElement.dataset.theme = id;
+  }
+
+  const api = { KEYS, MODES, LIGHT, DARK, DEFAULTS, read, save, resolve, apply };
   if (typeof module === 'object' && module.exports) {
     module.exports = api;
     return;
   }
   root.Theme = api;
+
   let storage = null;
   try {
     storage = root.localStorage;
   } catch (error) {
     storage = null;
   }
-  if (storage) apply(root.document, read(storage));
+  const media = root.matchMedia ? root.matchMedia('(prefers-color-scheme: dark)') : null;
+  const systemDark = () => Boolean(media && media.matches);
+  /** Show `prefs` (the saved ones by default); Settings uses it to preview. */
+  api.show = prefs => apply(root.document, resolve(prefs || (storage ? read(storage) : DEFAULTS), systemDark()));
+  api.show();
+  if (media && media.addEventListener) media.addEventListener('change', () => api.show());
 })(typeof self !== 'undefined' ? self : this);
