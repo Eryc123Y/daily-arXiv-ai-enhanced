@@ -132,3 +132,10 @@ test('Hugging Face upvotes show in the row and link from the reader', () => {
   assert.doesNotMatch(Render.renderRow(paper({ AI, pending: false }), info, false), /row-hf/);
   assert.match(Render.links(paper({ hf: 23 })), /href="https:\/\/huggingface\.co\/papers\/2610\.00001"[^>]*>Hugging Face ▲ 23</);
 });
+
+test('the reader carries an arXiv margin stamp, as on the PDF', () => {
+  const p = paper({ AI, pending: false, date: '2026-10-30' });
+  const html = Render.renderReader(p, Render.describe(p, [], [], TOPICS), []);
+  assert.match(html, /<p class="reader-stamp" aria-hidden="true">arXiv:2610\.00001 \[cs\.CV\] 30 Oct 2026<\/p>/);
+  assert.match(Render.renderReader(paper({ AI, pending: false }), Render.describe(p, [], [], TOPICS), []), /reader-stamp" aria-hidden="true">arXiv:2610\.00001 \[cs\.CV\]<\/p>/);
+});

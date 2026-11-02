@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Daily arXiv">
+  <!-- The chi of arXiv, printed twice like a red/cyan stereo pair. -->
+  <rect width="64" height="64" rx="14" fill="#1c2430"/>
+  <g fill="none" stroke-width="5.5" stroke-linecap="round">
+    <g stroke="#e8424a" transform="translate(-3.2 0)" style="mix-blend-mode:screen">
+      <path d="M15 13c8 0 11 7 16 19s9 19 18 19"/>
+      <path d="M47 14C37 24 28 38 17 51"/>
+    </g>
+    <g stroke="#2fd0dd" transform="translate(3.2 0)" style="mix-blend-mode:screen">
+      <path d="M15 13c8 0 11 7 16 19s9 19 18 19"/>
+      <path d="M47 14C37 24 28 38 17 51"/>
+    </g>
+  </g>
+</svg>

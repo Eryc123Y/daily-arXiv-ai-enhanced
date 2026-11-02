@@ -5,6 +5,7 @@
  */
 const KEYWORDS_KEY = 'preferredKeywords';
 const AUTHORS_KEY = 'preferredAuthors';
+const OPEN_ON_KEY = 'daily-arxiv-open-on';
 const PHONE = window.matchMedia('(max-width: 760px)');
 
 const state = {
@@ -66,6 +67,12 @@ function resolveKeywords(saved) {
   return [...keywords];
 }
 
+/** Where "Open on ..." goes: this browser's choice, else the site default. */
+function primaryLink() {
+  const saved = readList(OPEN_ON_KEY, null);
+  return saved === 'arxiv' || saved === 'alphaxiv' ? saved : DATA_CONFIG.primaryLink;
+}
+
 function loadPreferences() {
   state.keywords = resolveKeywords(readList(KEYWORDS_KEY, null));
   state.authors = readList(AUTHORS_KEY, []);
@@ -105,11 +112,20 @@ function filterItem(kind, key, label, count, active, colourIndex) {
   return `<li><button type="button" data-${kind}="${esc(key)}" aria-pressed="${active === key}">${dot}<span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
 }
 
+/** One day as two lines, weekday then date; a range on one. */
+function dayHeading(days) {
+  if (!days.length) return 'No day selected';
+  if (days.length > 1) return esc(Render.formatRange(days[0], days[days.length - 1]));
+  const weekday = Render.formatDay(days[0], { weekday: 'long' });
+  const date = Render.formatDay(days[0], { day: 'numeric', month: 'long', year: 'numeric' });
+  return `${esc(weekday)}<br>${esc(date)}`;
+}
+
 function renderNav(days) {
   const total = state.records.length;
   const done = state.records.filter(r => !r.pending).length;
   const matched = state.records.filter(r => state.info.get(r.id).matched).length;
-  $('dayTitle').textContent = days.length ? Render.formatRange(days[0], days[days.length - 1]) : 'No day selected';
+  $('dayTitle').innerHTML = dayHeading(days);
   $('daySentence').textContent = total ? Render.daySentence(total, matched, state.keywords.length + state.authors.length > 0) : '';
   const pending = total > 0 && done < total;
   $('progress').hidden = !pending;
@@ -188,7 +204,7 @@ function renderReader() {
     $('nextPaper').disabled = true;
     return;
   }
-  $('readerContent').innerHTML = Render.renderReader(entry.record, entry.info, state.keywords, { primaryLink: DATA_CONFIG.primaryLink });
+  $('readerContent').innerHTML = Render.renderReader(entry.record, entry.info, state.keywords, { primaryLink: primaryLink() });
   $('prevPaper').disabled = position <= 0;
   $('nextPaper').disabled = position >= state.visible.length - 1;
   $('reader').scrollTop = 0;
@@ -390,10 +406,42 @@ function outputJson(params, records) {
 
 // --- Events -------------------------------------------------------------------
 
+function themeOption(theme, current) {
+  const checked = theme.id === current ? ' checked' : '';
+  return `<label class="theme-option"><input type="radio" name="theme" value="${theme.id}"${checked}>
+<span class="swatch" data-swatch="${theme.id}" aria-hidden="true"><i></i><i></i><i></i></span>
+<span class="theme-text"><span class="theme-name">${esc(theme.name)}</span><span class="theme-note">${esc(theme.note)}</span></span></label>`;
+}
+
 function openSettings() {
+  const current = Theme.read(localStorage);
+  $('themeOptions').innerHTML = Theme.THEMES.map(theme => themeOption(theme, current)).join('');
+  const openOn = primaryLink();
+  document.querySelectorAll('input[name="openOn"]').forEach(input => {
+    input.checked = input.value === openOn;
+  });
   $('keywordsInput').value = state.keywords.join('\n');
   $('authorsInput').value = state.authors.join('\n');
   $('settings').showModal();
+}
+
+/** Save the dialog; the theme previews as soon as it is picked and reverts on Cancel. */
+function closeSettings() {
+  const form = $('settings').querySelector('form');
+  if ($('settings').returnValue !== 'save') {
+    Theme.apply(document, Theme.read(localStorage));
+    return;
+  }
+  Theme.save(localStorage, form.elements.theme.value);
+  writeList(OPEN_ON_KEY, form.elements.openOn.value || DATA_CONFIG.primaryLink);
+  const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
+  writeList(KEYWORDS_KEY, lines('keywordsInput'));
+  state.keywords = resolveKeywords(lines('keywordsInput'));
+  state.authors = lines('authorsInput');
+  state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
+  writeList(AUTHORS_KEY, state.authors);
+  describeAll();
+  renderAll(selectedDays());
 }
 
 function isTyping(target) {
@@ -466,16 +514,9 @@ function bindEvents() {
   $('resetSettings').addEventListener('click', () => {
     $('keywordsInput').value = defaultKeywords().join('\n');
   });
-  $('settings').addEventListener('close', () => {
-    if ($('settings').returnValue !== 'save') return;
-    const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
-    writeList(KEYWORDS_KEY, lines('keywordsInput'));
-    state.keywords = resolveKeywords(lines('keywordsInput'));
-    state.authors = lines('authorsInput');
-    state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
-    writeList(AUTHORS_KEY, state.authors);
-    describeAll();
-    renderAll(selectedDays());
+  $('settings').addEventListener('close', closeSettings);
+  $('themeOptions').addEventListener('change', event => {
+    if (event.target.name === 'theme') Theme.apply(document, event.target.value);
   });
 }
 

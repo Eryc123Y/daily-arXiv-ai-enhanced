@@ -1,71 +1,84 @@
-/* Daily arXiv, design A: topics | paper list | reading pane.
-   Cool chrome, white panes, navy ink, arXiv red for actions,
-   one colour per interest topic, highlighter yellow for keywords. */
+/* Daily arXiv: topics | paper list | reading pane.
+   The material is the arXiv preprint itself: white paper, blue-black ink,
+   arXiv red for actions, a highlighter for keywords, and the grey margin
+   stamp of every arXiv PDF beside the reading pane. Four palettes share the
+   same tokens; js/theme.js sets data-theme, and without it the system
+   decides (Preprint by day, Lamplight by night). */
 
 :root {
-  --chrome: #f3f5f8;
+  --serif: "STIX Two Text", "STIX Two", "Iowan Old Style", Georgia, serif;
+  --sans: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
+  --topbar: 62px;
+}
+
+/* Preprint: the arXiv PDF on a cool desk. */
+:root,
+:root[data-theme="preprint"] {
+  --chrome: #e8ebef;
   --surface: #ffffff;
-  --ink: #141b2d;
-  --muted: #5e6778;
-  --line: #e3e7ee;
-  --line-soft: #eef1f5;
+  --ink: #1c2430;
+  --muted: #5f6773;
+  --line: #dce1e7;
+  --line-soft: #edf0f3;
   --accent: #b31b1b;
-  --accent-hover: #8e1515;
+  --accent-hover: #8c1414;
   --accent-ink: #ffffff;
   --button: #b31b1b;
-  --button-hover: #8e1515;
+  --button-hover: #8c1414;
   --button-ink: #ffffff;
-  --pill: #141b2d;
-  --pill-ink: #f3f5f8;
-  --pill-edge: #141b2d;
-  --hover: #f3f5f8;
-  --select: #eef2f8;
-  --tldr: #f6f8fb;
+  --pill: #1c2430;
+  --pill-ink: #f4f6f8;
+  --pill-edge: #1c2430;
+  --hover: #f4f6f8;
+  --select: #f1f4f8;
+  --tldr: #f5f7f9;
   --mark-bg: #ffe58a;
-  --marker-ink: #141b2d;
+  --marker-ink: #1c2430;
   --progress: #c99a06;
   --pending: #7a5300;
   --focus: #2f5fd0;
-  --t0: #0f766e;
-  --t1: #4338ca;
-  --t2: #b45309;
-  --t3: #be185d;
-  --t-author: #0369a1;
-
-  --serif: "Newsreader", "Iowan Old Style", Georgia, serif;
-  --sans: "Atkinson Hyperlegible Next", "Segoe UI", system-ui, sans-serif;
-  --topbar: 62px;
+  --stamp: #a2a8b0;
+  --ok: #3f8a55;
+  --warn: #c08a1e;
+  --error: #c0392b;
+  --t0: #0b7a87;
+  --t1: #4b47b8;
+  --t2: #a86a00;
+  --t3: #b0306e;
+  --t-author: #1f6fa8;
   color-scheme: light;
 }
 
-/* Dark: warm charcoal for reading at night. arXiv red stays a solid
-   button with white text; links use a softer coral; keywords get a
-   highlighter stroke under the words rather than a yellow wash. */
+/* Lamplight: warm dark, amber links, for reading at night. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --chrome: #141312;
-    --surface: #1c1b19;
-    --ink: #ebe6de;
-    --muted: #a8a198;
-    --line: #322f2b;
-    --line-soft: #272522;
-    --accent: #f28b7d;
-    --accent-hover: #f7a99e;
-    --accent-ink: #141312;
-    --button: #b4302a;
-    --button-hover: #c93c34;
+  :root:not([data-theme]) {
+    --chrome: #151311;
+    --surface: #1d1a17;
+    --ink: #ece5da;
+    --muted: #a79e92;
+    --line: #34302a;
+    --line-soft: #28241f;
+    --accent: #e9b260;
+    --accent-hover: #f3c882;
+    --accent-ink: #151311;
+    --button: #a8322b;
+    --button-hover: #be3e35;
     --button-ink: #ffffff;
-    --pill: #2a2825;
-    --pill-ink: #ebe6de;
-    --pill-edge: #3d3a35;
-    --hover: #222120;
-    --select: #2c2926;
-    --tldr: #23211e;
-    --mark-bg: linear-gradient(transparent 58%, rgba(234, 179, 8, 0.38) 58%);
-    --marker-ink: #fbe7a6;
+    --pill: #2c2823;
+    --pill-ink: #ece5da;
+    --pill-edge: #4a433a;
+    --hover: #24211d;
+    --select: #2a2621;
+    --tldr: #24201c;
+    --mark-bg: linear-gradient(transparent 58%, rgba(233, 178, 96, 0.38) 58%);
+    --marker-ink: #f8e2b6;
     --progress: #d9a62e;
     --pending: #e2b45e;
     --focus: #9db7ff;
+    --stamp: #5e574e;
+    --ok: #7fb98c;
+    --warn: #e2b45e;
+    --error: #e5776c;
     --t0: #6fcdbd;
     --t1: #aeacf2;
     --t2: #e7b45c;
@@ -73,6 +86,116 @@
     --t-author: #82c3ec;
     color-scheme: dark;
   }
+}
+
+:root[data-theme="lamplight"] {
+  --chrome: #151311;
+  --surface: #1d1a17;
+  --ink: #ece5da;
+  --muted: #a79e92;
+  --line: #34302a;
+  --line-soft: #28241f;
+  --accent: #e9b260;
+  --accent-hover: #f3c882;
+  --accent-ink: #151311;
+  --button: #a8322b;
+  --button-hover: #be3e35;
+  --button-ink: #ffffff;
+  --pill: #2c2823;
+  --pill-ink: #ece5da;
+  --pill-edge: #4a433a;
+  --hover: #24211d;
+  --select: #2a2621;
+  --tldr: #24201c;
+  --mark-bg: linear-gradient(transparent 58%, rgba(233, 178, 96, 0.38) 58%);
+  --marker-ink: #f8e2b6;
+  --progress: #d9a62e;
+  --pending: #e2b45e;
+  --focus: #9db7ff;
+  --stamp: #5e574e;
+  --ok: #7fb98c;
+  --warn: #e2b45e;
+  --error: #e5776c;
+  --t0: #6fcdbd;
+  --t1: #aeacf2;
+  --t2: #e7b45c;
+  --t3: #e89cc0;
+  --t-author: #82c3ec;
+  color-scheme: dark;
+}
+
+/* Anaglyph: blue-black, cyan for links and selection, red for actions. */
+:root[data-theme="anaglyph"] {
+  --chrome: #0c131b;
+  --surface: #111a24;
+  --ink: #dce6ee;
+  --muted: #8b9aa8;
+  --line: #223142;
+  --line-soft: #1a2633;
+  --accent: #4fd3df;
+  --accent-hover: #86e3ea;
+  --accent-ink: #0c131b;
+  --button: #d9363e;
+  --button-hover: #ea4a51;
+  --button-ink: #ffffff;
+  --pill: #1b2836;
+  --pill-ink: #dce6ee;
+  --pill-edge: #35506a;
+  --hover: #152130;
+  --select: #172636;
+  --tldr: #152130;
+  --mark-bg: linear-gradient(transparent 60%, rgba(79, 211, 223, 0.36) 60%);
+  --marker-ink: #e2fafc;
+  --progress: #4fd3df;
+  --pending: #f08a8f;
+  --focus: #ffd166;
+  --stamp: #3b5064;
+  --ok: #4fd3df;
+  --warn: #f0b65a;
+  --error: #f27d8a;
+  --t0: #4fd3df;
+  --t1: #a3a6ff;
+  --t2: #f0b65a;
+  --t3: #f27d8a;
+  --t-author: #7fc4f5;
+  color-scheme: dark;
+}
+
+/* Graphite: neutral greys, one cobalt accent. */
+:root[data-theme="graphite"] {
+  --chrome: #edeef0;
+  --surface: #fcfcfc;
+  --ink: #202124;
+  --muted: #686b70;
+  --line: #dddee1;
+  --line-soft: #eeeff1;
+  --accent: #2b59c3;
+  --accent-hover: #1f4396;
+  --accent-ink: #ffffff;
+  --button: #2b59c3;
+  --button-hover: #1f4396;
+  --button-ink: #ffffff;
+  --pill: #202124;
+  --pill-ink: #fcfcfc;
+  --pill-edge: #202124;
+  --hover: #f4f4f5;
+  --select: #eef2fb;
+  --tldr: #f4f5f7;
+  --mark-bg: #dce6fb;
+  --marker-ink: #202124;
+  --progress: #2b59c3;
+  --pending: #6b4e00;
+  --focus: #2b59c3;
+  --stamp: #a7aaaf;
+  --ok: #3f8a55;
+  --warn: #b5841c;
+  --error: #b33a32;
+  --t0: #2e7d86;
+  --t1: #5a55b0;
+  --t2: #94691a;
+  --t3: #a04875;
+  --t-author: #2b59c3;
+  color-scheme: light;
 }
 
 *,
@@ -251,10 +374,23 @@ textarea {
 }
 
 .brand {
-  font: 600 23px / 1 var(--serif);
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 600 22px / 1 var(--serif);
   color: var(--ink);
   text-decoration: none;
   margin-right: 8px;
+}
+
+.brand img {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+}
+
+.settings-button {
+  gap: 8px;
 }
 
 .brand:hover {
@@ -357,7 +493,7 @@ textarea {
 
 .day h1 {
   margin: 0;
-  font: 500 26px / 1.15 var(--serif);
+  font: 500 25px / 1.15 var(--serif);
 }
 
 .day-sentence {
@@ -551,6 +687,7 @@ textarea {
 
 .row.is-selected {
   background: var(--select);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .row > span {
@@ -596,48 +733,62 @@ textarea {
   color: var(--ink);
 }
 
+/* Crawl, summaries, report: a sequence, drawn as dots on one thread. */
 .pipeline-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
-  margin: 10px 0 0;
+  display: grid;
+  gap: 6px;
+  margin: 14px 0 0;
   font-size: 12.5px;
+  line-height: 1.35;
   color: var(--muted);
 }
 
 .status-part {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
 }
 
 .status-part::before {
   content: '';
-  width: 7px;
-  height: 7px;
+  flex: none;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: currentColor;
-  opacity: 0.55;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1.5px var(--muted);
+  transform: translateY(0.5px);
+}
+
+.status-part:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 12px;
+  bottom: -8px;
+  width: 1px;
+  background: var(--line);
 }
 
 .status-part.is-ok::before {
-  background: #4f8a5b;
-  opacity: 1;
+  background: var(--ok);
+  box-shadow: none;
+}
+
+.status-part.is-warn::before {
+  background: var(--warn);
+  box-shadow: none;
+}
+
+.status-part.is-error::before {
+  background: var(--error);
+  box-shadow: none;
 }
 
 .status-part.is-warn,
 .status-part.is-error {
   color: var(--ink);
-}
-
-.status-part.is-warn::before {
-  background: #c9902c;
-  opacity: 1;
-}
-
-.status-part.is-error::before {
-  background: #c0392b;
-  opacity: 1;
 }
 
 .status-part a {
@@ -667,7 +818,7 @@ textarea {
 
 .row > .row-title {
   margin-top: 4px;
-  font: 500 17.5px / 1.3 var(--serif);
+  font: 500 17px / 1.32 var(--serif);
   color: var(--ink);
 }
 
@@ -708,9 +859,25 @@ textarea {
 /* Right: the reading pane */
 
 .reader {
+  position: relative;
   container-type: inline-size;
-  padding: 34px clamp(24px, 4vw, 56px) 40px;
+  padding: 34px clamp(24px, 4vw, 56px) 40px clamp(64px, 7vw, 96px);
   background: var(--surface);
+}
+
+/* The grey identifier that runs up the left margin of every arXiv PDF. */
+.reader-stamp {
+  position: absolute;
+  top: 36px;
+  left: clamp(18px, 2.4vw, 34px);
+  margin: 0;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font: 400 19px / 1 var(--serif);
+  letter-spacing: 0.01em;
+  color: var(--stamp);
+  white-space: nowrap;
+  user-select: none;
 }
 
 .reader-bar {
@@ -745,8 +912,7 @@ textarea {
 
 .reader-title {
   margin: 12px 0 0;
-  font: 500 34px / 1.15 var(--serif);
-  letter-spacing: -0.005em;
+  font: 500 32px / 1.18 var(--serif);
 }
 
 .reader-authors {
@@ -797,7 +963,7 @@ textarea {
 
 .tldr p {
   margin: 0;
-  font: 400 20px / 1.45 var(--serif);
+  font: 400 19.5px / 1.5 var(--serif);
 }
 
 .fields {
@@ -879,7 +1045,9 @@ textarea {
 /* Settings dialog ------------------------------------------------------------- */
 
 .settings {
-  width: min(36rem, calc(100vw - 2rem));
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   border: 1px solid var(--line);
   border-radius: 12px;
   background: var(--surface);
@@ -892,8 +1060,8 @@ textarea {
 }
 
 .settings h2 {
-  margin: 0 0 6px;
-  font: 500 24px / 1.2 var(--serif);
+  margin: 0 0 2px;
+  font: 500 26px / 1.2 var(--serif);
 }
 
 .settings-note {
@@ -902,7 +1070,27 @@ textarea {
   font-size: 14px;
 }
 
-.settings label {
+.settings-group {
+  margin: 18px 0 0;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+.settings-group legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 0;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.settings-group legend + * {
+  clear: both;
+}
+
+.settings label[for] {
   display: block;
   margin: 12px 0 4px;
   font-weight: 700;
@@ -919,15 +1107,102 @@ textarea {
   line-height: 1.5;
 }
 
-.settings-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 18px;
+.settings .link-button {
+  margin-top: 6px;
+  font-size: 14px;
 }
 
-.settings-actions .spacer {
-  flex: 1;
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 8px;
+}
+
+.theme-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.theme-option input {
+  position: absolute;
+  opacity: 0;
+}
+
+.theme-option:has(input:checked) {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+.theme-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.theme-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.theme-name {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.theme-note {
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+/* Three stripes per theme: paper, ink, accent. */
+.swatch {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, 12px);
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+}
+
+.swatch i:nth-child(1) { background: var(--sw-paper); }
+.swatch i:nth-child(2) { background: var(--sw-ink); }
+.swatch i:nth-child(3) { background: var(--sw-accent); }
+
+[data-swatch="preprint"] { --sw-paper: #ffffff; --sw-ink: #1c2430; --sw-accent: #b31b1b; }
+[data-swatch="lamplight"] { --sw-paper: #1d1a17; --sw-ink: #ece5da; --sw-accent: #e9b260; }
+[data-swatch="anaglyph"] { --sw-paper: #111a24; --sw-ink: #d9363e; --sw-accent: #4fd3df; }
+[data-swatch="graphite"] { --sw-paper: #fcfcfc; --sw-ink: #202124; --sw-accent: #2b59c3; }
+[data-swatch="auto"] { --sw-paper: linear-gradient(#ffffff 50%, #1d1a17 50%); --sw-ink: linear-gradient(#1c2430 50%, #ece5da 50%); --sw-accent: linear-gradient(#b31b1b 50%, #e9b260 50%); }
+
+.choices {
+  display: grid;
+  gap: 6px;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.choice input {
+  accent-color: var(--button);
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
 }
 
 /* Two columns: filters move above the list ------------------------------------ */
@@ -1088,6 +1363,14 @@ textarea {
     z-index: 30;
     padding: 0 18px 32px;
     overflow-y: auto;
+  }
+
+  .reader-stamp {
+    display: none;
+  }
+
+  .tldr p {
+    font-size: 18px;
   }
 
   body.reader-open .reader {
