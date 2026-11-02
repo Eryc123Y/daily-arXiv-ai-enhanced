@@ -13,28 +13,34 @@ function storage(initial = {}) {
   };
 }
 
-test('themes: the system choice first, each with a name and a note', () => {
-  assert.equal(Theme.THEMES[0].id, 'auto');
-  assert.deepEqual(Theme.THEMES.map(t => t.id), ['auto', 'preprint', 'lamplight', 'anaglyph', 'graphite']);
-  assert.ok(Theme.THEMES.every(t => t.name && t.note));
+test('light and dark themes are listed separately, each with a name and a note', () => {
+  assert.deepEqual(Theme.LIGHT.map(t => t.id), ['preprint', 'graphite']);
+  assert.deepEqual(Theme.DARK.map(t => t.id), ['lilac', 'lamplight', 'anaglyph']);
+  assert.deepEqual(Theme.MODES.map(m => m.id), ['system', 'light', 'dark']);
+  assert.ok([...Theme.LIGHT, ...Theme.DARK, ...Theme.MODES].every(t => t.name));
 });
 
-test('a saved theme is read back, and anything unknown or unreadable means auto', () => {
-  assert.equal(Theme.read(storage({ [Theme.KEY]: 'anaglyph' })), 'anaglyph');
-  assert.equal(Theme.read(storage({ [Theme.KEY]: 'neon' })), 'auto');
-  assert.equal(Theme.read({ getItem() { throw new Error('blocked'); } }), 'auto');
+test('defaults: follow the system, Preprint by day, Lilac by night', () => {
+  assert.deepEqual(Theme.read(storage()), { mode: 'system', light: 'preprint', dark: 'lilac' });
+  assert.deepEqual(Theme.read({ getItem() { throw new Error('blocked'); } }), { mode: 'system', light: 'preprint', dark: 'lilac' });
 });
 
-test('auto is stored as no choice, and applying it removes the attribute', () => {
-  const store = storage({ [Theme.KEY]: 'graphite' });
-  Theme.save(store, 'auto');
-  assert.deepEqual(store.data, {});
-  Theme.save(store, 'lamplight');
-  assert.equal(store.data[Theme.KEY], 'lamplight');
+test('saved choices are read back, and a theme in the wrong slot falls back to the default', () => {
+  const store = storage();
+  Theme.save(store, { mode: 'dark', light: 'graphite', dark: 'anaglyph' });
+  assert.deepEqual(Theme.read(store), { mode: 'dark', light: 'graphite', dark: 'anaglyph' });
+  store.data[Theme.KEYS.dark] = 'preprint';
+  assert.equal(Theme.read(store).dark, 'lilac');
+});
+
+test('the page theme follows the mode and the system', () => {
+  const prefs = { mode: 'system', light: 'graphite', dark: 'lamplight' };
+  assert.equal(Theme.resolve(prefs, false), 'graphite');
+  assert.equal(Theme.resolve(prefs, true), 'lamplight');
+  assert.equal(Theme.resolve({ ...prefs, mode: 'light' }, true), 'graphite');
+  assert.equal(Theme.resolve({ ...prefs, mode: 'dark' }, false), 'lamplight');
 
   const doc = { documentElement: { dataset: {} } };
-  Theme.apply(doc, 'preprint');
-  assert.equal(doc.documentElement.dataset.theme, 'preprint');
-  Theme.apply(doc, 'auto');
-  assert.equal('theme' in doc.documentElement.dataset, false);
+  Theme.apply(doc, 'lilac');
+  assert.equal(doc.documentElement.dataset.theme, 'lilac');
 });
