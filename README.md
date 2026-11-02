@@ -32,7 +32,7 @@ Everything runs on GitHub's free tier; the page reads its data from whichever re
 
 ## How a day flows
 
-1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), Monday to Friday at 01:30 UTC plus a 07:30 UTC catch-up) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
+1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), Monday to Friday at 01:17, 01:47, 03:23 and 07:37 UTC, because GitHub delays or skips scheduled runs; the local task also starts it when the day is missing) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
 2. **Summaries** are written to `data/<date>_AI_enhanced_English.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its abstract, says the summary is not written yet, and a progress bar shows how many are ready.
 3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
 
@@ -42,7 +42,7 @@ Set by the repository variable `SUMMARY_MODE`.
 
 | Mode | Who summarises | Needs |
 |---|---|---|
-| `claude-code` (default, also when unset) | A local coding agent: a scheduled Claude Code task (Haiku subagents), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
+| `claude-code` (default, also when unset) | A local coding agent: a scheduled Claude Code task (headless Haiku through `run-local`), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
 | `api` | The Actions job, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key secret |
 
 ### API providers
@@ -77,16 +77,14 @@ Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/da
 
 ### The local task (claude-code mode)
 
-Scheduled task `daily-arxiv-summaries`, daily at 10:30, 16:30 and 21:30 local time (MYT), so it starts about an hour after the morning crawl and has two later chances to resume. Each run:
+Scheduled task `daily-arxiv-summaries`, at 10:20 and 21:20 local time (MYT) Sunday to Friday, with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md). A weekday run:
 
-1. checks plan usage before starting and before every wave of subagents (so the job never crowds out your other work on the same subscription; see the fallback below);
-2. `uv run python -m summaries status` to find recent days with pending papers;
-3. `uv run python -m summaries prepare --date D` writes chunks of 20 pending papers to `.cache/summaries/D/`;
-4. Haiku subagents, three at a time, each turn one chunk into a plain-text block file;
-5. `uv run python -m summaries merge --date D` validates the blocks, merges them into the day's summary file and pushes it to the `data` branch, after every few chunks;
-6. `uv run python -m summaries finish` releases the run's lock.
+1. `uv run python -m summaries ensure-day` starts the crawl from the Mac when the day's papers are still missing, and waits for it;
+2. checks plan usage (so the job never crowds out your other work on the same subscription; see the fallback below);
+3. `uv run python -m summaries run-local --client claude` summarises 40 pending papers per headless Haiku call (`--tools Read,Write --strict-mcp-config`, so each call starts at about 11,500 tokens instead of 70,000), merging and pushing as it goes;
+4. `uv run python -m summaries digest --dir <folder>` writes the day's short Chinese report (one Sonnet call over the site data; code renders it with links that open each paper on the page) and prints a push message.
 
-Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off on the next run. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md).
+The evening run resumes anything the morning could not finish. On Sunday `digest-week` puts the week's radar and topic counts on one page. Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md); the design and its measurements (cost per run, PDFs versus abstracts, how accurate abstract-only picks are): [docs/daily-pipeline.md](docs/daily-pipeline.md).
 
 ### Other coding agents (Codex, Antigravity, ...)
 
@@ -134,7 +132,7 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
 
 ## Changes from upstream
 
