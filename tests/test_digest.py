@@ -2,7 +2,7 @@ import json
 import re
 
 import pytest
-from conftest import seed_data_branch
+from conftest import git, seed_data_branch
 
 from summaries import digest
 from summaries.cli import main
@@ -208,6 +208,8 @@ def test_digest_writes_the_report_radar_rows_and_ledger(tmp_path, remote_and_clo
     ledger = (vault / "ledger.md").read_text()
     assert f"## {DAY}（网站数据 {DAY}）" in ledger and "项目雷达：2611.2" in ledger
     assert out["push"].startswith("arXiv 11-02：3 篇") and out["report"] == report
+    log = [json.loads(line) for line in git(remote, "show", "data:logs/summary-runs.jsonl").splitlines()]
+    assert (log[-1]["date"], log[-1]["path"]) == (DAY, "report")
 
 
 def test_digest_does_not_rewrite_an_existing_report(tmp_path, remote_and_clone, monkeypatch, capsys):
