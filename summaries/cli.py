@@ -561,11 +561,12 @@ def build_parser():
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
 
-    from summaries import digest, local_runner, setup
+    from summaries import digest, local_runner, setup, weekly
 
     local_runner.add_parser(sub)
     setup.add_parser(sub)
     digest.add_parser(sub)
+    weekly.add_parser(sub)
 
     handover = sub.add_parser("handover", help="usage gate reached: start the API job or pause")
     handover.add_argument("--date", required=True)

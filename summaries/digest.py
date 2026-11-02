@@ -130,7 +130,7 @@ def _one_line(text):
 
 def _snippet(paper):
     tldr = (paper.get("AI") or {}).get("tldr")
-    return _short(tldr or paper.get("summary"), SNIPPET_CHARS)
+    return shorten(tldr or paper.get("summary"), SNIPPET_CHARS)
 
 
 def _block(paper):
@@ -361,7 +361,7 @@ def weekday(day):
     return WEEKDAYS[date.fromisoformat(day).weekday()]
 
 
-def _short(text, limit):
+def shorten(text, limit):
     text = _one_line(text)
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
@@ -369,7 +369,7 @@ def _short(text, limit):
 def _paper_link(site, day, found, paper_id, topic=None):
     names = found.topics_of.get(paper_id, [])
     chosen = topic if topic in names else (names[0] if names else "all")
-    title = _short(found.records[paper_id].get("title"), TITLE_CHARS).replace("[", "(").replace("]", ")")
+    title = shorten(found.records[paper_id].get("title"), TITLE_CHARS).replace("[", "(").replace("]", ")")
     return f"[{title}]({day_link(site, day, topic=chosen, paper=paper_id)})"
 
 
@@ -417,7 +417,7 @@ def push_message(day, found, picks, site):
     top = min(picks["radar"], key=lambda i: LEVEL_ORDER[i["level"]])
     label = f"雷达（{top['level']}）："
     room = 200 - len(head) - len(label) - len("。") - len(tail)
-    title = _short(found.records[top["id"]].get("title", ""), max(room, 10))
+    title = shorten(found.records[top["id"]].get("title", ""), max(room, 10))
     return f"{head}{label}{title}。{tail}"
 
 
@@ -482,18 +482,18 @@ def no_batch_note(today, day, site):
     return f"# arXiv 日报 · {today}（周{weekday(today)}）\n\narXiv 今天没有新批次（节假日或批次推迟）。{latest}\n"
 
 
-def _emit(**values):
+def emit(**values):
     print(json.dumps(values, ensure_ascii=False, indent=2))
 
 
 def nothing_new(args, vault, today, day, site, report_path):
     """No unreported batch: say so, and on the day's last run leave a two-line note."""
     if not args.final:
-        _emit(status="no-new-batch", latest=day)
+        emit(status="no-new-batch", latest=day)
         return 0
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(no_batch_note(today, day, site), encoding="utf-8")
-    _emit(status="written-no-batch", path=str(report_path), push="")
+    emit(status="written-no-batch", path=str(report_path), push="")
     return 0
 
 
@@ -518,7 +518,7 @@ def cmd_digest(args):
     today = args.today or date.today().isoformat()
     report_path = vault / "digests" / f"{today}.md"
     if report_path.exists() and not args.force:
-        _emit(status="exists", path=str(report_path))
+        emit(status="exists", path=str(report_path))
         return 0
     branch = cli.make_branch(args)
     branch.fetch()
@@ -533,14 +533,14 @@ def cmd_digest(args):
     topics = load_topics()
     found = build_candidates(raw, ai_records, topics, radar_patterns(brief), known_ids(vault, today))
     if args.wait_summaries and found.done < SUMMARISED_ENOUGH * found.total and not args.final:
-        _emit(status="summaries-pending", date=day, done=found.done, total=found.total)
+        emit(status="summaries-pending", date=day, done=found.done, total=found.total)
         return 0
     work = Path(args.cache) / day
     work.mkdir(parents=True, exist_ok=True)
     try:
         picks, problems = choose(args, day, found, topics, brief, feedback, work)
     except RuntimeError as error:
-        _emit(status="error", date=day, reason=str(error))
+        emit(status="error", date=day, reason=str(error))
         return 1
 
     # The ledger entry marks the day as reported, so it is written last.
@@ -549,7 +549,7 @@ def cmd_digest(args):
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)
-    _emit(
+    emit(
         status="written",
         path=str(report_path),
         date=day,
@@ -557,59 +557,6 @@ def cmd_digest(args):
         report=report,
         problems=problems[:20],
     )
-    return 0
-
-
-def load_week(cache, today):
-    """picks.json of the days in the seven days up to today, oldest first."""
-    start = (date.fromisoformat(today) - timedelta(days=6)).isoformat()
-    weeks = []
-    for path in sorted(Path(cache).glob("*/picks.json")):
-        try:
-            saved = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        if isinstance(saved, dict) and start <= saved.get("day", "") <= today:
-            weeks.append(saved)
-    return weeks
-
-
-def render_week(today, days, topics, site):
-    start, end = days[0]["day"], days[-1]["day"]
-    total = sum(d["total"] for d in days)
-    lines = [f"# arXiv 本周回顾 · {start} 至 {end}", ""]
-    lines += [f"本周 {len(days)} 天，共 {total} 篇 · [打开本周]({day_link(site, end, start=start)})", ""]
-    radar = [(d["day"], item, d["titles"]) for d in days for item in d["radar"]]
-    lines.append(f"**本周雷达**（{len(radar)} 条）" if radar else "**本周雷达**：无")
-    for day, item, titles in sorted(radar, key=lambda r: LEVEL_ORDER[r[1]["level"]]):
-        title = _short(titles.get(item["id"], item["id"]), TITLE_CHARS)
-        link = day_link(site, day, topic="all", paper=item["id"])
-        lines.append(f"- [{title}]({link})（{item['level']}，{day[5:]}）— {item['reason']}")
-    lines += ["", "**各主题本周精选**"]
-    for topic in topics:
-        count = sum(len(d["topics"].get(topic["name"], [])) for d in days)
-        lines.append(f"- {topic['name']}：{count} 篇 · [本周全部]({day_link(site, end, topic=topic['name'], start=start)})")
-    return "\n".join(lines) + "\n", total, len(radar)
-
-
-def cmd_digest_week(args):
-    """Sunday: the week's report days, radar rows and topic counts in one page, with no model call."""
-    vault = Path(args.dir)
-    today = args.today or date.today().isoformat()
-    report_path = vault / "digests" / f"{today}.md"
-    if report_path.exists() and not args.force:
-        _emit(status="exists", path=str(report_path))
-        return 0
-    days = load_week(args.cache, today)
-    if not days:
-        _emit(status="no-reports")
-        return 0
-    site = args.site or site_url(args.repo)
-    text, total, radar = render_week(today, days, load_topics(), site)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(text, encoding="utf-8")
-    push = f"arXiv 本周：{total} 篇，雷达 {radar} 条。{day_link(site, days[-1]['day'], start=days[0]['day'])}"
-    _emit(status="written", path=str(report_path), push=push, report=text)
     return 0
 
 
@@ -627,11 +574,3 @@ def add_parser(sub):
     digest.add_argument("--site", help="reading page URL; default from the repository")
     digest.add_argument("--cache", default=".cache/digest", help="work files (prompts, answers, picks)")
     digest.set_defaults(func=cmd_digest)
-
-    week = sub.add_parser("digest-week", help="Sunday: the week's reports on one page (no model call)")
-    week.add_argument("--dir", required=True)
-    week.add_argument("--today", help="report date (local), default today")
-    week.add_argument("--force", action="store_true")
-    week.add_argument("--site", help="reading page URL; default from the repository")
-    week.add_argument("--cache", default=".cache/digest")
-    week.set_defaults(func=cmd_digest_week)
