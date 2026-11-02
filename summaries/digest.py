@@ -25,6 +25,7 @@ from urllib.parse import quote
 import requests
 
 from summaries import cli
+from summaries.databranch import PublishError
 from summaries.interests import load_topics, topics_for
 from summaries.records import dedupe_by_id, has_summary
 from summaries.signals import read_signals
@@ -569,6 +570,10 @@ def cmd_digest(args):
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)
+    try:
+        cli.record_run(branch, day, args.language, "report")
+    except (PublishError, subprocess.SubprocessError) as error:
+        problems.append(f"run log not updated: {error}")
     emit(
         status="written",
         path=str(report_path),

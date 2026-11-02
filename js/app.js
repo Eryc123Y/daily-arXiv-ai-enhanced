@@ -21,6 +21,7 @@ const state = {
   selectedId: null,
   mainCategories: [],
   visible: [],
+  status: null,
 };
 
 const $ = id => document.getElementById(id);
@@ -116,6 +117,7 @@ function renderNav(days) {
     $('progressFill').style.width = `${Math.round((100 * done) / total)}%`;
     $('progressText').textContent = Render.progressText(done, total);
   }
+  renderStatus(days);
 
   const counts = Filters.counts(entries(), activeFilters(), state.mainCategories, state.topics.map(t => t.name));
   const count = topic => counts.topics.get(topic);
@@ -227,6 +229,35 @@ function closeReader() {
   document.body.classList.remove('reader-open');
   const button = document.querySelector('.row.is-selected');
   if (button) button.focus();
+}
+
+// --- Pipeline status ----------------------------------------------------------
+
+/** "10:41" today, "2 Nov 21:59" on another day, in the reader's time zone. */
+function clockTime(iso) {
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+  const clock = when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (when.toDateString() === new Date().toDateString()) return clock;
+  return `${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${clock}`;
+}
+
+/** One line under the day: crawl, summaries and report, for a single selected day. */
+function renderStatus(days) {
+  const box = $('pipelineStatus');
+  if (!state.status || days.length !== 1) {
+    box.hidden = true;
+    return;
+  }
+  const parts = Status.statusParts({ ...state.status, day: days[0], newest: days[0] === state.days[0], time: clockTime });
+  box.hidden = !parts.length;
+  box.innerHTML = parts
+    .map(part => {
+      const text = esc(part.text);
+      const body = part.href ? `<a href="${esc(part.href)}" target="_blank" rel="noopener">${text}</a>` : text;
+      return `<span class="status-part is-${part.tone}">${body}</span>`;
+    })
+    .join('');
 }
 
 // --- Days and the URL ---------------------------------------------------------
@@ -480,6 +511,10 @@ async function init() {
   readHash();
   const linkedPaper = state.selectedId;
   bindEvents();
+  DataSource.loadStatus().then(status => {
+    state.status = status;
+    renderStatus(selectedDays());
+  });
   await showSelection({ keepTopic: Boolean(state.topic) });
   openLinkedPaper(linkedPaper);
 }

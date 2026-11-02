@@ -7,6 +7,8 @@
  *                        categories: crawled categories from assets/site.json, or null }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
  *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
+ *   loadStatus()    -> { log: [run log entries], crawl: latest crawl workflow run or null }
+ *                      for the pipeline line; never rejects
  *
  * Both reject with a LoadError when a file that should be there cannot be
  * read, so a failed download is never shown as a day without papers. Files
@@ -26,7 +28,18 @@
     }
   }
 
-  function createStaticSource({ fetch: fetchImpl, url }) {
+  function parseLines(text) {
+    return (text || '').split('\n').flatMap(line => {
+      try {
+        return line.trim() ? [JSON.parse(line)] : [];
+      } catch (error) {
+        return [];
+      }
+    });
+  }
+
+  /** url(path): a data-branch file; api(path): the repository on the GitHub REST API (optional). */
+  function createStaticSource({ fetch: fetchImpl, url, api }) {
     let languages = new Map();
 
     async function fetchText(path, { optional = false } = {}) {
@@ -48,6 +61,18 @@
         return parsed && typeof parsed === 'object' ? parsed : {};
       } catch (error) {
         return {};
+      }
+    }
+
+    async function latestCrawl() {
+      if (!api) return null;
+      try {
+        const response = await fetchImpl(api('actions/workflows/run.yml/runs?per_page=1'), { cache: 'no-cache' });
+        if (!response.ok) return null;
+        const runs = JSON.parse(await response.text()).workflow_runs || [];
+        return runs[0] || null;
+      } catch (error) {
+        return null;
       }
     }
 
@@ -80,6 +105,13 @@
         ]);
         return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
       },
+      async loadStatus() {
+        const [logText, crawl] = await Promise.all([
+          fetchText('logs/summary-runs.jsonl', { optional: true }).catch(() => ''),
+          latestCrawl(),
+        ]);
+        return { log: parseLines(logText), crawl };
+      },
     };
   }
 
@@ -92,5 +124,6 @@
   root.DataSource = createStaticSource({
     fetch: (...args) => root.fetch(...args),
     url: path => root.DATA_CONFIG.getDataUrl(path),
+    api: path => `https://api.github.com/repos/${root.DATA_CONFIG.repoOwner}/${root.DATA_CONFIG.repoName}/${path}`,
   });
 })(typeof self !== 'undefined' ? self : this);
