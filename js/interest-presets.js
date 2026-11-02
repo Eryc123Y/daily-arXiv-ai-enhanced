@@ -1,6 +1,6 @@
 /**
  * Default interest topics and keywords, used until keywords are saved in the
- * "Keywords & authors" dialog.
+ * Settings dialog.
  * Seeded on 2026-10-30 from the arXiv daily digest's project brief (weak
  * supervision, data reuse, RLVR), its 2D-to-3D / stereo focus list, and the
  * two routes of the Research Soul core question (continual learning; which

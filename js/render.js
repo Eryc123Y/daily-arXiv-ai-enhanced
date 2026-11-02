@@ -155,6 +155,13 @@
       .join('');
   }
 
+  /** The vertical line in the left margin of every arXiv PDF: identifier, primary category, date. */
+  function stamp(paper) {
+    const primary = (paper.categories || [])[0];
+    const day = paper.date ? formatDay(paper.date, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    return [`arXiv:${paper.id}`, primary ? `[${primary}]` : '', day].filter(Boolean).join(' ');
+  }
+
   function renderReader(paper, info, terms, options = {}) {
     const ai = paper.pending ? null : paper.AI;
     const topicLine = info.topics
@@ -170,7 +177,8 @@
 <details class="abstract"><summary>Show the abstract</summary><p>${mark(paper.summary, terms)}</p></details>`
       : `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>
 <section class="abstract-open"><h3>Abstract</h3><p>${mark(paper.summary, terms)}</p></section>`;
-    return `<article class="reader-body" aria-labelledby="readerTitle">
+    return `<p class="reader-stamp" aria-hidden="true">${esc(stamp(paper))}</p>
+<article class="reader-body" aria-labelledby="readerTitle">
 <p class="reader-kicker">${topicLine}${matches}</p>
 <h2 class="reader-title" id="readerTitle">${mark(paper.title, terms)}</h2>
 <p class="reader-authors">${PaperData.highlight(esc(authorLine(paper.authors, 12)), info.match.authors, 'hl')}</p>

@@ -6,21 +6,22 @@
   <meta name="description" content="New arXiv papers in vision, ML and language each day, with short summaries and interest highlights.">
   <meta name="color-scheme" content="light dark">
   <title>Daily arXiv</title>
-  <link rel="icon" type="image/png" href="assets/logo2-removebg-preview.png">
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&display=swap">
-  <link rel="stylesheet" href="css/site.css?v=17">
-  <script src="js/data-config.js?v=17"></script>
-  <script src="js/paper-data.js?v=17"></script>
-  <script src="js/interest-presets.js?v=17"></script>
-  <script src="js/data-source.js?v=17"></script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+  <script src="js/theme.js?v=18"></script>
+  <link rel="stylesheet" href="css/site.css?v=18">
+  <script src="js/data-config.js?v=18"></script>
+  <script src="js/paper-data.js?v=18"></script>
+  <script src="js/interest-presets.js?v=18"></script>
+  <script src="js/data-source.js?v=18"></script>
 </head>
 <body>
   <a class="skip-link" href="#paperList">Skip to the paper list</a>
 
   <header class="topbar">
-    <a class="brand" href="./">Daily arXiv</a>
+    <a class="brand" href="./"><img src="assets/logo.svg" alt="" width="28" height="28">Daily arXiv</a>
     <form class="day-nav" id="dayForm" aria-label="Choose a day">
       <button type="button" class="icon-button" id="prevDay" aria-label="Previous day">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
@@ -42,7 +43,10 @@
       <span class="visually-hidden">Search titles, authors and summaries</span>
       <input type="search" id="search" placeholder="Search titles, authors, summaries" autocomplete="off">
     </label>
-    <button type="button" class="button-outline" id="openSettings">Keywords &amp; authors</button>
+    <button type="button" class="button-outline settings-button" id="openSettings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+      Settings
+    </button>
   </header>
 
   <div class="app">
@@ -98,24 +102,42 @@
 
   <dialog id="settings" class="settings" aria-labelledby="settingsTitle">
     <form method="dialog">
-      <h2 id="settingsTitle">Keywords and authors</h2>
-      <p class="settings-note">Papers whose title, abstract or summary contain one of these keywords, or with one of these authors, are marked and grouped under Topics. One per line; keywords from the default topics stay in their topic. Saved in this browser only.</p>
-      <label for="keywordsInput">Keywords</label>
-      <textarea id="keywordsInput" rows="10" spellcheck="false"></textarea>
-      <label for="authorsInput">Authors</label>
-      <textarea id="authorsInput" rows="3" spellcheck="false"></textarea>
+      <h2 id="settingsTitle">Settings</h2>
+      <p class="settings-note">Saved in this browser only.</p>
+
+      <fieldset class="settings-group">
+        <legend>Theme</legend>
+        <div class="theme-options" id="themeOptions"></div>
+      </fieldset>
+
+      <fieldset class="settings-group">
+        <legend>Open papers on</legend>
+        <div class="choices">
+          <label class="choice"><input type="radio" name="openOn" value="alphaxiv"> alphaXiv, with its discussion and chat</label>
+          <label class="choice"><input type="radio" name="openOn" value="arxiv"> arXiv</label>
+        </div>
+      </fieldset>
+
+      <fieldset class="settings-group">
+        <legend>Keywords and authors</legend>
+        <p class="settings-note">Papers whose title, abstract or summary contain one of these keywords, or with one of these authors, are marked and grouped under Topics. One per line; keywords from the default topics stay in their topic.</p>
+        <label for="keywordsInput">Keywords</label>
+        <textarea id="keywordsInput" rows="8" spellcheck="false"></textarea>
+        <label for="authorsInput">Authors</label>
+        <textarea id="authorsInput" rows="3" spellcheck="false"></textarea>
+        <button type="button" class="link-button" id="resetSettings">Restore default keywords</button>
+      </fieldset>
+
       <div class="settings-actions">
-        <button type="button" class="button-outline" id="resetSettings">Restore default keywords</button>
-        <span class="spacer"></span>
         <button value="cancel" class="button-outline">Cancel</button>
         <button value="save" class="button-solid">Save</button>
       </div>
     </form>
   </dialog>
 
-  <script src="js/render.js?v=17"></script>
-  <script src="js/filters.js?v=17"></script>
-  <script src="js/status.js?v=17"></script>
-  <script src="js/app.js?v=17"></script>
+  <script src="js/render.js?v=18"></script>
+  <script src="js/filters.js?v=18"></script>
+  <script src="js/status.js?v=18"></script>
+  <script src="js/app.js?v=18"></script>
 </body>
 </html>
