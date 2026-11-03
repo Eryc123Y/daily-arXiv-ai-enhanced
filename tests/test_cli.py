@@ -49,6 +49,9 @@ def test_ingest_publishes_only_papers_not_seen_in_the_last_week(tmp_path, remote
     assert [p["id"] for p in parse_jsonl(branch_file(remote, f"data/{DAY}.jsonl"))] == ["B", "C"]
     assert "has_new_content=true" in gh_output.read_text()
     assert f"{DAY}.jsonl" in branch_file(remote, "assets/file-list.txt")
+    [entry] = parse_jsonl(branch_file(remote, "logs/summary-runs.jsonl"))
+    assert (entry["date"], entry["path"], entry["added"], entry["total"]) == (DAY, "crawl", 2, 2)
+    assert entry["at"].endswith("+00:00")
 
 
 def test_ingest_on_a_day_without_an_announcement_publishes_nothing(tmp_path, remote_and_clone, monkeypatch, capsys):

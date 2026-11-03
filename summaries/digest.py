@@ -42,6 +42,7 @@ RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
 SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.I)
 INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.I)
 LIST_MARKER = re.compile(r"^[\s>*`\-]*(?:\d+[.)]\s*)?")
+PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/|$)", re.I)  # as in js/render.js
 REFERENCES = re.compile(r"\n\s*(References|REFERENCES|Bibliography)\s*\n")
 FULLTEXT_CHARS = 60_000
 MODEL_TIMEOUT = 900
@@ -136,8 +137,12 @@ def _snippet(paper):
     return shorten(tldr or paper.get("summary"), SNIPPET_CHARS)
 
 
+def _code_tag(paper):
+    return " [code]" if paper.get("code_url") and not PROJECT_PAGE.match(paper["code_url"]) else ""
+
+
 def _block(paper):
-    return f"=== {paper['id']}\ntitle: {_one_line(paper.get('title'))}\nabstract: {_one_line(paper.get('summary'))}\n"
+    return f"=== {paper['id']}{_code_tag(paper)}\ntitle: {_one_line(paper.get('title'))}\nabstract: {_one_line(paper.get('summary'))}\n"
 
 
 def writer_prompt(day, found, topics, feedback, brief):
@@ -176,13 +181,15 @@ Rules:
 # Topics
 {topic_lines}
 
+Papers marked [code] link their code; between two papers of similar value, prefer the one with code.
+
 # Keyword matches by topic
 {chr(10).join(sections)}
 # Radar regex hits not listed above
 {chr(10).join(_block(p) for p in radar) or "(none)"}
 
 # Every other paper today (id | title | TL;DR or start of abstract)
-{chr(10).join(f"{p['id']} | {_one_line(p.get('title'))} | {_snippet(p)}" for p in found.others)}
+{chr(10).join(f"{p['id']}{_code_tag(p)} | {_one_line(p.get('title'))} | {_snippet(p)}" for p in found.others)}
 """
 
 
@@ -376,6 +383,14 @@ def _paper_link(site, day, found, paper_id, topic=None):
     return f"[{title}]({day_link(site, day, topic=chosen, paper=paper_id)})"
 
 
+def _code_link(found, paper_id):
+    """' · [代码](url)' for a linked repository, ' · [项目页](url)' for a project page."""
+    url = found.records[paper_id].get("code_url")
+    if not url:
+        return ""
+    return f" · [{'项目页' if PROJECT_PAGE.match(url) else '代码'}]({url})"
+
+
 def render_report(day, today, found, picks, topics, site, hot=()):
     """`hot`: (day, id, title, upvotes) of the previous batch's most upvoted papers on Hugging Face."""
     shown = {item["id"] for item in picks["radar"]}
@@ -391,7 +406,7 @@ def render_report(day, today, found, picks, topics, site, hot=()):
         lines.append("**雷达**：")
         for item in sorted(picks["radar"], key=lambda i: LEVEL_ORDER[i["level"]]):
             seen = "已读全文" if item["read"] else "仅摘要"
-            lines.append(f"- {_paper_link(site, day, found, item['id'])}（{item['level']}，{seen}）— {item['reason']}")
+            lines.append(f"- {_paper_link(site, day, found, item['id'])}（{item['level']}，{seen}）— {item['reason']}{_code_link(found, item['id'])}")
     else:
         lines.append("**雷达**：今日无可能撞车的论文")
     for index, topic in enumerate(topics):
@@ -406,11 +421,11 @@ def render_report(day, today, found, picks, topics, site, hot=()):
             lines.append(f"**{name}**：{empty}（{more}）")
             continue
         lines.append(f"**{name}**（{more}）")
-        lines += [f"- {_paper_link(site, day, found, pid, name)} — {gist}" for pid, gist in chosen]
+        lines += [f"- {_paper_link(site, day, found, pid, name)} — {gist}{_code_link(found, pid)}" for pid, gist in chosen]
     other = [(pid, gist) for pid, gist in picks["other"] if pid not in shown]
     if other:
         lines += ["", "**其他**"]
-        lines += [f"- {_paper_link(site, day, found, pid)} — {gist}" for pid, gist in other]
+        lines += [f"- {_paper_link(site, day, found, pid)} — {gist}{_code_link(found, pid)}" for pid, gist in other]
     if picks["note"]:
         lines += ["", f"> {picks['note']}"]
     return "\n".join(lines) + "\n"

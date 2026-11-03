@@ -127,12 +127,16 @@ def cmd_ingest(args):
     seen = history_ids(branch, day, args.history_days)
     fresh = [p for p in crawled if p["id"] not in seen]
     result = {}
+    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def build(current):
         existing = read_records(current, raw_path(args.date))
         combined = dedupe_by_id(existing + fresh)
         result.update(added=len(combined) - len(existing), papers=len(combined))
-        return {raw_path(args.date): dump_jsonl(combined), **site_settings(args.language)}
+        # When the papers landed, for the week's health table and the status line.
+        entry = {"date": args.date, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
+        log = (current.read(RUN_LOG) or "") + dump_jsonl([entry])
+        return {raw_path(args.date): dump_jsonl(combined), RUN_LOG: log, **site_settings(args.language)}
 
     content = build(branch)
     if result["added"] == 0:

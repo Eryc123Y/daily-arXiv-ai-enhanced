@@ -77,7 +77,7 @@ Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/da
 
 ### The local task (claude-code mode)
 
-Scheduled task `daily-arxiv-summaries`, at 10:20 and 21:20 local time (MYT) Sunday to Friday, with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md). A weekday run:
+Scheduled task `daily-arxiv-summaries`, at 10:20, 16:20 and 21:20 local time (MYT) Sunday to Friday, with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md). A weekday run:
 
 1. `uv run python -m summaries ensure-day` starts the crawl from the Mac when the day's papers are still missing, and waits for it;
 2. checks plan usage (so the job never crowds out your other work on the same subscription; see the fallback below);
