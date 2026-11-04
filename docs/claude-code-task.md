@@ -17,7 +17,7 @@ Rules:
 Tools: load both with one ToolSearch query "select:mcp__ccd_session_mgmt__get_usage,PushNotification". Gate reached = the "5-hour limit" or the "Weekly · all models" window has percentUsed 80 or more.
 
 Sunday:
-1. `uv run python -m summaries digest-week --dir "DIGEST"`. If status is not "written", reply with one line and stop.
+1. `uv run python -m summaries missed --dir "DIGEST"; uv run python -m summaries digest-week --dir "DIGEST"`. The first records last week's look-back papers that were in one of our batches in DIGEST/missed.md; the second writes the weekly page. If digest-week's status is not "written", reply with one line and stop.
 2. Call get_usage. Unless the gate is reached, start one Agent (subagent_type "general-purpose", model "sonnet", description "arXiv weekly look-back") with this prompt, DIGEST and <today> written out: "Find at most 3 influential older papers for my project radar. Read DIGEST/project-brief.md and take sub-direction ((ISO week number - 1) mod 5) + 1 from its list. Load the alphaXiv discover_papers tool with ToolSearch and call it twice for that sub-direction, prioritize 'historical' and then 'popular'. Skip IDs that appear in DIGEST/project-radar.md or the brief. Judge from abstracts only. Append to DIGEST/digests/<today>.md a section '## 旧文回溯（子方向 N）' with one line per paper: [title](https://arxiv.org/abs/ID) — 中文一句话说明为什么值得读. Append one row per paper to DIGEST/project-radar.md: | <today> | ID | title | 可借鉴（回溯） | 一句话关系 | 视情况阅读 |. Reply with the IDs only."
 3. Go to Finish.
 
