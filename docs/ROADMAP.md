@@ -1,59 +1,104 @@
 # Roadmap
 
-Now / Next / Later, updated 2026-11-03. **Now** is what can be done without the reader's time while he is in exams (to 2026-11-16). **Next** starts after that and mostly needs the server: a VPS, or Cloudflare Pages + D1 / Supabase. **Later** is direction, not commitment. The pipeline keeps the `data` branch as the source of truth, and `js/data-source.js` is the only page code that changes backend.
+Updated 2026-11-04 after aligning with the reader (Eric). The competitor comparison behind some items is in [competitive-brief.md](competitive-brief.md); the daily pipeline is described in [daily-pipeline.md](daily-pipeline.md).
 
-Items are ranked by ICE (Impact, Confidence, Ease; 1-10 each, score = I × C × E / 100). The site has one reader, so RICE's reach does not apply. Impact means time saved or papers not missed for that reader. The competitor comparison behind some items is in [competitive-brief.md](competitive-brief.md).
+## Direction
 
-## Now (November, no reader time needed)
+- **Who it is for**: Eric first, and soon something he can share. What sharing needs (a clear licence, labels, a fork that deploys cleanly) comes before the server. The radar and the project brief stay private in his vault.
+- **Capacity**: Eric is in exams until 2026-11-16 and has no time for it before then. From 11-16 he has 3 hours or more a week, for decisions, reviews and trying new features; Claude does the building. Feature work stops in January for the ICML 2027 deadline (late January; check the official date).
+- **Server**: a hosted service, Cloudflare Pages + D1 or Supabase (picked in the M2 spec), not the VPS. The `data` branch stays the source of truth, and `js/data-source.js` is the only page code that changes backend.
 
-| Item | I | C | E | ICE | State |
-|---|---|---|---|---|---|
-| Code links in the report and a `[code]` hint to the writer | 6 | 9 | 9 | 4.9 | done 11-03 |
-| Pipeline health: crawl entries in the run log, a health table on Sunday's page, "arXiv has not announced yet" on the status line | 6 | 8 | 8 | 3.8 | done 11-03 |
-| A 16:20 run for late announcements | 7 | 8 | 10 | 5.6 | done 11-03 |
-| Push notifications that reach the phone: the 11-03 push failed with Remote Control disconnected; find out why and fall back to the messenger chat | 7 | 5 | 6 | 2.1 | open |
-| Weekly synthesis of `feedback.md` and the messenger chat into the writer's standing preferences | 5 | 6 | 7 | 2.1 | open |
+## Objectives and how they are measured
 
-## Next (from mid-November)
+| Objective | Measure | Target | Where it is read |
+|---|---|---|---|
+| **The report is on time** | Weekdays with the report written by 11:30, among days arXiv announced by 10:00 | 90% or more | Sunday's health table (live since 11-03); an on-time count added in M0 |
+| **The picks are worth reading** | Share of the report's picks Eric rates up or opens | A baseline in December, then up | Ratings, from M2 |
+| **No important paper is missed** | Papers Eric or the Sunday search finds that should have been on the radar and were not | Zero at level high or medium, counted per month | A "missed" list, from M0 |
 
-| Item | I | C | E | ICE |
-|---|---|---|---|---|
-| **Reading state**: read/unread, star, "read later", "since my last visit" | 8 | 8 | 5 | 3.2 |
-| **Followed authors** as a weekly line on Sunday's page | 4 | 8 | 8 | 2.6 |
-| **Ratings as a signal**: a thumbs up or down per paper (on the page, or by replying in the messenger chat); the writer sees recent ratings, and later they train the ranking (as Scholar Inbox and arxiv-sanity do) | 8 | 6 | 5 | 2.4 |
-| **Full-text search across all days** with filters by topic, category and date range | 6 | 8 | 5 | 2.4 |
-| **Server backend**: the two calls of `js/data-source.js` (list days, load a day), a database fed from the `data` branch after each push, one login | 7 | 8 | 4 | 2.2 |
-| **Settings saved on the server**: summary mode and model, usage threshold, schedule; arXiv categories; topics, keywords, followed authors, exclusion keywords (`disparity` only with `stereo`); main paper link and theme; notification content | 6 | 8 | 4 | 1.9 |
-| **Relevance beyond keywords**: embedding similarity to starred papers and to the project brief, next to keyword matches | 8 | 6 | 4 | 1.9 |
+## Milestones
 
-Dependencies: reading state, ratings and settings need the server; embedding ranking needs ratings or stars to learn from.
+Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on a decision or an action only he can take).
 
-## Later
+### M0 · now to 2026-11-16 · no reader time
 
-- **Notes per paper**, exported to Obsidian and Zotero/BibTeX; **version watch** for starred papers.
-- **Deep summary on demand** for a starred paper, from the full PDF, cached.
-- **Trends**: a topic-by-week chart and rising keywords, replacing upstream's statistic page.
-- **Status page** with a re-run button and usage or API cost (the status line and Sunday's health table cover the basics now).
-- **Sharing**: other readers with their own topics, and a read-only JSON API.
-- **Many sources, one daily view.** Each source is fetched by code on a schedule and merged into one record per paper (arXiv ID, else DOI):
-  - alphaXiv trending and discussion counts, and Hugging Face models and datasets (upvotes already done);
-  - OpenReview reviews and decisions;
-  - Semantic Scholar or OpenAlex: citations, new papers by followed authors, who cites the radar papers;
-  - GitHub stars for linked code;
-  - X and Reddit discussion through an agent-reach style fetcher;
-  - conference accepted-paper lists, blogs and lab pages through RSS.
+| Item | Owner | Status |
+|---|---|---|
+| Code links in the report, crawl times in the run log, Sunday health table, "arXiv has not announced yet" on the status line, a 16:20 catch-up run | Claude | **Done** (11-03, PR #22) |
+| On-time count: Sunday's health table counts weekdays with the report by 11:30 | Claude | Not Started |
+| Missed papers: Sunday's search for older radar papers records what it finds in `missed.md` in the vault; the messenger appends there when Eric says a paper should have been caught | Claude (code); Eric pastes the messenger's new prompt line | Not Started |
+| Push notifications that reach the phone: the 11-03 push failed with Remote Control disconnected; find the cause, and when the push fails say so in the run's last message | Claude | Not Started |
+| Sharing groundwork that needs no decision: label summaries as written from the abstract, tell a failed load apart from an empty day on the page, a clean-fork test, publish the measured cost | Claude | Not Started |
+| Specs for M1 and M2 (`docs/specs/`): sharing, and reading state + ratings on a hosted backend | Claude | Not Started |
+| Messenger at 11:30 Sun-Fri, task model set to Sonnet, three idle routines deleted | Eric | **Needs Eric** |
 
-  Division of work, from the 2026-11-02 measurements (docs/daily-pipeline.md): code fetches, dedupes and tags; a cheap model screens by meaning; one stronger model writes the short report; full text only for the few papers whose grade depends on it.
-- **Our own papers MCP server**: the database behind the site as MCP tools (search by topic, date and keyword; read a summary; list the radar), so any Claude session can ask what came out on a topic without a crawl.
+### M1 · 2026-11-16 to 11-29 · shareable
+
+| Item | Owner | Status |
+|---|---|---|
+| Licence: README says upstream's Modified Apache License (clause 9) correctly; ask upstream if anything is unclear | Eric decides, Claude writes | **Needs Eric** |
+| "Deploy your own" checked on a fresh fork end to end, with what it costs per day | Claude | Not Started |
+| A short shareable README and a link Eric can send | Claude; Eric approves | Not Started |
+| Feedback from the first two weeks of reports folded into `feedback.md` | Eric 30 min, Claude summarises | Not Started |
+
+### M2 · 2026-11-30 to 12-20 · reading state and ratings on a hosted backend
+
+| Item | Owner | Status |
+|---|---|---|
+| Backend: Cloudflare Pages + D1 or Supabase, fed from the `data` branch after each push; one login for Eric | Claude; Eric creates the account | Not Started |
+| Reading state: read/unread, star, read later, "since my last visit" | Claude | Not Started |
+| Ratings: up or down on each paper, on the page and by reply in the messenger chat; the writer sees recent ratings; the hit-rate measure goes live | Claude | Not Started |
+| Followed authors: a weekly line on Sunday's page | Claude | Not Started |
+
+### M3 · 2026-12-21 to 2027-01-04 · finding more of the right papers
+
+| Item | Owner | Status |
+|---|---|---|
+| Full-text search across all days, by topic, category and date | Claude | Not Started |
+| Relevance beyond keywords: rank by similarity to starred and up-rated papers and to the project brief, next to keyword matches; judged against the hit rate | Claude | Not Started |
+| Settings saved on the server (topics, keywords, followed authors, exclusions, schedule, models) | Claude | Not Started |
+
+### Freeze · 2027-01-05 to the ICML deadline
+
+Only fixes to the daily pipeline. Nothing that needs Eric's time.
+
+## Dependencies and risks
+
+- **M2 needs Eric to create the hosted account.** If that slips, M2 slips, and with it the hit rate.
+- **Embedding ranking (M3) needs about a month of ratings** to be judged. If ratings are sparse, M3 ships search and settings, and ranking moves to Later.
+- **arXiv and GitHub timing.** arXiv was about ten hours late on 2026-11-03 and GitHub skipped scheduled runs; the 16:20 run and the status line cover this.
+- **Privacy.** The `data` branch is public. Radar reasons and ratings live in the vault or behind the login, never on the `data` branch.
+- **Usage.** The pipeline runs on Eric's Claude plan; a usage gate at 80% hands the summaries to the API path (needs `ANTHROPIC_API_KEY`, not set).
+
+## Later (after the ICML deadline)
+
+- Other readers with their own topics on the same server, and a read-only JSON API.
+- Notes per paper exported to Obsidian and Zotero/BibTeX; version watch for starred papers.
+- Deep summary on demand for a starred paper, from the full PDF, cached.
+- Trends: a topic-by-week chart and rising keywords.
+- A status page with a re-run button and usage or API cost.
+- The report's picks on the site, behind the login (they reveal the research direction).
+- Many sources, one daily view, each fetched by code and merged per paper (arXiv ID, else DOI): alphaXiv trending and discussion counts, Hugging Face models and datasets, OpenReview, Semantic Scholar or OpenAlex, GitHub stars, X and Reddit through an agent-reach style fetcher, conference lists and blogs through RSS. Division of work from the 2026-11-02 measurements: code fetches, dedupes and tags; a cheap model screens by meaning; one stronger model writes the report; full text only where the grade depends on it.
+- Our own papers MCP server: the database as MCP tools (search by topic, date and keyword; read a summary; list the radar).
 
 ## Done
 
-- 2026-11-03: one daily pipeline (crawl check from the Mac, headless Haiku summaries, a short Chinese report with deep links; docs/daily-pipeline.md).
-- 2026-11-03: Hugging Face Daily Papers upvotes as a second source (`signals.yml`, ▲ on the page, a line in the report).
-- 2026-11-03: redesigned page with separate light and dark themes, a pipeline status line, code links in the report, a week health table, and a 16:20 catch-up run.
+- 2026-11-03: one daily pipeline (crawl check from the Mac, headless Haiku summaries, a short Chinese report with deep links).
+- 2026-11-03: Hugging Face Daily Papers upvotes as a second source.
+- 2026-11-03: redesigned page with separate light and dark themes and a pipeline status line.
+- 2026-11-03: code links in the report, a week health table, a 16:20 catch-up run.
 
 ## Deferred
 
 - Intro video for the README, once the features and UI settle.
-- AI triage from title and abstract (undecided whether it can be done well): relevance to the reader's topics (0-3), contribution type, strength of the evidence the abstract states, whether it explains mechanisms or conditions, code and compute needs, and the model's confidence in each judgement, written in the same call as the summary. Sort only, never hide; pilot on about 50 papers against the reader's own judgement first. No author or venue prestige, no citation forecasts, no novelty verdicts from abstracts.
+- AI triage from title and abstract (relevance, contribution type, evidence strength, confidence), sort only and never hide; undecided whether it can be done well, so only after a pilot on about 50 papers against Eric's own judgement.
 - A daily email: the messenger routine and the push already deliver the report.
+
+## Changes in this update
+
+- Ordered by dated milestones tied to three objectives, instead of one ICE-ranked list.
+- Sharing groundwork moved before the server (M0 and M1), because the goal is "Eric first, shareable soon".
+- Server choice narrowed to a hosted service; the VPS is no longer a candidate.
+- Added two measures that did not exist: the on-time count and the missed-papers list (M0).
+- Ratings moved up with reading state into M2, because the hit-rate objective depends on them.
+- With 3+ hours a week, search, ranking and server-side settings fit before January (M3); sharing with other readers on one server moved to Later.
