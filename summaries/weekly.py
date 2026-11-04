@@ -2,14 +2,19 @@
 
 Reads the `picks.json` that `digest` keeps for each reported day in its cache
 folder, and lists the week's radar papers and how many picks each topic got,
-with links to the week on the reading page.
+with links to the week on the reading page. Ends with the pipeline's health:
+when each day's papers landed, its summaries finished and its report was
+written, from logs/summary-runs.jsonl on the data branch.
 """
 
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from summaries import digest
+from summaries import cli, digest
+from summaries.records import parse_jsonl
+
+PATH_NAMES = {"claude-code": "local Claude", "local-claude": "local Claude", "api": "API", "api-fallback": "API fallback"}
 
 
 def load_week(cache, today):
@@ -26,7 +31,39 @@ def load_week(cache, today):
     return weeks
 
 
-def render_week(today, days, topics, site):
+def _clock(at, day, tz):
+    moment = datetime.fromisoformat(at).astimezone(tz)
+    return moment.strftime("%H:%M") if moment.date().isoformat() == day else moment.strftime("%m-%d %H:%M")
+
+
+def health_lines(log, days, tz=None):
+    """One line per day: when the papers landed, the summaries finished and the report was written, in local time."""
+    lines = ["**流程健康**（本地时间；数据入库 → 摘要写完 → 日报）"]
+    for day in days:
+        entries = [e for e in log if e.get("date") == day and e.get("at")]
+        landed = next((e for e in entries if e.get("path") == "crawl"), None)
+        done = next((e for e in entries if e.get("path") not in ("crawl", "report") and e.get("total") and not e.get("pending")), None)
+        report = next((e for e in entries if e.get("path") == "report"), None)
+        paused = sum(1 for e in entries if str(e.get("path", "")).startswith("paused"))
+        when = lambda entry: _clock(entry["at"], day, tz) if entry else "—"
+        who = f"（{PATH_NAMES.get(done['path'], done['path'])}）" if done else ""
+        note = f"；暂停 {paused} 次" if paused else ""
+        lines.append(f"- {day[5:]}：{when(landed)} → {when(done)}{who}{" " if not who else ""}→ {when(report)}{note}")
+    return lines
+
+
+def read_log(args):
+    """The data branch's run log, or [] when it cannot be read (offline, no clone)."""
+    try:
+        branch = cli.make_branch(args)
+        branch.fetch()
+        return parse_jsonl(branch.read(cli.RUN_LOG) or "")
+    except Exception as error:  # the review page is still useful without its health table
+        print(f"health table skipped: {error}")
+        return []
+
+
+def render_week(today, days, topics, site, log=()):
     start, end = days[0]["day"], days[-1]["day"]
     total = sum(d["total"] for d in days)
     lines = [f"# arXiv 本周回顾 · {start} 至 {end}", ""]
@@ -41,6 +78,8 @@ def render_week(today, days, topics, site):
     for topic in topics:
         count = sum(len(d["topics"].get(topic["name"], [])) for d in days)
         lines.append(f"- {topic['name']}：{count} 篇 · [本周全部]({digest.day_link(site, end, topic=topic['name'], start=start)})")
+    if log:
+        lines += ["", *health_lines(log, [d["day"] for d in days])]
     return "\n".join(lines) + "\n", total, len(radar)
 
 
@@ -57,7 +96,7 @@ def cmd_digest_week(args):
         digest.emit(status="no-reports")
         return 0
     site = args.site or digest.site_url(args.repo)
-    text, total, radar = render_week(today, days, digest.load_topics(), site)
+    text, total, radar = render_week(today, days, digest.load_topics(), site, read_log(args))
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(text, encoding="utf-8")
     push = f"arXiv 本周：{total} 篇，雷达 {radar} 条。{digest.day_link(site, days[-1]['day'], start=days[0]['day'])}"

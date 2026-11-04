@@ -23,14 +23,17 @@ Times are Malaysia time (UTC+8). arXiv announces at 20:00 US Eastern, which is 0
 |---|---|
 | 09:17, 09:47, 11:23, 15:37 (Mon-Fri) | GitHub Actions crawl (`run.yml`). A run that finds nothing new publishes nothing. |
 | 10:20 (Mon-Fri) | Scheduled task: `ensure-day` (starts the crawl and waits if the day is missing), usage gate, `run-local` summaries, `digest`, one push notification. The report is the task's final message and `digests/<date>.md` in the vault. |
+| 16:20 (Mon-Fri) | Same task as the morning, for days when arXiv announces late (2026-11-03: the batch appeared between 16:30 and 19:00). On a normal day the report already exists and the run stops after a few calls. |
 | 21:20 (Mon-Fri) | Same task again with `digest --final`: resumes summaries stopped by the usage gate, writes the report if the morning had no batch yet, and on a day without any batch writes a two-line note. Otherwise it stops after a few calls. |
 | 10:20 (Sun) | `digest-week` (the week's radar rows and topic counts, no model call), then one Sonnet subagent looks for up to three older papers for the radar (two alphaXiv searches). The 21:20 Sunday run stops at once. |
 
-Cron for the task: `20 10,21 * * 0-5`.
+Cron for the task: `20 10,16,21 * * 0-5`.
+
+`ingest` logs a `crawl` entry (when the papers landed) in `logs/summary-runs.jsonl`, beside the summary and report entries. Sunday's page ends with a health table built from that log (data landed, summaries finished, report written, pauses), and the site's status line says when the latest crawl found that arXiv has not announced the day yet.
 
 ## Report format
 
-About one screen in Chinese: the day's count and a link to the day on the page; one radar line per possible collision (level, whether the full text was read, the reason); up to three picks per interest topic with title, a one-line gist and a link that opens that paper (`#day=<date>&topic=<topic>&paper=<id>`; the page now opens a linked paper on phones and falls back to All papers when the topic would hide it); up to two other papers; an optional one-line note. When the previous batch has papers with at least 10 upvotes on Hugging Face Daily Papers (`data/<day>_hf.json`, refreshed every four hours by `signals.yml` with no model), a line names the top two: the morning report is too early for today's upvotes, so it reports what the community picked from the last batch. A radar paper is not repeated under its topic. Rendered by `summaries/digest.py`; the model only writes plain picks lines, so links and layout cannot drift.
+About one screen in Chinese: the day's count and a link to the day on the page; one radar line per possible collision (level, whether the full text was read, the reason); up to three picks per interest topic with title, a one-line gist and a link that opens that paper (`#day=<date>&topic=<topic>&paper=<id>`; the page now opens a linked paper on phones and falls back to All papers when the topic would hide it); up to two other papers; an optional one-line note. When the previous batch has papers with at least 10 upvotes on Hugging Face Daily Papers (`data/<day>_hf.json`, refreshed every four hours by `signals.yml` with no model), a line names the top two: the morning report is too early for today's upvotes, so it reports what the community picked from the last batch. A radar paper is not repeated under its topic. A pick whose listing links code ends with ` · [代码](url)` (` · [项目页](url)` for a project page), from the `code_url` the spider keeps, and the writer sees `[code]` beside such candidates so it can prefer them between papers of similar value. Rendered by `summaries/digest.py`; the model only writes plain picks lines, so links and layout cannot drift.
 
 ## Measurements
 

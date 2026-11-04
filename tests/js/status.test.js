@@ -51,6 +51,19 @@ test('a running crawl and a day still waiting for its report say so', () => {
   assert.deepEqual(parts.map(p => p.text), ['Crawl running', 'Summaries 450/450, local Claude, 13:59', 'Report not written yet']);
 });
 
+test('the crawl entry is not mistaken for a summary run', () => {
+  const log = Status.parseLog(LOG + '\n' + JSON.stringify({ date: '2026-11-02', path: 'crawl', at: '2026-11-02T15:00:00+00:00', total: 450, added: 450 }));
+  assert.equal(Status.dayRuns(log, '2026-11-02').summaries.path, 'local-claude');
+});
+
+test('a crawl on a later weekday that found nothing says arXiv has not announced yet', () => {
+  const crawl = { status: 'completed', conclusion: 'success', created_at: '2026-11-03T02:34:14Z', updated_at: '2026-11-03T02:35:00Z' };
+  const parts = Status.statusParts({ log: Status.parseLog(LOG), crawl, day: '2026-11-02', newest: true, time });
+  assert.deepEqual(parts[0], { text: 'Checked 02:35: arXiv has not announced 3 November yet', tone: 'busy' });
+  const saturday = { ...crawl, created_at: '2026-11-07T02:34:14Z', updated_at: '2026-11-07T02:35:00Z' };
+  assert.equal(Status.statusParts({ log: Status.parseLog(LOG), crawl: saturday, day: '2026-11-06', newest: true, time })[0].text, 'Crawled 02:35');
+});
+
 test('broken log lines are skipped', () => {
   assert.equal(Status.parseLog('{not json\n' + LOG).length, 4);
 });

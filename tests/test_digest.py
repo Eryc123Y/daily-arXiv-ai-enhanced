@@ -4,7 +4,7 @@ import re
 import pytest
 from conftest import git, seed_data_branch
 
-from summaries import digest
+from summaries import digest, weekly
 from summaries.cli import main
 from summaries.records import dump_jsonl
 
@@ -122,6 +122,28 @@ def test_report_is_short_and_links_every_pick():
     assert "[RLVR at scale]" in text and "（中，已读全文）" in text
     assert "Weak supervision and data reuse" in text
     assert len(text.splitlines()) < 30
+
+
+def test_report_links_the_code_of_papers_that_release_it():
+    raw = [
+        {**paper("1", "Stereo video", "A stereo method."), "code_url": "https://github.com/a/stereo"},
+        {**paper("2", "Stereo pages", "Another stereo method."), "code_url": "https://lab.github.io/pages"},
+        paper("3", "Stereo plain", "A third stereo method."),
+    ]
+    found = digest.build_candidates(raw, [], TOPICS, {}, known=set())
+    picks = {"topics": {"2D-to-3D and stereo": [("1", "a"), ("2", "b"), ("3", "c")]}, "radar": [], "other": [], "note": ""}
+    lines = digest.render_report(DAY, DAY, found, picks, TOPICS, SITE).splitlines()
+    assert next(l for l in lines if "[Stereo video]" in l).endswith("— a · [代码](https://github.com/a/stereo)")
+    assert next(l for l in lines if "[Stereo pages]" in l).endswith("— b · [项目页](https://lab.github.io/pages)")
+    assert next(l for l in lines if "[Stereo plain]" in l).endswith("— c")
+
+
+def test_the_writer_sees_which_candidates_release_code():
+    raw = [{**paper("1", "Stereo video", "A stereo method."), "code_url": "https://github.com/a/stereo"}, paper("2", "Cats", "x")]
+    found = digest.build_candidates(raw, [], TOPICS, {}, known=set())
+    prompt = digest.writer_prompt(DAY, found, TOPICS, "", "")
+    assert "=== 1 [code]\n" in prompt
+    assert "\n2 | Cats |" in prompt
 
 
 def test_a_radar_paper_is_not_repeated_under_its_topic():
@@ -257,6 +279,7 @@ def test_a_failed_full_text_download_keeps_the_abstract_grade(tmp_path, remote_a
 
 def test_week_review_collects_the_weeks_picks_without_a_model(tmp_path, monkeypatch, capsys):
     vault = make_vault(tmp_path)
+    monkeypatch.setattr(weekly, "read_log", lambda args: [])  # no data branch in this test
     cache = tmp_path / "cache"
     for day, total, radar in [("2026-10-30", 910, []), ("2026-11-02", 450, [{"id": "2610.41073", "level": "可借鉴", "reason": "数值混杂", "check": False, "action": "", "read": False}])]:
         (cache / day).mkdir(parents=True)
@@ -347,8 +370,26 @@ def test_rows_added_today_do_not_hide_papers_on_a_rerun(tmp_path):
     assert digest.known_ids(tmp_path, today=DAY) == {"2610.12345"}
 
 
+def test_week_health_lists_when_each_step_finished():
+    log = [
+        {"date": "2026-11-02", "path": "paused-no-key", "at": "2026-11-02T08:44:28+00:00", "total": 450, "done": 0, "pending": 450},
+        {"date": "2026-11-02", "path": "claude-code", "at": "2026-11-02T13:59:36+00:00", "total": 450, "done": 450, "pending": 0},
+        {"date": "2026-11-03", "path": "crawl", "at": "2026-11-03T10:58:28+00:00", "total": 1335, "added": 1335},
+        {"date": "2026-11-03", "path": "local-claude", "at": "2026-11-03T13:44:44+00:00", "total": 1335, "done": 480, "pending": 855},
+        {"date": "2026-11-03", "path": "local-claude", "at": "2026-11-03T14:00:55+00:00", "total": 1335, "done": 1335, "pending": 0},
+        {"date": "2026-11-03", "path": "report", "at": "2026-11-03T14:01:53+00:00", "total": 1335, "done": 1335, "pending": 0},
+    ]
+    from datetime import timedelta, timezone
+
+    lines = weekly.health_lines(log, ["2026-11-02", "2026-11-03"], timezone(timedelta(hours=8)))
+    assert lines[0] == "**流程健康**（本地时间；数据入库 → 摘要写完 → 日报）"
+    assert lines[1] == "- 11-02：— → 21:59（local Claude）→ —；暂停 1 次"
+    assert lines[2] == "- 11-03：18:58 → 22:00（local Claude）→ 22:01"
+
+
 def test_a_broken_picks_file_does_not_stop_the_week(tmp_path, monkeypatch, capsys):
     vault = make_vault(tmp_path)
+    monkeypatch.setattr(weekly, "read_log", lambda args: [])  # no data branch in this test
     cache = tmp_path / "cache"
     (cache / "2026-11-02").mkdir(parents=True)
     (cache / "2026-11-02" / "picks.json").write_text("{not json")

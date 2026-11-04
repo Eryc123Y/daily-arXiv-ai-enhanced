@@ -42,15 +42,28 @@
     const forDay = log.filter(e => e.date === day);
     const last = list => (list.length ? list[list.length - 1] : null);
     return {
-      summaries: last(forDay.filter(e => e.path !== 'report')),
+      summaries: last(forDay.filter(e => e.path !== 'report' && e.path !== 'crawl')),
       report: last(forDay.filter(e => e.path === 'report')),
       reports: log.some(e => e.path === 'report'),
     };
   }
 
-  function crawlPart(run, time) {
+  /** The weekday the crawl ran for, when it is later than the newest day shown: arXiv has not announced it yet. */
+  function unannounced(run, day) {
+    const crawled = (run.created_at || '').slice(0, 10);
+    const weekday = new Date(`${crawled}T00:00:00Z`).getUTCDay();
+    return crawled > day && weekday >= 1 && weekday <= 5 ? crawled : null;
+  }
+
+  function longDay(iso) {
+    return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' });
+  }
+
+  function crawlPart(run, day, time) {
     if (!run) return null;
     if (run.status !== 'completed') return { text: 'Crawl running', tone: 'busy' };
+    const waiting = run.conclusion === 'success' && unannounced(run, day);
+    if (waiting) return { text: `Checked ${time(run.updated_at)}: arXiv has not announced ${longDay(waiting)} yet`, tone: 'busy' };
     if (run.conclusion === 'success') return { text: `Crawled ${time(run.updated_at)}`, tone: 'ok' };
     return { text: `Crawl failed ${time(run.updated_at)}`, tone: 'error', href: run.html_url };
   }
@@ -74,7 +87,7 @@
   /** [{text, tone: ok|busy|warn|error, href?}] for the day; the crawl only for the newest day. */
   function statusParts({ log, crawl, day, newest, time }) {
     const runs = dayRuns(log, day);
-    return [newest ? crawlPart(crawl, time) : null, summaryPart(runs.summaries, time), reportPart(runs, newest, time)].filter(Boolean);
+    return [newest ? crawlPart(crawl, day, time) : null, summaryPart(runs.summaries, time), reportPart(runs, newest, time)].filter(Boolean);
   }
 
   return { parseLog, dayRuns, statusParts };
