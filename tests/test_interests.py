@@ -1,4 +1,11 @@
-from summaries.interests import keyword_matches, load_topics, topics_for
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from summaries.interests import PRESETS, keyword_matches, load_topics, topics_for
 
 
 def test_keywords_match_like_the_reading_page():
@@ -27,3 +34,19 @@ def test_topics_read_title_abstract_and_tldr():
     paper = {"title": "Depth", "summary": "A stereo method.", "AI": {"tldr": "Uses RLVR."}}
     assert topics_for(paper, topics) == ["Stereo", "RL"]
     assert topics_for({"title": "Stereotypes", "summary": ""}, topics) == []
+
+
+CASES = json.loads((Path(__file__).parent / "fixtures" / "keyword-cases.json").read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: f"{c['keyword']}|{c['text']}")
+def test_keyword_cases_shared_with_the_page(case):
+    """tests/js/paper-data.test.js runs the same table against js/paper-data.js."""
+    assert keyword_matches(case["text"], case["keyword"]) is case["matches"]
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
+def test_the_python_parser_reads_every_topic_the_page_defines():
+    script = "const {INTEREST_PRESETS} = require('./js/interest-presets.js'); console.log(JSON.stringify(INTEREST_PRESETS.topics))"
+    page = json.loads(subprocess.run(["node", "-e", script], cwd=PRESETS.parent.parent, capture_output=True, text=True, check=True).stdout)
+    assert [(t["name"], t["keywords"]) for t in load_topics()] == [(t["name"], t["keywords"]) for t in page]

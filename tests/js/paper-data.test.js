@@ -112,3 +112,10 @@ test('a customised list is kept as it is', () => {
 test('saving exactly the defaults clears the saved list', () => {
   assert.equal(keywordsFor([...INTEREST_PRESETS.keywords]).clearSaved, true);
 });
+
+test('keyword cases shared with summaries/interests.py', () => {
+  const cases = require('../fixtures/keyword-cases.json');
+  for (const { keyword, text, matches } of cases) {
+    assert.equal(PaperData.keywordMatches(text, keyword), matches, `${keyword} | ${text}`);
+  }
+});

@@ -1,0 +1,127 @@
+[
+ {
+  "keyword": "stereo",
+  "text": "A Stereo method",
+  "matches": true
+ },
+ {
+  "keyword": "stereo",
+  "text": "stereoscopic video",
+  "matches": false
+ },
+ {
+  "keyword": "stereo",
+  "text": "multi-view stereos",
+  "matches": true
+ },
+ {
+  "keyword": "depth estimation",
+  "text": "monocular depth-estimation from video",
+  "matches": true
+ },
+ {
+  "keyword": "depth estimation",
+  "text": "depth   estimation",
+  "matches": true
+ },
+ {
+  "keyword": "depth estimation",
+  "text": "depthestimation",
+  "matches": false
+ },
+ {
+  "keyword": "2D-to-3D",
+  "text": "2D to 3D conversion",
+  "matches": true
+ },
+ {
+  "keyword": "2D-to-3D",
+  "text": "2d-to-3d video",
+  "matches": true
+ },
+ {
+  "keyword": "RLVR",
+  "text": "rlvr training",
+  "matches": true
+ },
+ {
+  "keyword": "RLVR",
+  "text": "RLVRs",
+  "matches": true
+ },
+ {
+  "keyword": "patch",
+  "text": "patches of images",
+  "matches": true
+ },
+ {
+  "keyword": "box",
+  "text": "boxes",
+  "matches": true
+ },
+ {
+  "keyword": "learning",
+  "text": "unlearning",
+  "matches": false
+ },
+ {
+  "keyword": "data reuse",
+  "text": "data/reuse",
+  "matches": true
+ },
+ {
+  "keyword": "data reuse",
+  "text": "data_reuse",
+  "matches": true
+ },
+ {
+  "keyword": "NeRF",
+  "text": "NeRF-based",
+  "matches": true
+ },
+ {
+  "keyword": "C++",
+  "text": "written in C++ code",
+  "matches": true
+ },
+ {
+  "keyword": "label noise",
+  "text": "label noises",
+  "matches": true
+ },
+ {
+  "keyword": "label noise",
+  "text": "label-noise-robust",
+  "matches": true
+ },
+ {
+  "keyword": "2D-to-3D",
+  "text": "2D–to–3D (en dash)",
+  "matches": true
+ },
+ {
+  "keyword": "depth estimation",
+  "text": "depth—estimation (em dash)",
+  "matches": true
+ },
+ {
+  "keyword": "depth estimation",
+  "text": "depth‐estimation (U+2010)",
+  "matches": true
+ },
+ {
+  "keyword": "semi-supervised",
+  "text": "semi‑supervised (U+2011)",
+  "matches": true
+ },
+ {
+  "keyword": "stereo",
+  "text": "STEREO matching",
+  "matches": true
+ },
+ {
+  "keyword": "stereo",
+  "text": "Stereo.",
+  "matches": true
+ }
+]

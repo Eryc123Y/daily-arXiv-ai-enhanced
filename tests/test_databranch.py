@@ -1,6 +1,7 @@
+import pytest
 from conftest import git, seed_data_branch
 
-from summaries.databranch import DataBranch, Identity
+from summaries.databranch import DataBranch, Identity, PublishError
 
 BOT = Identity("Eryc123Y", "145822832+Eryc123Y@users.noreply.github.com")
 
@@ -130,3 +131,15 @@ def test_read_raises_when_a_listed_file_cannot_be_loaded(tmp_path, remote_and_cl
     with pytest.raises(Exception):
         branch.read("data/2026-10-30.jsonl")
     assert branch.read("data/absent.jsonl") is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["project-brief.md", "data/project-radar.md", "logs/feedback.md", "assets/missed.md", "data/ratings.md", "README.md", "../x.jsonl"],
+)
+def test_publish_refuses_private_files_and_paths_outside_the_data_folders(remote_and_clone, path):
+    """The data branch is public: only data/, logs/ and assets/ files, never a vault file."""
+    remote, clone = remote_and_clone
+    with pytest.raises(PublishError, match="refusing to publish"):
+        DataBranch(clone).publish({path: "secret"}, "oops", BOT)
+    assert git(remote, "branch", "--list", "data") == ""

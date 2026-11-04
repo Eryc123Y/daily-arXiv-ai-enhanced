@@ -13,6 +13,18 @@ import tempfile
 from dataclasses import dataclass
 
 FILE_LIST = "assets/file-list.txt"
+# The data branch is public. Only these folders are published, and never a
+# file from Eric's vault, whatever folder it is given under.
+PUBLIC_FOLDERS = ("data/", "logs/", "assets/")
+PRIVATE_NAMES = {"project-brief.md", "project-radar.md", "feedback.md", "missed.md", "ratings.md", "ledger.md"}
+
+
+def check_public(paths):
+    """Raise PublishError for a path that must not reach the public branch."""
+    for path in paths:
+        parts = path.split("/")
+        if not path.startswith(PUBLIC_FOLDERS) or ".." in parts or parts[-1] in PRIVATE_NAMES:
+            raise PublishError(f"refusing to publish {path}: the data branch is public")
 
 
 @dataclass(frozen=True)
@@ -146,6 +158,7 @@ class DataBranch:
         for _ in range(attempts):
             self.fetch()
             content = files(self) if callable(files) else files
+            check_public(content)
             commit = self._build_commit(content, message, identity)
             if commit is None:
                 return None
