@@ -7,3 +7,4 @@
 {"date": "2026-11-03", "path": "report", "at": "2026-11-03T14:01:53+00:00", "total": 1335, "done": 1335, "pending": 0}
 {"date": "2026-11-04", "path": "crawl", "at": "2026-11-04T07:32:11+00:00", "total": 587, "added": 587}
 {"date": "2026-11-04", "path": "local-claude", "at": "2026-11-04T08:44:23+00:00", "total": 587, "done": 480, "pending": 107, "reason": "12 chunks, 0 failed"}
+{"date": "2026-11-04", "path": "local-claude", "at": "2026-11-04T08:46:35+00:00", "total": 587, "done": 587, "pending": 0, "reason": "3 chunks, 0 failed"}
