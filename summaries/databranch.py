@@ -8,22 +8,26 @@ branch and retries on top of the newest remote state if a push races.
 """
 
 import os
+import re
 import subprocess
 import tempfile
 from dataclasses import dataclass
 
 FILE_LIST = "assets/file-list.txt"
-# The data branch is public. Only these folders are published, and never a
-# file from Eric's vault, whatever folder it is given under.
-PUBLIC_FOLDERS = ("data/", "logs/", "assets/")
-PRIVATE_NAMES = {"project-brief.md", "project-radar.md", "feedback.md", "missed.md", "ratings.md", "ledger.md"}
+# The data branch is public, so only the files the page reads are published:
+# a day's papers, its summaries and its upvotes, the run log, and the two
+# asset files. Anything else (the vault's radar, brief, ratings, a report or
+# the digest cache) is refused, whatever folder it is given under.
+PUBLIC_PATH = re.compile(
+    r"^(?:data/\d{4}-\d{2}-\d{2}(?:\.jsonl|_AI_enhanced_[A-Za-z]+\.jsonl|_hf\.json)"
+    r"|logs/summary-runs\.jsonl|assets/(?:file-list\.txt|site\.json))$"
+)
 
 
 def check_public(paths):
-    """Raise PublishError for a path that must not reach the public branch."""
+    """Raise PublishError for a path that is not one of the public file kinds."""
     for path in paths:
-        parts = path.split("/")
-        if not path.startswith(PUBLIC_FOLDERS) or ".." in parts or parts[-1] in PRIVATE_NAMES:
+        if not PUBLIC_PATH.match(path):
             raise PublishError(f"refusing to publish {path}: the data branch is public")
 
 
