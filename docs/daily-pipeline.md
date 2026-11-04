@@ -25,11 +25,11 @@ Times are Malaysia time (UTC+8). arXiv announces at 20:00 US Eastern, which is 0
 | 10:20 (Mon-Fri) | Scheduled task: `ensure-day` (starts the crawl and waits if the day is missing), usage gate, `run-local` summaries, `digest`, one push notification. The report is the task's final message and `digests/<date>.md` in the vault. |
 | 16:20 (Mon-Fri) | Same task as the morning, for days when arXiv announces late (2026-11-03: the batch appeared between 16:30 and 19:00). On a normal day the report already exists and the run stops after a few calls. |
 | 21:20 (Mon-Fri) | Same task again with `digest --final`: resumes summaries stopped by the usage gate, writes the report if the morning had no batch yet, and on a day without any batch writes a two-line note. Otherwise it stops after a few calls. |
-| 10:20 (Sun) | `digest-week` (the week's radar rows and topic counts, no model call), then one Sonnet subagent looks for up to three older papers for the radar (two alphaXiv searches). The 21:20 Sunday run stops at once. |
+| 10:20 (Sun) | `missed` (look-back radar papers from earlier Sundays that were in one of our batches go to `missed.md` in the vault), then `digest-week` (the week's radar rows and topic counts, no model call), then one Sonnet subagent looks for up to three older papers for the radar (two alphaXiv searches). The 21:20 Sunday run stops at once. |
 
 Cron for the task: `20 10,16,21 * * 0-5`.
 
-`ingest` logs a `crawl` entry (when the papers landed) in `logs/summary-runs.jsonl`, beside the summary and report entries. Sunday's page ends with a health table built from that log (data landed, summaries finished, report written, pauses), and the site's status line says when the latest crawl found that arXiv has not announced the day yet.
+`ingest` logs a `crawl` entry (when the papers landed) in `logs/summary-runs.jsonl`, beside the summary and report entries. Sunday's page ends with a health table built from that log (data landed, summaries finished, report written, pauses), the on-time count (weekdays with the report by 11:30, among days whose papers landed by 10:00) and the misses of the last thirty days from `missed.md`, and the site's status line says when the latest crawl found that arXiv has not announced the day yet.
 
 ## Report format
 
