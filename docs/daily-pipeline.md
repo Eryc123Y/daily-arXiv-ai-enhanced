@@ -29,6 +29,8 @@ Times are Malaysia time (UTC+8). arXiv announces at 20:00 US Eastern, which is 0
 
 Cron for the task: `20 10,16,21 * * 0-5`.
 
+The phone gets the report from the claude.ai routine "Arxiv daily digest", which posts `digests/<date>.md` into its chat at 11:30. The task's own push rarely arrives: `PushNotification` goes out through Remote Control, a scheduled run is an unattended session, and an unattended session cannot turn Remote Control on, so the tool answers "Mobile push not sent (Remote Control inactive)" (seen on 2026-10-29 and 2026-11-03; interactive sessions do deliver). The task says so in its last line.
+
 `ingest` logs a `crawl` entry (when the papers landed) in `logs/summary-runs.jsonl`, beside the summary and report entries. Sunday's page ends with a health table built from that log (data landed, summaries finished, report written, pauses), the on-time count (weekdays with the report by 11:30, among days whose papers landed by 10:00) and the misses of the last thirty days from `missed.md`, and the site's status line says when the latest crawl found that arXiv has not announced the day yet.
 
 ## Report format
