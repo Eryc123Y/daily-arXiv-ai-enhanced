@@ -1,6 +1,7 @@
+import pytest
 from conftest import git, seed_data_branch
 
-from summaries.databranch import DataBranch, Identity
+from summaries.databranch import DataBranch, Identity, PublishError
 
 BOT = Identity("Eryc123Y", "145822832+Eryc123Y@users.noreply.github.com")
 
@@ -84,22 +85,22 @@ def test_publish_retries_on_top_of_a_concurrent_push(tmp_path, remote_and_clone)
 
 def test_publish_rebuilds_files_from_fresh_state_on_retry(tmp_path, remote_and_clone):
     remote, clone = remote_and_clone
-    other = seed_data_branch(tmp_path, remote, {"data/counter.txt": "1\n"})
+    other = seed_data_branch(tmp_path, remote, {"logs/summary-runs.jsonl": "1\n"})
     raced = []
 
     def concurrent_push():
         if not raced:
             raced.append(True)
-            (other / "data" / "counter.txt").write_text("5\n")
+            (other / "logs" / "summary-runs.jsonl").write_text("5\n")
             git(other, "commit", "-am", "bump")
             git(other, "push", str(remote), "HEAD:refs/heads/data")
 
     def build(branch):
-        return {"data/counter.txt": str(int(branch.read("data/counter.txt")) + 1) + "\n"}
+        return {"logs/summary-runs.jsonl": str(int(branch.read("logs/summary-runs.jsonl")) + 1) + "\n"}
 
     DataBranch(clone).publish(build, "increment", BOT, on_before_push=concurrent_push)
 
-    assert show(remote, "data/counter.txt") == "6"
+    assert show(remote, "logs/summary-runs.jsonl") == "6"
 
 
 def test_read_returns_none_for_missing_files_and_branch(tmp_path, remote_and_clone):
@@ -130,3 +131,26 @@ def test_read_raises_when_a_listed_file_cannot_be_loaded(tmp_path, remote_and_cl
     with pytest.raises(Exception):
         branch.read("data/2026-10-30.jsonl")
     assert branch.read("data/absent.jsonl") is None
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "project-brief.md",
+        "data/project-radar.md",
+        "logs/feedback.md",
+        "assets/missed.md",
+        "data/ratings.md",
+        "data/picks.json",
+        "data/digests/2026-11-04.md",
+        "data/2026-11-04.md",
+        "README.md",
+        "data/../2026-11-04.jsonl",
+    ],
+)
+def test_publish_refuses_private_files_and_paths_outside_the_data_folders(remote_and_clone, path):
+    """The data branch is public: only the file kinds the page reads."""
+    remote, clone = remote_and_clone
+    with pytest.raises(PublishError, match="refusing to publish"):
+        DataBranch(clone).publish({path: "secret"}, "oops", BOT)
+    assert git(remote, "branch", "--list", "data") == ""

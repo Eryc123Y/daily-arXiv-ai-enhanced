@@ -30,6 +30,19 @@ Everything runs on GitHub's free tier; the page reads its data from whichever re
    - an LLM API inside GitHub Actions: add your provider's key with `gh secret set` and set `SUMMARY_MODE` to `api` (see API providers below).
 4. Put your own interests in [`js/interest-presets.js`](js/interest-presets.js) (named topics with keywords), or edit them per browser in the page's Settings.
 
+### What it costs
+
+Measured on this instance (details in [docs/daily-pipeline.md](docs/daily-pipeline.md#measurements)); API-equivalent list prices, though the local task runs on a Claude plan:
+
+| Step | Per day |
+|---|---|
+| Crawl and Hugging Face upvotes (GitHub Actions) | free |
+| Summaries, Haiku, 40 papers a call | about $0.27 for 450 papers, $0.53 for 910 |
+| Chinese report, one Sonnet call | about $0.16-0.21 |
+| The scheduled task around them | 7-9 tool calls; a few percent of a 5-hour window |
+
+On 2026-11-03 a 1,335-paper day took the 5-hour window from 5% to 9% and left the weekly window unchanged. Summaries are written from titles and abstracts only; reading the PDFs would cost 40-50 times as much.
+
 ## How a day flows
 
 1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), Monday to Friday at 01:17, 01:47, 03:23 and 07:37 UTC, because GitHub delays or skips scheduled runs; the local task also starts it when the day is missing) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.

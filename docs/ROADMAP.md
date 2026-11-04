@@ -25,19 +25,20 @@ Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on
 | Item | Owner | Status |
 |---|---|---|
 | Code links in the report, crawl times in the run log, Sunday health table, "arXiv has not announced yet" on the status line, a 16:20 catch-up run | Claude | **Done** (11-03, PR #22) |
-| On-time count: Sunday's health table counts weekdays with the report by 11:30 | Claude | Not Started |
-| Missed papers: Sunday's search for older radar papers records what it finds in `missed.md` in the vault; the messenger appends there when Eric says a paper should have been caught | Claude (code); Eric pastes the messenger's new prompt line | Not Started |
-| Push notifications that reach the phone: the 11-03 push failed with Remote Control disconnected; find the cause, and when the push fails say so in the run's last message | Claude | Not Started |
-| Sharing groundwork that needs no decision: label summaries as written from the abstract, tell a failed load apart from an empty day on the page, a clean-fork test, publish the measured cost | Claude | Not Started |
-| Specs for M1 and M2 (`docs/specs/`): sharing, and reading state + ratings on a hosted backend | Claude | Not Started |
+| On-time count: Sunday's health table counts weekdays with the report by 11:30 | Claude | **Done** (11-04, PR #24) |
+| Missed papers: `summaries missed` records Sunday look-back papers that were in an earlier batch in `missed.md`; the messenger appends the ones Eric points out | Claude (code, **Done** 11-04, PR #24); Eric pastes rule 5 of the messenger prompt | **Needs Eric** |
+| Push notifications that reach the phone: cause found (a scheduled run is unattended and cannot turn Remote Control on); the messenger routine is the phone channel, and the run's last line says when the push was not sent | Claude | **Done** (11-04, docs only) |
+| Sharing groundwork that needs no decision: summaries labelled as written from the abstract and failed loads shown as failures (both already done), the measured cost in the README, a guard that keeps vault files off the public branch | Claude | **Done** (11-04) |
+| Specs for M1 and M2: [m1-shareable.md](specs/m1-shareable.md), [m2-reading-state-and-ratings.md](specs/m2-reading-state-and-ratings.md); open questions for Eric in each | Claude | **Done** (11-04) |
+| Maintainability notes, [maintainability.md](maintainability.md): four decisions for Eric (types, module layout, record shapes, upstream leftovers) and fixes that need none | Claude | **Done** (11-04) |
 | Messenger at 11:30 Sun-Fri, task model set to Sonnet, three idle routines deleted | Eric | **Needs Eric** |
 
 ### M1 · 2026-11-16 to 11-29 · shareable
 
 | Item | Owner | Status |
 |---|---|---|
-| Licence: README says upstream's Modified Apache License (clause 9) correctly; ask upstream if anything is unclear | Eric decides, Claude writes | **Needs Eric** |
-| "Deploy your own" checked on a fresh fork end to end, with what it costs per day | Claude | Not Started |
+| Licence: README already names upstream's Modified Apache License (section 9); Eric decides whether to ask upstream anything | Eric | **Needs Eric** |
+| "Deploy your own" checked on a fresh fork end to end (needs Eric's OK to create a throwaway repository) | Claude | **Needs Eric** |
 | A short shareable README and a link Eric can send | Claude; Eric approves | Not Started |
 | Feedback from the first two weeks of reports folded into `feedback.md` | Eric 30 min, Claude summarises | Not Started |
 

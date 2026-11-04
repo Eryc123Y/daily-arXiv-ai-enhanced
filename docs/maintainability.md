@@ -1,0 +1,30 @@
+# Maintainability notes
+
+A running list of what would make the code harder to keep correct as it grows, with a suggested fix and whether it needs a decision from Eric. Started 2026-11-04 from a read of the repository and a Codex (`gpt-6-astra`, high effort) review of PR #24. Items are removed when fixed.
+
+## Needs a decision (architecture and types)
+
+| # | Observation | Why it matters | Suggestion |
+|---|---|---|---|
+| D1 | **No types are checked.** None of the 154 functions in `summaries/` has annotations, and there is no type checker or linter; the page is plain JS with no type checking. | Renames and record-shape changes (the summary record, the run-log entry, picks) are caught only by tests that happen to cover them. M2 adds a backend whose records must match on both sides. | Python: pyright in basic mode in CI now, strict for new modules, annotations added module by module; ruff for lint and format. JS: JSDoc types checked by `tsc --checkJs` (no build step), or TypeScript with a build step. Same question as Q2 in the M2 spec. |
+| D2 | **`cli.py` is both the entry point and a library.** `digest`, `weekly`, `signals`, `missed` import `cli` for `make_branch`, `emit`, `read_records`, `RUN_LOG`, and `cli.main` imports them back inside the function to avoid an import cycle. | The cycle works only because of the late import; a top-level import added in the wrong file breaks start-up. `cli.py` (601 lines) grows with every helper. | Move the shared pieces into `summaries/common.py` (or `datafiles.py`: paths, `read_records`, the run log, `emit`) and keep `cli.py` to argument parsing and commands. A mechanical change, one PR. |
+| D3 | **Record shapes are implicit.** The raw paper, the summary record, the run-log entry (`date`, `path`, `at`, counts), `picks.json` and the radar table row are dicts built in several places and parsed in others (Python and JS). | The run-log entry is read by `js/status.js`, `weekly.py` and the status command; adding the `crawl` entry in PR #22 needed a fix in `status.js` to ignore it. | Name each shape once: a `TypedDict` or dataclass per record in Python, a JSDoc `@typedef` in JS, and a short schema table in docs/claude-code-mode.md. Decide together with D1. |
+| D4 | **Upstream leftovers.** `ai/` (upstream's summariser, unused), `to_md/`, `update_readme.py`, `template.md`, `readme_content_template.md`, `run.sh`, `SKILL/`, `js/auth.js` with `login.html`, `js/auth-config.js` and `setup-local-auth.sh`, and `statistic.html` with `css/styles.css` (2,365 lines) and `js/statistic.js` (806 lines) behind the "Keyword trends" link. | About 5,000 lines nobody maintains; they show up in searches and reviews and confuse a new reader of a fork. | Delete what no workflow or page uses (`ai/`, `to_md/`, `update_readme.py`, the templates, `run.sh`, `SKILL/`, auth files) in one PR, and replace the keyword-trends page in the M3 "Trends" item. Keeping upstream parity is the reason not to. |
+
+## Can be fixed without a decision
+
+| # | Observation | Suggestion | State |
+|---|---|---|---|
+| F1 | **Keyword matching exists twice**, in `js/paper-data.js` and `summaries/interests.py`, kept in step by hand; the report's topic counts and the page's must agree. | One table of match cases (keyword, text, expected) in `tests/fixtures/keyword-cases.json`, run by both the node and the Python suites. | done in this PR |
+| F2 | **The Python side reads topics from `js/interest-presets.js` with a regex.** A formatting change in the JS file (double quotes, a trailing comment) silently drops a topic from the report. | A test that the Python parser finds every topic the JS file defines (count and names), run in both suites; later, move the presets to JSON. | done in this PR (test) |
+| F3 | **Nothing stopped a private file from being published.** The `data` branch is public, and the radar, brief, feedback, missed list, reports and digest cache must never reach it. | `DataBranch.publish` accepts only the file kinds the page reads (a day's papers, summaries and upvotes, the run log, two asset files) and refuses anything else, with a test per private kind. A first version with a list of private names missed `data/picks.json` and `data/digests/*.md` (found by the Codex review). | done in this PR |
+| F4 | **The project-page pattern is defined three times**: the spider, `js/render.js` and `summaries/digest.py`. | Store `code_kind` (`code` or `page`) in the record at crawl time, so readers do not re-derive it. Small, but it changes the data format, so after D3. | open |
+| F5 | **`digest.py` is 616 lines** and holds candidate building, prompts, answer parsing, full-text fetching, rendering and file writes. | Split along those lines (`digest/candidates.py`, `prompts.py`, `render.py`) when it next grows; the functions are already short and pure, so the split is mechanical. | open |
+| F7 | **`missed.md` and the radar table are parsed as Markdown** with a fixed column order, and look-back rows are recognised by "回溯" in the level column; a hand edit that reorders columns is skipped without a warning. | Keep the structured record (JSON lines) as the source and render the Markdown from it; until then, `summaries missed` could warn about rows it cannot parse. | open |
+| F6 | **Some tests reach the network or the real data branch unless told not to** (`digest-week` reads the run log; two tests now stub it). | A pytest fixture that fails any test touching the real origin, so a new test cannot do it by accident. | open |
+
+## Things that are in good shape
+
+- Functions are short: only `build_parser` in `cli.py` is over 50 lines.
+- The data access of the page goes through one module (`js/data-source.js`), so the backend can change without touching the views.
+- Each bug fixed in the last week came with a test that failed first; 168 Python and 57 JS tests run in under a minute in CI.
