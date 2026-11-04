@@ -66,12 +66,22 @@ def on_time(log, days, tz=None):
     return hits, eligible
 
 
+def week_days(log, report_days, today):
+    """The report days plus the week's days with papers but no report, which count as late."""
+    start = (date.fromisoformat(today) - timedelta(days=6)).isoformat()
+    crawled = {e["date"] for e in log if e.get("path") == "crawl" and start <= e.get("date", "") <= today}
+    return sorted(set(report_days) | crawled)
+
+
 def health_lines(log, days, tz=None, misses=None):
     """Per day: when the papers landed, the summaries finished and the report was written (local time); then the
     on-time count and, given `misses` as (recent, high or medium), the misses of the last thirty days."""
     lines = ["**流程健康**（本地时间；数据入库 → 摘要写完 → 日报）"]
     for day in days:
         landed, done, report, paused = _day_entries(log, day)
+        if not (landed or done or report or paused):
+            continue  # a day from before the log kept these entries
+
         def when(entry, day=day):
             return _clock(entry["at"], day, tz) if entry else "—"
 
@@ -112,8 +122,8 @@ def render_week(today, days, topics, site, log=(), misses=None):
     for topic in topics:
         count = sum(len(d["topics"].get(topic["name"], [])) for d in days)
         lines.append(f"- {topic['name']}：{count} 篇 · [本周全部]({digest.day_link(site, end, topic=topic['name'], start=start)})")
-    if log:
-        lines += ["", *health_lines(log, [d["day"] for d in days], misses=misses)]
+    if log or misses is not None:
+        lines += ["", *health_lines(log, week_days(log, [d["day"] for d in days], today), misses=misses)]
     return "\n".join(lines) + "\n", total, len(radar)
 
 

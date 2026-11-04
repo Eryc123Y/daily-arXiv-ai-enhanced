@@ -58,3 +58,30 @@ def test_missed_appends_new_misses_once(tmp_path, remote_and_clone, monkeypatch,
     assert text.count("2610.40564") == 1
     assert "| 2026-11-08 | 2610.40564 | Single Algorithm | 中 | 2026-10-30 | 周日回溯 |" in text
     assert out == {"added": 0, "recent": 1, "recent_high_or_medium": 1}
+
+
+def test_a_paper_listed_only_after_it_was_found_is_not_a_miss():
+    rows = missed.backfill_rows(RADAR)
+    assert missed.find_misses(rows, {"2610.40564": "2026-11-09"}, known=set()) == []
+
+
+def test_escaped_pipes_in_a_hand_edited_title_keep_the_row():
+    text = "| 2026-11-08 | 2610.40564 | A \\| B | 中（回溯） | r | a |\n"
+    assert [(r.title, r.level) for r in missed.backfill_rows(text)] == [("A \\| B", "中")]
+
+
+def test_an_old_batch_and_a_file_without_a_final_newline(tmp_path, remote_and_clone, monkeypatch, capsys):
+    remote, clone = remote_and_clone
+    monkeypatch.setenv("DATA_REPO", "alice/my-arxiv")
+    seed_data_branch(tmp_path, remote, {"data/2026-06-01.jsonl": dump_jsonl([{"id": "2610.40564", "title": "Single Algorithm"}])})
+    vault = tmp_path / "vault"
+    vault.mkdir()
+    (vault / "project-radar.md").write_text(RADAR)
+    (vault / "missed.md").write_text(missed.HEADER + "| 2026-11-01 | 2610.11111 | T | 高 | 2026-10-20 | Eric |")
+
+    assert main(["--repo", str(clone), "missed", "--dir", str(vault), "--today", "2026-11-08"]) == 0
+    out = json.loads(capsys.readouterr().out)
+
+    lines = (vault / "missed.md").read_text().splitlines()
+    assert lines[-2:] == ["| 2026-11-01 | 2610.11111 | T | 高 | 2026-10-20 | Eric |", "| 2026-11-08 | 2610.40564 | Single Algorithm | 中 | 2026-06-01 | 周日回溯 |"]
+    assert out == {"added": 1, "recent": 2, "recent_high_or_medium": 2}

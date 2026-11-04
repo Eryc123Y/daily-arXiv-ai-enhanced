@@ -358,11 +358,16 @@ def test_radar_rows_go_into_a_well_formed_table_once(tmp_path):
     picks = {"topics": {}, "radar": [{"id": "2611.00002", "level": "中", "reason": "a|b", "check": False, "action": "", "read": False}], "other": [], "note": ""}
     path = tmp_path / "project-radar.md"
     digest.append_radar_rows(path, DAY, found, picks)
-    path.write_text(path.read_text().rstrip("\n"))
     digest.append_radar_rows(path, DAY, found, picks)
+    path.write_text(path.read_text().rstrip("\n"))
+    later = digest.build_candidates([paper("2611.00003", "U", "RLVR multiple epochs")], [], TOPICS, digest.radar_patterns(BRIEF), set())
+    digest.append_radar_rows(path, DAY, later, {**picks, "radar": [{**picks["radar"][0], "id": "2611.00003"}]})
     lines = path.read_text().splitlines()
     assert lines[0].startswith("| 日期 | arXiv ID |") and lines[1].startswith("|---")
-    assert lines[2:] == [f"| {DAY} | 2611.00002 | T/x | 中 | a/b | {digest.UNREAD_ACTION} |"]
+    assert lines[2:] == [
+        f"| {DAY} | 2611.00002 | T/x | 中 | a/b | {digest.UNREAD_ACTION} |",
+        f"| {DAY} | 2611.00003 | U | 中 | a/b | {digest.UNREAD_ACTION} |",
+    ]
 
 
 def test_rows_added_today_do_not_hide_papers_on_a_rerun(tmp_path):
@@ -397,10 +402,15 @@ def test_week_health_counts_reports_on_time_and_recent_misses():
         ]
 
     log = day("2026-11-09", "01:20:00", "02:50:00") + day("2026-11-10", "01:20:00", "04:00:00") + day("2026-11-11", "10:58:00", "14:01:00")
-    lines = weekly.health_lines(log, ["2026-11-09", "2026-11-10", "2026-11-11"], timezone(timedelta(hours=8)), misses=(2, 1))
-    # 11-09 on time (10:50); 11-10 late (12:00); 11-11 excluded, arXiv announced after 10:00.
-    assert "- 准时：1/2 天在 11:30 前写好日报（不计 arXiv 10:00 后才发布的日子）" in lines
+    log += [{"date": "2026-11-12", "path": "crawl", "at": "2026-11-12T01:20:00+00:00", "total": 9, "added": 9}]
+    days = weekly.week_days(log, ["2026-11-09", "2026-11-10", "2026-11-11"], "2026-11-15")
+    assert days == ["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"]
+    lines = weekly.health_lines(log, days, timezone(timedelta(hours=8)), misses=(2, 1))
+    # 11-09 on time (10:50); 11-10 late (12:00); 11-11 excluded, arXiv announced after 10:00; 11-12 never reported.
+    assert "- 准时：1/3 天在 11:30 前写好日报（不计 arXiv 10:00 后才发布的日子）" in lines
+    assert "- 11-12：09:20 → — → —" in lines
     assert "- 漏报（近 30 天）：2 篇，其中高或中 1 篇（missed.md）" in lines
+    assert weekly.health_lines([], [], misses=(2, 1))[-1] == "- 漏报（近 30 天）：2 篇，其中高或中 1 篇（missed.md）"
 
 
 def test_a_broken_picks_file_does_not_stop_the_week(tmp_path, monkeypatch, capsys):

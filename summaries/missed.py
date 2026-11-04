@@ -20,11 +20,11 @@ HEADER = (
     "| 发现日期 | arXiv ID | 标题 | 等级 | 当时所在的批次 | 来源 |\n"
     "|---|---|---|---|---|---|\n"
 )
-ROW = re.compile(r"^\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(\d{4}\.\d{4,5})\s*\|\s*([^|]*)\|\s*([^|]*)\|")
+CELL = r"((?:\\\||[^|])*)"  # a table cell; a hand-edited "\|" stays inside it
+ROW = re.compile(rf"^\|\s*(\d{{4}}-\d{{2}}-\d{{2}})\s*\|\s*(\d{{4}}\.\d{{4,5}})\s*\|{CELL}\|{CELL}\|")
 LEVEL = re.compile(r"^(高|中|可借鉴)")
 SERIOUS = ("高", "中")
 RECENT_DAYS = 30
-SEARCH_DAYS = 90
 
 
 @dataclass(frozen=True)
@@ -60,8 +60,12 @@ def backfill_rows(radar_text):
 
 
 def find_misses(rows, listed_on, known):
-    """Rows whose paper was in a batch (`listed_on`: {id: day}) and is not yet in missed.md (`known`)."""
-    return [Miss(row, listed_on[row.paper_id]) for row in rows if row.paper_id in listed_on and row.paper_id not in known]
+    """Rows whose paper was in a batch before it was found (`listed_on`: {id: first day}) and is not yet in missed.md."""
+    return [
+        Miss(row, listed_on[row.paper_id])
+        for row in rows
+        if row.paper_id in listed_on and listed_on[row.paper_id] < row.found and row.paper_id not in known
+    ]
 
 
 def recent_misses(text, today, days=RECENT_DAYS):
@@ -71,13 +75,12 @@ def recent_misses(text, today, days=RECENT_DAYS):
     return len(recent), sum(1 for level in recent if level.startswith(SERIOUS))
 
 
-def listed_days(branch, ids, today, days=SEARCH_DAYS):
-    """{id: the day's batch it was in} for `ids`, over the data files of the last `days` days."""
-    start = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
+def listed_days(branch, ids, today):
+    """{id: the first day's batch it was in} for `ids`, over every data file up to `today`."""
     found = {}
     for path in sorted(branch.list_files("data/")):
         match = cli.RAW_FILE.match(path)
-        if not match or not start <= match.group(1) <= today:
+        if not match or match.group(1) > today:
             continue
         for record in cli.read_records(branch, path):
             if record.get("id") in ids:
@@ -103,7 +106,7 @@ def cmd_missed(args):
         branch.fetch()
         misses = find_misses(rows, listed_days(branch, {r.paper_id for r in rows}, today), known)
     if misses or not missed_path.exists():
-        current = current + "".join(_line(m) for m in misses)
+        current = current + ("" if current.endswith("\n") else "\n") + "".join(_line(m) for m in misses)
         missed_path.write_text(current, encoding="utf-8")
     total, serious = recent_misses(current, today)
     cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious)
