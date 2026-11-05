@@ -23,11 +23,11 @@ Times are Malaysia time (UTC+8). arXiv announces at 20:00 US Eastern, which is 0
 |---|---|
 | 09:17, 09:47, 11:23, 15:37 (Mon-Fri) | GitHub Actions crawl (`run.yml`). A run that finds nothing new publishes nothing. |
 | 10:20 (Mon-Fri) | Scheduled task: `ensure-day` (starts the crawl and waits if the day is missing), usage gate, `run-local` summaries, `digest`, one push notification. The report is the task's final message and `digests/<date>.md` in the vault. |
-| 16:20 (Mon-Fri) | Same task as the morning, for days when arXiv announces late (2026-11-03: the batch appeared between 16:30 and 19:00). On a normal day the report already exists and the run stops after a few calls. |
+| 12:20, 16:20 (Mon-Fri) | Same task as the morning, for days when arXiv announces late. The listing was still the previous day's at 10:34 on 2026-11-05 (it appeared before 13:03) and at 12:15 on 11-04; on 11-03 it appeared between 16:30 and 19:00. On a normal day the report already exists and the run stops after a few calls. |
 | 21:20 (Mon-Fri) | Same task again with `digest --final`: resumes summaries stopped by the usage gate, writes the report if the morning had no batch yet, and on a day without any batch writes a two-line note. Otherwise it stops after a few calls. |
 | 10:20 (Sun) | `missed` (look-back radar papers from earlier Sundays that were in one of our batches go to `missed.md` in the vault), then `digest-week` (the week's radar rows and topic counts, no model call), then one Sonnet subagent looks for up to three older papers for the radar (two alphaXiv searches). The 21:20 Sunday run stops at once. |
 
-Cron for the task: `20 10,16,21 * * 0-5`.
+Cron for the task: `20 10,12,16,21 * * 0-5`.
 
 The phone gets the report from the claude.ai routine "Arxiv daily digest", which posts `digests/<date>.md` into its chat at 11:30. The task's own push rarely arrives: `PushNotification` goes out through Remote Control, a scheduled run is an unattended session, and an unattended session cannot turn Remote Control on, so the tool answers "Mobile push not sent (Remote Control inactive)" (seen on 2026-10-29 and 2026-11-03; interactive sessions do deliver). The task says so in its last line.
 

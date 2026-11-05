@@ -8,6 +8,7 @@ misses of the last thirty days, one of the three measures in docs/ROADMAP.md.
 """
 
 import re
+import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ HEADER = (
 CELL = r"((?:\\\||[^|])*)"  # a table cell; a hand-edited "\|" stays inside it
 ROW = re.compile(rf"^\|\s*(\d{{4}}-\d{{2}}-\d{{2}})\s*\|\s*(\d{{4}}\.\d{{4,5}})\s*\|{CELL}\|{CELL}\|")
 LEVEL = re.compile(r"^(高|中|可借鉴)")
+SEPARATOR = re.compile(r"^\|[\s|:-]+$")
 SERIOUS = ("高", "中")
 RECENT_DAYS = 30
 
@@ -47,6 +49,18 @@ def _rows(text):
         if match:
             found, paper_id, title, level = (part.strip() for part in match.groups())
             yield found, paper_id, title, level
+
+
+def unreadable_rows(text):
+    """Table rows that `_rows` skips or whose level is not high, medium or 可借鉴: a hand edit that moved a column."""
+    bad = []
+    for line in (text or "").splitlines():
+        if not line.startswith("|") or SEPARATOR.match(line) or "arXiv ID" in line:
+            continue
+        match = ROW.match(line)
+        if not match or not LEVEL.match(match.group(4).strip()):
+            bad.append(line)
+    return bad
 
 
 def backfill_rows(radar_text):
@@ -97,8 +111,10 @@ def cmd_missed(args):
     vault = Path(args.dir)
     today = args.today or date.today().isoformat()
     radar_path, missed_path = vault / "project-radar.md", vault / "missed.md"
-    rows = backfill_rows(radar_path.read_text(encoding="utf-8") if radar_path.exists() else "")
+    radar = radar_path.read_text(encoding="utf-8") if radar_path.exists() else ""
+    rows = backfill_rows(radar)
     current = missed_path.read_text(encoding="utf-8") if missed_path.exists() else HEADER
+    skipped = {name: lines for name, lines in ((radar_path.name, unreadable_rows(radar)), (missed_path.name, unreadable_rows(current))) if lines}
     known = {paper_id for _, paper_id, _, _ in _rows(current)}
     misses = []
     if rows:
@@ -109,7 +125,9 @@ def cmd_missed(args):
         current = current + ("" if current.endswith("\n") else "\n") + "".join(_line(m) for m in misses)
         missed_path.write_text(current, encoding="utf-8")
     total, serious = recent_misses(current, today)
-    cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious)
+    for name, lines in skipped.items():
+        print(f"warning: {name}: {len(lines)} row(s) not read (columns moved or unknown level)", file=sys.stderr)
+    cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious, **({"skipped": skipped} if skipped else {}))
     return 0
 
 
