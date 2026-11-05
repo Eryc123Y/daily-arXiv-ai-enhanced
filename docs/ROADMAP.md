@@ -31,7 +31,7 @@ Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on
 | Sharing groundwork that needs no decision: summaries labelled as written from the abstract and failed loads shown as failures (both already done), the measured cost in the README, a guard that keeps vault files off the public branch | Claude | **Done** (11-04) |
 | Specs for M1 and M2: [m1-shareable.md](specs/m1-shareable.md), [m2-reading-state-and-ratings.md](specs/m2-reading-state-and-ratings.md); open questions for Eric in each | Claude | **Done** (11-04) |
 | Maintainability notes, [maintainability.md](maintainability.md): four decisions (types, module layout, record shapes, upstream leftovers), decided 11-05; D2 and D4 in M0, D1 and D3 in M1 | Claude | **Done** (11-04, decided 11-05) |
-| Delete upstream leftovers (D4) and move shared helpers out of `cli.py` (D2) | Claude | On Track |
+| Delete upstream leftovers (D4) and move shared helpers out of `cli.py` (D2) | Claude | **Done** (11-05) |
 | Messenger at 11:30 Sun-Fri, task model set to Sonnet, three idle routines deleted | Eric | **Needs Eric** |
 
 ### M1 · 2026-11-16 to 11-29 · shareable

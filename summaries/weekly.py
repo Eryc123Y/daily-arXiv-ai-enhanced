@@ -11,7 +11,7 @@ import json
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
-from summaries import cli, digest, missed
+from summaries import datafiles, digest, missed
 from summaries.records import parse_jsonl
 
 ANNOUNCED_BY, ON_TIME_BY = time(10, 0), time(11, 30)  # the "report on time" measure in docs/ROADMAP.md
@@ -99,9 +99,9 @@ def health_lines(log, days, tz=None, misses=None):
 def read_log(args):
     """The data branch's run log, or [] when it cannot be read (offline, no clone)."""
     try:
-        branch = cli.make_branch(args)
+        branch = datafiles.make_branch(args)
         branch.fetch()
-        return parse_jsonl(branch.read(cli.RUN_LOG) or "")
+        return parse_jsonl(branch.read(datafiles.RUN_LOG) or "")
     except Exception as error:  # the review page is still useful without its health table
         print(f"health table skipped: {error}")
         return []

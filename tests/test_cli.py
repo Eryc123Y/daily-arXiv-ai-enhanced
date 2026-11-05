@@ -278,14 +278,14 @@ def log_lines(remote):
 
 
 def test_handover_dispatches_the_api_job_when_the_secret_exists(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
     run(clone, "prepare", "--date", DAY, capsys=capsys)
     (clone / ".cache" / "summaries" / DAY / "chunk-000.out.txt").write_text("=== 1\n" + FIELDS.format(n=1))
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
+    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
 
     code, out = run(clone, "handover", "--date", DAY, "--reason", "weekly 81%", capsys=capsys)
 
@@ -300,12 +300,12 @@ def test_handover_dispatches_the_api_job_when_the_secret_exists(tmp_path, remote
 
 
 def test_handover_without_a_key_pauses_and_logs_it(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh([], calls))
+    monkeypatch.setattr(github, "gh", fake_gh([], calls))
 
     code, out = run(clone, "handover", "--date", DAY, capsys=capsys)
 
@@ -315,13 +315,13 @@ def test_handover_without_a_key_pauses_and_logs_it(tmp_path, remote_and_clone, m
 
 
 def test_handover_with_nothing_pending_needs_no_fallback(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     ai = [{**paper("1"), "AI": {k: "x" for k in ("tldr", "motivation", "method", "result", "conclusion")}}]
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")]), AI_FILE: dump_jsonl(ai)})
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
+    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
 
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
 
@@ -395,18 +395,18 @@ def test_mode_command_accepts_a_ready_gemini_provider(tmp_path, remote_and_clone
 
 
 def test_handover_checks_the_configured_providers_secret_and_model(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini"}))
+    monkeypatch.setattr(github, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini"}))
 
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
     assert json.loads(out)["path"] == "paused-no-key"
     assert "SUMMARY_MODEL" in log_lines(remote)[-1]["reason"]
 
-    monkeypatch.setattr(cli, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "g"}))
+    monkeypatch.setattr(github, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "g"}))
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
     assert json.loads(out)["path"] == "api-fallback"
 
@@ -414,12 +414,12 @@ def test_handover_checks_the_configured_providers_secret_and_model(tmp_path, rem
 
 def test_handover_pauses_when_the_repository_settings_cannot_be_read(tmp_path, remote_and_clone, monkeypatch, capsys):
     """A failed gh call must not be mistaken for an unset SUMMARY_PROVIDER."""
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls, "unreachable"))
+    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls, "unreachable"))
 
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
 
@@ -454,12 +454,12 @@ def crawl_gh(calls, on_dispatch=None, runs=None, conclusion="success", flaky=0):
 
 
 def test_ensure_day_does_nothing_when_the_crawl_already_published(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-11-02.jsonl": dump_jsonl([paper("A")])})
     calls = []
-    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+    monkeypatch.setattr(github, "gh", crawl_gh(calls))
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
 
@@ -467,11 +467,11 @@ def test_ensure_day_does_nothing_when_the_crawl_already_published(tmp_path, remo
 
 
 def test_ensure_day_skips_weekends(remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     _, clone = remote_and_clone
     calls = []
-    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+    monkeypatch.setattr(github, "gh", crawl_gh(calls))
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-01", capsys=capsys)
 
@@ -479,7 +479,7 @@ def test_ensure_day_skips_weekends(remote_and_clone, monkeypatch, capsys):
 
 
 def test_ensure_day_starts_the_crawl_and_waits_for_it(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import cli, github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
@@ -492,7 +492,7 @@ def test_ensure_day_starts_the_crawl_and_waits_for_it(tmp_path, remote_and_clone
         git(work, "push", str(remote), "HEAD:refs/heads/data")
 
     calls = []
-    monkeypatch.setattr(cli, "gh", crawl_gh(calls, on_dispatch=crawl))
+    monkeypatch.setattr(github, "gh", crawl_gh(calls, on_dispatch=crawl))
     monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
@@ -503,12 +503,12 @@ def test_ensure_day_starts_the_crawl_and_waits_for_it(tmp_path, remote_and_clone
 
 
 def test_ensure_day_reports_a_crawl_that_found_nothing(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import cli, github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
     calls = []
-    monkeypatch.setattr(cli, "gh", crawl_gh(calls))
+    monkeypatch.setattr(github, "gh", crawl_gh(calls))
     monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
@@ -517,7 +517,7 @@ def test_ensure_day_reports_a_crawl_that_found_nothing(tmp_path, remote_and_clon
 
 
 def test_ensure_day_does_not_start_a_second_crawl_while_one_runs(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import cli, github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
@@ -527,7 +527,7 @@ def test_ensure_day_does_not_start_a_second_crawl_while_one_runs(tmp_path, remot
         runs[0]["status"] = "completed"
 
     calls = []
-    monkeypatch.setattr(cli, "gh", crawl_gh(calls, runs=runs))
+    monkeypatch.setattr(github, "gh", crawl_gh(calls, runs=runs))
     monkeypatch.setattr(cli.time, "sleep", finish)
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
@@ -537,11 +537,11 @@ def test_ensure_day_does_not_start_a_second_crawl_while_one_runs(tmp_path, remot
 
 
 def test_ensure_day_reports_a_failed_crawl(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import cli, github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-    monkeypatch.setattr(cli, "gh", crawl_gh([], conclusion="failure", flaky=2))
+    monkeypatch.setattr(github, "gh", crawl_gh([], conclusion="failure", flaky=2))
     monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
@@ -550,7 +550,7 @@ def test_ensure_day_reports_a_failed_crawl(tmp_path, remote_and_clone, monkeypat
 
 
 def test_ensure_day_reports_a_dispatch_it_could_not_make(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli
+    from summaries import github
 
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
@@ -558,7 +558,7 @@ def test_ensure_day_reports_a_dispatch_it_could_not_make(tmp_path, remote_and_cl
     def offline(*args):
         raise subprocess.CalledProcessError(1, ["gh"], stderr="error connecting to api.github.com")
 
-    monkeypatch.setattr(cli, "gh", offline)
+    monkeypatch.setattr(github, "gh", offline)
 
     code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
 

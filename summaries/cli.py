@@ -10,8 +10,6 @@ Local task:   ensure-day (start a skipped crawl), run-local (summaries through
 import argparse
 import json
 import os
-import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -19,92 +17,30 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from summaries.blocks import format_chunk, parse_blocks
-from summaries.databranch import DataBranch
+from summaries import digest, github, local_runner, missed, setup, signals, weekly
+from summaries.datafiles import (
+    RAW_FILE,
+    RUN_LOG,
+    ai_path,
+    counts,
+    emit,
+    make_branch,
+    publish_summaries,
+    raw_path,
+    read_records,
+    recent_days,
+    record_run,
+    site_settings,
+)
+from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
 from summaries.providers import KEY_ENV, resolve_provider
-from summaries.prompting import instructions
-from summaries.records import (
-    AI_FIELDS,
-    dedupe_by_id,
-    dump_jsonl,
-    merge_summaries,
-    parse_jsonl,
-    pending_papers,
-)
+from summaries.records import dedupe_by_id, dump_jsonl, parse_jsonl, pending_papers
 
-GITHUB_REMOTE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
-SITE_SETTINGS = "assets/site.json"
-RUN_LOG = "logs/summary-runs.jsonl"
 API_WORKFLOW = "summarize-api.yml"
 CRAWL_WORKFLOW = "run.yml"
 ACTIVE_RUN = {"queued", "in_progress", "waiting", "pending", "requested"}
 POLL_SECONDS = 20
-GH_TIMEOUT = 120
-RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
-LOCK_TTL_SECONDS = 3 * 3600
-
-
-def parse_repo_slug(url):
-    match = GITHUB_REMOTE.search(url.strip())
-    return f"{match.group(1)}/{match.group(2)}" if match else None
-
-
-def repo_slug(repo_dir):
-    """owner/name of the GitHub repository: DATA_REPO, GITHUB_REPOSITORY, else the origin remote."""
-    for name in ("DATA_REPO", "GITHUB_REPOSITORY"):
-        if os.environ.get(name, "").strip():
-            return os.environ[name].strip()
-    url = subprocess.run(
-        ["git", "remote", "get-url", "origin"], cwd=str(repo_dir), capture_output=True, text=True
-    ).stdout
-    slug = parse_repo_slug(url)
-    if not slug:
-        raise SystemExit("Cannot tell which GitHub repository this is; set DATA_REPO=owner/name.")
-    return slug
-
-
-def site_settings(language):
-    """Published to the data branch so the page knows the crawled categories."""
-    categories = [c.strip() for c in os.environ.get("CATEGORIES", "").split(",") if c.strip()]
-    if not categories:
-        return {}
-    return {SITE_SETTINGS: json.dumps({"categories": categories, "language": language}, indent=2) + "\n"}
-
-
-def raw_path(day):
-    return f"data/{day}.jsonl"
-
-
-def ai_path(day, language):
-    return f"data/{day}_AI_enhanced_{language}.jsonl"
-
-
-def emit(**values):
-    """Print JSON for the caller and mirror scalars to $GITHUB_OUTPUT."""
-    print(json.dumps(values, ensure_ascii=False, indent=2))
-    out = os.environ.get("GITHUB_OUTPUT")
-    if out:
-        with open(out, "a", encoding="utf-8") as fh:
-            for key, value in values.items():
-                if isinstance(value, (str, int, bool)):
-                    fh.write(f"{key}={str(value).lower() if isinstance(value, bool) else value}\n")
-
-
-def make_branch(args):
-    return DataBranch(args.repo, fetch_args=shlex.split(os.environ.get("DATA_FETCH_ARGS", "")))
-
-
-def read_records(branch, path):
-    return parse_jsonl(branch.read(path) or "")
-
-
-def counts(raw, ai_records):
-    total = len(dedupe_by_id(raw))
-    pending = len(pending_papers(raw, ai_records))
-    return {"total": total, "done": total - pending, "pending": pending}
-
-
 # --- Actions -----------------------------------------------------------------
 
 
@@ -165,13 +101,6 @@ def cmd_mode(args):
     return 0
 
 
-def recent_days(branch, days):
-    """Dates with a raw file in the last `days` days, newest first."""
-    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
-    found = (m.group(1) for p in branch.list_files("data/") if (m := RAW_FILE.match(p)))
-    return sorted((d for d in found if d >= cutoff), reverse=True)
-
-
 def cmd_api(args):
     from summaries import providers
     from summaries.llm import summarize_all
@@ -211,49 +140,7 @@ def cmd_api(args):
     return 1 if requested and not summarised else 0
 
 
-def publish_summaries(branch, day, language, new, source):
-    stats = {}
-
-    def build(current):
-        raw = read_records(current, raw_path(day))
-        merged = merge_summaries(raw, read_records(current, ai_path(day, language)), new)
-        stats.update(counts(raw, merged))
-        return {ai_path(day, language): dump_jsonl(merged)}
-
-    if new:
-        branch.publish(build, f"summaries: {day} ({source})")
-    else:
-        branch.fetch()
-        build(branch)
-    return stats
-
-
 # --- Run log and API fallback ------------------------------------------------
-
-
-def gh(*args):
-    """Run the GitHub CLI as the user it is logged in as."""
-    return subprocess.run(["gh", *args], capture_output=True, text=True, check=True, timeout=GH_TIMEOUT).stdout
-
-
-def record_run(branch, day, language, path, reason=None):
-    """Append which summary path ran for `day` to logs/summary-runs.jsonl."""
-    entry = {}
-
-    def build(current):
-        stats = counts(read_records(current, raw_path(day)), read_records(current, ai_path(day, language)))
-        entry.clear()
-        entry.update(
-            date=day,
-            path=path,
-            at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            **stats,
-            **({"reason": reason} if reason else {}),
-        )
-        return {RUN_LOG: (current.read(RUN_LOG) or "") + dump_jsonl([entry])}
-
-    branch.publish(build, f"log: {day} {path}")
-    return entry
 
 
 def cmd_record(args):
@@ -269,7 +156,7 @@ class SettingsUnavailable(RuntimeError):
 def gh_variable(slug, name):
     """A repository variable's value, "" when it is not set."""
     try:
-        return gh("variable", "get", name, "-R", slug).strip()
+        return github.gh("variable", "get", name, "-R", slug).strip()
     except subprocess.CalledProcessError as error:
         if "not found" in (error.stderr or ""):
             return ""
@@ -283,7 +170,7 @@ def remote_api_problem(slug):
     names of the secrets; no key value is ever read.
     """
     try:
-        secrets = {s["name"] for s in json.loads(gh("secret", "list", "-R", slug, "--json", "name") or "[]")}
+        secrets = {s["name"] for s in json.loads(github.gh("secret", "list", "-R", slug, "--json", "name") or "[]")}
         env = {name: gh_variable(slug, name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         return f"could not read the repository secrets: {(getattr(error, 'stderr', None) or str(error)).strip()}"
@@ -307,10 +194,10 @@ def cmd_handover(args):
     if merged["pending"] == 0:
         path = "claude-code"
     else:
-        slug = repo_slug(args.repo)
+        slug = github.repo_slug(args.repo)
         problem = remote_api_problem(slug)
         if problem is None:
-            gh("workflow", "run", API_WORKFLOW, "-R", slug, "-f", f"date={args.date}")
+            github.gh("workflow", "run", API_WORKFLOW, "-R", slug, "-f", f"date={args.date}")
             path = "api-fallback"
         else:
             path = "paused-no-key"
@@ -322,7 +209,7 @@ def cmd_handover(args):
 
 def crawl_runs(slug):
     fields = "databaseId,status,conclusion"
-    return json.loads(gh("run", "list", "--workflow", CRAWL_WORKFLOW, "-R", slug, "-L", "5", "--json", fields) or "[]")
+    return json.loads(github.gh("run", "list", "--workflow", CRAWL_WORKFLOW, "-R", slug, "-L", "5", "--json", fields) or "[]")
 
 
 def wait_for_crawl(slug, seen, watch, wait):
@@ -355,12 +242,12 @@ def cmd_ensure_day(args):
     if raw:
         emit(date=day, status="present", dispatched=False, total=len(dedupe_by_id(raw)))
         return 0
-    slug = repo_slug(args.repo)
+    slug = github.repo_slug(args.repo)
     try:
         runs = crawl_runs(slug)
         running = {r["databaseId"] for r in runs if r["status"] in ACTIVE_RUN}
         if not running:
-            gh("workflow", "run", CRAWL_WORKFLOW, "-R", slug)
+            github.gh("workflow", "run", CRAWL_WORKFLOW, "-R", slug)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         detail = (getattr(error, "stderr", None) or str(error)).strip() or str(error)
         emit(date=day, status="error", reason=detail.splitlines()[-1][:200])
@@ -381,10 +268,6 @@ def cmd_ensure_day(args):
 # --- Claude Code local task ---------------------------------------------------
 
 
-def work_dir(args, day):
-    return Path(args.work_dir) / day
-
-
 def cmd_status(args):
     branch = make_branch(args)
     branch.fetch()
@@ -396,54 +279,9 @@ def cmd_status(args):
     return 0
 
 
-def acquire_lock(root, force):
-    """Create the run lock atomically; return the current holder if it is taken."""
-    root.mkdir(parents=True, exist_ok=True)
-    lock = root / "LOCK"
-    if lock.exists() and (force or time.time() - lock.stat().st_mtime >= LOCK_TTL_SECONDS):
-        lock.unlink(missing_ok=True)
-    try:
-        with open(lock, "x", encoding="utf-8") as fh:
-            fh.write(f"{os.getpid()} {datetime.now().isoformat(timespec='seconds')}\n")
-    except FileExistsError:
-        return lock.read_text(encoding="utf-8").strip() or "unknown"
-    return None
-
-
-def release_lock(root):
-    (root / "LOCK").unlink(missing_ok=True)
-
-
-def collect_outputs(directory):
-    summaries, problems = {}, []
-    for out in sorted(directory.glob("*.out.txt")):
-        found, issues = parse_blocks(out.read_text(encoding="utf-8"))
-        problems += [f"{out.name}: {issue}" for issue in issues]
-        for paper_id, ai in found.items():
-            summaries.setdefault(paper_id, ai)
-    return summaries, problems
-
-
 def cmd_merge(args):
     emit(**merge_outputs(args))
     return 0
-
-
-def merge_outputs(args):
-    directory = work_dir(args, args.date)
-    outputs = sorted(directory.glob("*.out.txt")) if directory.exists() else []
-    summaries, problems = collect_outputs(directory) if outputs else ({}, [])
-    branch = make_branch(args)
-    branch.fetch()
-    known = {p["id"] for p in read_records(branch, raw_path(args.date))}
-    unknown = sorted(set(summaries) - known)
-    problems += [f"{paper_id}: not in the day's raw file" for paper_id in unknown]
-    stats = publish_summaries(branch, args.date, args.language, summaries, "claude-code")
-    archive = directory / "merged"
-    for out in outputs:
-        archive.mkdir(parents=True, exist_ok=True)
-        out.rename(archive / f"{int(time.time())}-{out.name}")
-    return {"date": args.date, "parsed": len(summaries), "problems": problems[:30], **stats}
 
 
 def cmd_prepare(args):
@@ -461,38 +299,6 @@ def cmd_prepare(args):
     return 0
 
 
-def write_chunks(args):
-    """Write INSTRUCTIONS.md and chunk inputs for the day's pending papers; return the plan."""
-    directory = work_dir(args, args.date)
-    leftovers = None
-    if directory.exists() and any(directory.glob("*.out.txt")):
-        leftovers = merge_outputs(args)
-    for stale in directory.glob("*.in.txt") if directory.exists() else []:
-        stale.unlink()
-    directory.mkdir(parents=True, exist_ok=True)
-
-    branch = make_branch(args)
-    branch.fetch()
-    raw = read_records(branch, raw_path(args.date))
-    ai_records = read_records(branch, ai_path(args.date, args.language))
-    todo = pending_papers(raw, ai_records)
-    guide = directory / "INSTRUCTIONS.md"
-    guide.write_text(subagent_instructions(args.language), encoding="utf-8")
-    chunks = []
-    for index in range(0, len(todo), args.chunk_size):
-        part = todo[index : index + args.chunk_size]
-        stem = directory / f"chunk-{index // args.chunk_size:03d}"
-        Path(f"{stem}.in.txt").write_text(format_chunk(part), encoding="utf-8")
-        chunks.append({"input": f"{stem}.in.txt", "output": f"{stem}.out.txt", "papers": len(part)})
-    return {
-        "date": args.date,
-        **counts(raw, ai_records),
-        "merged_leftovers": leftovers,
-        "instructions": str(guide),
-        "chunks": chunks,
-    }
-
-
 def cmd_finish(args):
     release_lock(Path(args.work_dir))
     for directory in Path(args.work_dir).glob("*/merged"):
@@ -500,30 +306,6 @@ def cmd_finish(args):
             shutil.rmtree(directory.parent)
     print("lock released")
     return 0
-
-
-def subagent_instructions(language):
-    fields = "\n".join(f"{name}: ..." for name in AI_FIELDS)
-    return f"""# Summarise arXiv papers
-
-{instructions(language)}
-
-## Input
-The input file holds one block per paper: a line `=== <arXiv id>`, then a `title:` line and an `abstract:` line.
-
-## Output
-Use the Write tool to write the output file with one block per input paper, in input order, exactly in this format:
-
-=== <arXiv id>
-{fields}
-
-Rules:
-- Every paper in the input gets a block. Copy each `=== <arXiv id>` line exactly.
-- Field names stay in English as shown; field contents are in {language}.
-- Each field is a single line. No Markdown, no blank fields, nothing else in the file.
-
-When the file is written, reply with only: done <number of blocks written>
-"""
 
 
 def build_parser():
@@ -564,8 +346,6 @@ def build_parser():
     merge.set_defaults(func=cmd_merge)
 
     sub.add_parser("finish", help="release the lock").set_defaults(func=cmd_finish)
-
-    from summaries import digest, local_runner, missed, setup, signals, weekly
 
     local_runner.add_parser(sub)
     setup.add_parser(sub)

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 
-from summaries import cli
+from summaries import datafiles
 
 HEADER = (
     "# 漏报清单\n\n"
@@ -106,10 +106,10 @@ def listed_days(branch, ids, today):
     """{id: the first day's batch it was in} for `ids`, over every data file up to `today`."""
     found = {}
     for path in sorted(branch.list_files("data/")):
-        match = cli.RAW_FILE.match(path)
+        match = datafiles.RAW_FILE.match(path)
         if not match or match.group(1) > today:
             continue
-        for record in cli.read_records(branch, path):
+        for record in datafiles.read_records(branch, path):
             if record.get("id") in ids:
                 found.setdefault(record["id"], match.group(1))
     return found
@@ -131,7 +131,7 @@ def cmd_missed(args):
     known = {paper_id for _, paper_id, _, _ in _rows(current)}
     misses = []
     if rows:
-        branch = cli.make_branch(args)
+        branch = datafiles.make_branch(args)
         branch.fetch()
         misses = find_misses(rows, listed_days(branch, {r.paper_id for r in rows}, today), known)
     if misses or not missed_path.exists():
@@ -140,7 +140,7 @@ def cmd_missed(args):
     total, serious = recent_misses(current, today)
     for name, lines in skipped.items():
         print(f"warning: {name}: {len(lines)} row(s) not read (columns moved or unknown level)", file=sys.stderr)
-    cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious, **({"skipped": skipped} if skipped else {}))
+    datafiles.emit(added=len(misses), recent=total, recent_high_or_medium=serious, **({"skipped": skipped} if skipped else {}))
     return 0
 
 
