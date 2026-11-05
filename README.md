@@ -146,7 +146,7 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page). `ai/enhance.py` is upstream's OpenAI-compatible summariser, kept but not used by the workflow.
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page).
 
 ## Changes from upstream
 
