@@ -63,26 +63,27 @@ Eric reads the report on his phone in the morning and opens papers on the site f
 ## Design sketch (for the blocking questions)
 
 - **Where the state lives.** A new `js/state-source.js` beside `js/data-source.js`, with two implementations: `remote` (the backend) and `none` (no backend: every call answers "unavailable"). The paper data stays on the `data` branch; only state moves.
-- **Records** (names and types to settle with Eric, see Q3):
-  - `paper_state(reader, paper_id, day, read_at, starred_at, later_at, rating, rated_at, source)`; `rating` is `up`, `down` or null; `source` is `page` or `chat`.
+- **Records** (an event log, decided in Q3; field types settle with D1/D3):
+  - `paper_event(reader, paper_id, day, kind, value, at, source)`: one row per tap. `kind` is `read`, `star`, `later` or `rating`; `value` is `on`/`off` for the first three and `up`, `down` or `none` for `rating`; `source` is `page` or `chat`.
+  - `paper_state`: a view with the latest value of each kind per paper, which is what the page reads.
   - `visit(reader, at)` for "since my last visit".
 - **API**, same origin as the page: `GET /api/state?since=<time>` returns changed rows; `PUT /api/state/<paper_id>` sets fields; both behind the login.
 - **The pipeline reads ratings** through one read-only call with a token kept in the macOS keychain (never in the repository or a log), merged with `DIGEST/ratings.md`.
 
-## Open questions
+## Decisions (Eric, 2026-11-05)
 
-| # | Question | For | Blocking |
-|---|---|---|---|
-| Q1 | Cloudflare (Pages Functions + D1, login through Cloudflare Access, no auth code to write; the site moves from GitHub Pages to Cloudflare Pages for Eric's instance) or Supabase (Postgres with row-level security and its own login; the site can stay on GitHub Pages)? My recommendation: Cloudflare, because Access removes the login code and D1 is SQLite, which is easy to test locally. | Eric | yes |
-| Q2 | Page code in TypeScript (a build step), or JSDoc types checked by `tsc --checkJs` (no build step)? This decides how `state-source.js` and the record types are written. | Eric | yes |
-| Q3 | The record shape above: one row per paper with nullable fields, or an event log (each tap is a row, state is derived)? An event log keeps history for the hit rate and for ranking, at the cost of a little more code. | Eric | yes |
-| Q4 | Does "read" mean "opened in the reading pane", or "opened for longer than a few seconds"? | Eric | no |
-| Q5 | Should a down rating hide a paper from the default list, or only mark it? (The roadmap's rule so far: sort, never hide.) | Eric | no |
-| Q6 | Is a messenger-chat rating format of "👍/👎 + arXiv ID" convenient on the phone, or should the messenger infer it from free text? | Eric | no |
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Cloudflare (Pages Functions + D1, login through Cloudflare Access) or Supabase? | **Cloudflare.** Access means no login code, D1 is SQLite and easy to test locally, and LitScout is planned on Cloudflare too. Eric's instance moves from GitHub Pages to Cloudflare Pages. |
+| Q2 | Page code in TypeScript (a build step) or JSDoc checked by `tsc --checkJs`? | **JSDoc with `tsc --checkJs`**, no build step, so a fork deploys as it is. |
+| Q3 | One row per paper, or an event log? | **Event log** (see Records): the hit rate and M3 ranking need the history, and the volume is a few hundred taps a week. |
+| Q4 | What counts as "read"? | Opened in the reading pane. |
+| Q5 | Does a down rating hide a paper? | No: it marks the paper and sorts it lower; the list never hides papers. |
+| Q6 | Rating from the messenger chat | "👍/👎 + arXiv ID"; the messenger also accepts free text and repeats what it understood for Eric to confirm. |
 
 ## Timeline
 
-- 11-30: Eric answers Q1-Q3 and creates the Cloudflare or Supabase account (about 15 minutes).
+- 11-30: Eric creates the Cloudflare account (about 15 minutes); Q1-Q3 were answered on 11-05.
 - 12-01 to 12-07: backend, login, `state-source.js`, R1, R2, R7, R8.
 - 12-08 to 12-14: ratings on the page and from the chat (R3, R4), writer prompt (R5).
 - 12-15 to 12-20: hit rate on Sunday's page (R6), P1 items as time allows.

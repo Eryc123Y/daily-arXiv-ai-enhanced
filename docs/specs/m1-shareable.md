@@ -36,9 +36,9 @@ Eric wants to send the site to classmates or his group soon. Someone who opens t
 - **R2** README opening: three sentences on what the site does, a screenshot, and the live link. Acceptance: Eric reads it and would send it as is.
 - **R3** A privacy check in CI: a test that the publishing commands never write `project-brief.md`, `project-radar.md`, `feedback.md`, `missed.md` or rating files to the `data` branch.
 
-## Open questions
+## Decisions (Eric, 2026-11-05)
 
-| # | Question | For | Blocking |
-|---|---|---|---|
-| Q1 | May I create a throwaway fork on your GitHub account for R1 (deleted afterwards), or do you prefer a second account? | Eric | yes, for R1 |
-| Q2 | Is upstream's licence clear enough to share, or do you want to ask dw-dengwei first? | Eric | no |
+| # | Question | Decision |
+|---|---|---|
+| Q1 | Where to run the fresh-fork test (R1) | A temporary repository `arxiv-deploy-test` on Eric's account with a copy pushed to it (GitHub does not let an account fork its own repository), or a real fork from a second account if Eric has one, since a fork starts with Actions disabled and that step most needs testing. Claude asks again before deleting it. |
+| Q2 | Ask upstream about the licence first? | No: share as it is; the README names upstream's Modified Apache License and the source. Ask upstream only before a wide public launch. |
