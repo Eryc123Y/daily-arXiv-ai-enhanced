@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 BLOCKED_PROGRAMS = {"gh", "curl", "wget"}
+LAUNCHERS = {"sh", "bash", "zsh", "dash", "env"}  # would hide the program they start; nothing in the code uses them
 GIT_LOCAL_ONLY = {"GIT_ALLOW_PROTOCOL": "file"}  # git refuses https, ssh and git transports
 
 
@@ -32,8 +33,11 @@ class GuardedPopen(subprocess.Popen):
     """Every subprocess call in the suite goes through Popen, including `run` saved at import time."""
 
     def __init__(self, args, *rest, **kwargs):
-        if _program(args) in BLOCKED_PROGRAMS:
-            raise GuardError(f"tests must not run {_program(args)} ({args!r}); stub the call instead")
+        programs = {_program(args), Path(os.fsdecode(kwargs.get("executable") or "")).name}
+        if kwargs.get("shell") or programs & LAUNCHERS:
+            raise GuardError(f"tests must not run programs through a shell or env ({args!r}); call the program directly")
+        if programs & BLOCKED_PROGRAMS:
+            raise GuardError(f"tests must not run {', '.join(sorted(programs & BLOCKED_PROGRAMS))} ({args!r}); stub the call instead")
         if kwargs.get("env") is not None:
             kwargs["env"] = {**kwargs["env"], **GIT_LOCAL_ONLY}
         super().__init__(args, *rest, **kwargs)
@@ -57,12 +61,14 @@ def _refuse(what):
 
 
 _saved = {}
+RESOLVERS = ("gethostbyname", "gethostbyname_ex", "gethostbyaddr")
 
 
 def _install():
     _saved.update(
         popen=subprocess.Popen,
         getaddrinfo=socket.getaddrinfo,
+        resolvers={name: getattr(socket, name) for name in RESOLVERS},
         connect=socket.socket.connect,
         connect_ex=socket.socket.connect_ex,
         sendto=socket.socket.sendto,
@@ -89,8 +95,17 @@ def _install():
             _refuse(f"send to {args[-1]}")
         return _saved["sendto"](self, data, *args)
 
+    def guarded_resolver(name):
+        def resolve(host, *args, **kwargs):
+            if not _local_host(host):
+                _refuse(f"resolve {host}")
+            return _saved["resolvers"][name](host, *args, **kwargs)
+        return resolve
+
     subprocess.Popen = GuardedPopen
     socket.getaddrinfo = getaddrinfo
+    for name in RESOLVERS:
+        setattr(socket, name, guarded_resolver(name))
     socket.socket.connect = connect
     socket.socket.connect_ex = connect_ex
     socket.socket.sendto = sendto
@@ -100,6 +115,8 @@ def _install():
 def _uninstall():
     subprocess.Popen = _saved["popen"]
     socket.getaddrinfo = _saved["getaddrinfo"]
+    for name, original in _saved["resolvers"].items():
+        setattr(socket, name, original)
     socket.socket.connect = _saved["connect"]
     socket.socket.connect_ex = _saved["connect_ex"]
     socket.socket.sendto = _saved["sendto"]

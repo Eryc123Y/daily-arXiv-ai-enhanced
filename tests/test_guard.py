@@ -39,10 +39,20 @@ def test_local_git_and_temporary_remotes_still_work(remote_and_clone):
     lambda: subprocess.run(["gh", "run", "list"], capture_output=True),
     lambda: subprocess.Popen(["gh", "api", "user"]),
     lambda: local_runner.run_command(["gh", "--version"]),
-    lambda: subprocess.check_output("curl https://arxiv.org", shell=True),
+    lambda: subprocess.run(["/usr/bin/true"], executable="/usr/bin/curl"),
 ])
 def test_gh_and_downloaders_are_refused(call):
     with pytest.raises(RuntimeError, match="must not run"):
+        call()
+
+
+@pytest.mark.parametrize("call", [
+    lambda: subprocess.check_output("curl https://arxiv.org", shell=True),
+    lambda: subprocess.run(["/bin/sh", "-c", "curl --version"]),
+    lambda: subprocess.run(["env", "curl", "--version"]),
+])
+def test_shells_and_env_are_refused(call):
+    with pytest.raises(RuntimeError, match="through a shell or env"):
         call()
 
 
@@ -51,6 +61,9 @@ def test_the_network_is_refused_before_any_lookup():
         requests.get("https://arxiv.org/list/cs.CV/new", timeout=5)
     with pytest.raises(RuntimeError, match="resolve arxiv.org"):
         socket.create_connection(("arxiv.org", 443), timeout=5)
+    for resolve in (socket.gethostbyname, socket.gethostbyname_ex, socket.gethostbyaddr):
+        with pytest.raises(RuntimeError, match="resolve arxiv.org"):
+            resolve("arxiv.org")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         with pytest.raises(RuntimeError, match="network"):
             sock.connect_ex(("192.0.2.1", 443))
