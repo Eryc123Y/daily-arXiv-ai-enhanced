@@ -8,6 +8,7 @@ misses of the last thirty days, one of the three measures in docs/ROADMAP.md.
 """
 
 import re
+import sys
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -23,6 +24,7 @@ HEADER = (
 CELL = r"((?:\\\||[^|])*)"  # a table cell; a hand-edited "\|" stays inside it
 ROW = re.compile(rf"^\|\s*(\d{{4}}-\d{{2}}-\d{{2}})\s*\|\s*(\d{{4}}\.\d{{4,5}})\s*\|{CELL}\|{CELL}\|")
 LEVEL = re.compile(r"^(高|中|可借鉴)")
+SEPARATOR = re.compile(r"^\|[\s|:-]+$")
 SERIOUS = ("高", "中")
 RECENT_DAYS = 30
 
@@ -41,21 +43,46 @@ class Miss:
     listed: str
 
 
-def _rows(text):
+def _is_header(line):
+    cells = line.split("|")
+    return len(cells) > 2 and cells[2].strip() == "arXiv ID"
+
+
+def _parse(text):
+    """(rows, unreadable) of a radar or missed table.
+
+    A row is (found, arXiv ID, title, level) with a date, an ID and a level of
+    high, medium or 可借鉴 in those columns. Any other table line except the
+    header and the separator is unreadable (a hand edit that moved a column or
+    used another level) and is left out of every count.
+    """
+    rows, unreadable = [], []
     for line in (text or "").splitlines():
+        if not line.startswith("|") or SEPARATOR.match(line) or _is_header(line):
+            continue
         match = ROW.match(line)
-        if match:
-            found, paper_id, title, level = (part.strip() for part in match.groups())
-            yield found, paper_id, title, level
+        row = tuple(part.strip() for part in match.groups()) if match else None
+        if row and LEVEL.match(row[3]):
+            rows.append(row)
+        else:
+            unreadable.append(line)
+    return rows, unreadable
+
+
+def _rows(text):
+    return _parse(text)[0]
+
+
+def unreadable_rows(text):
+    return _parse(text)[1]
 
 
 def backfill_rows(radar_text):
     """The radar rows Sunday's look-back added, with their level without the "（回溯…）" note."""
     rows = []
     for found, paper_id, title, level in _rows(radar_text):
-        grade = LEVEL.match(level)
-        if "回溯" in level and grade:
-            rows.append(Row(found, paper_id, title, grade.group(1)))
+        if "回溯" in level:
+            rows.append(Row(found, paper_id, title, LEVEL.match(level).group(1)))
     return rows
 
 
@@ -97,8 +124,10 @@ def cmd_missed(args):
     vault = Path(args.dir)
     today = args.today or date.today().isoformat()
     radar_path, missed_path = vault / "project-radar.md", vault / "missed.md"
-    rows = backfill_rows(radar_path.read_text(encoding="utf-8") if radar_path.exists() else "")
+    radar = radar_path.read_text(encoding="utf-8") if radar_path.exists() else ""
+    rows = backfill_rows(radar)
     current = missed_path.read_text(encoding="utf-8") if missed_path.exists() else HEADER
+    skipped = {name: lines for name, lines in ((radar_path.name, unreadable_rows(radar)), (missed_path.name, unreadable_rows(current))) if lines}
     known = {paper_id for _, paper_id, _, _ in _rows(current)}
     misses = []
     if rows:
@@ -109,7 +138,9 @@ def cmd_missed(args):
         current = current + ("" if current.endswith("\n") else "\n") + "".join(_line(m) for m in misses)
         missed_path.write_text(current, encoding="utf-8")
     total, serious = recent_misses(current, today)
-    cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious)
+    for name, lines in skipped.items():
+        print(f"warning: {name}: {len(lines)} row(s) not read (columns moved or unknown level)", file=sys.stderr)
+    cli.emit(added=len(misses), recent=total, recent_high_or_medium=serious, **({"skipped": skipped} if skipped else {}))
     return 0
 
 

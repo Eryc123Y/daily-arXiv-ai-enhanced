@@ -67,7 +67,7 @@ Only fixes to the daily pipeline. Nothing that needs Eric's time.
 
 - **M2 needs Eric to create the hosted account.** If that slips, M2 slips, and with it the hit rate.
 - **Embedding ranking (M3) needs about a month of ratings** to be judged. If ratings are sparse, M3 ships search and settings, and ranking moves to Later.
-- **arXiv and GitHub timing.** arXiv was about ten hours late on 2026-11-03 and GitHub skipped scheduled runs; the 16:20 run and the status line cover this.
+- **arXiv and GitHub timing.** arXiv's listing was late on 11-03 (about ten hours), 11-04 and 11-05 (past 10:30), and GitHub delayed or skipped scheduled crawls; the 12:20 and 16:20 runs and the status line cover this. If late listings continue, the on-time measure, which only counts days announced by 10:00, will cover few days.
 - **Privacy.** The `data` branch is public. Radar reasons and ratings live in the vault or behind the login, never on the `data` branch.
 - **Usage.** The pipeline runs on Eric's Claude plan; a usage gate at 80% hands the summaries to the API path (needs `ANTHROPIC_API_KEY`, not set).
 
