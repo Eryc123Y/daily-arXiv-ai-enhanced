@@ -4,8 +4,9 @@ import subprocess
 import pytest
 from conftest import git, seed_data_branch
 
-from summaries import cli
-from summaries.cli import main, parse_repo_slug, repo_slug
+from summaries import github
+from summaries.cli import main
+from summaries.github import parse_repo_slug, repo_slug
 from summaries.databranch import BOT_IDENTITY, Identity, resolve_identity
 from summaries.records import dump_jsonl
 
@@ -77,7 +78,7 @@ def test_setup_configures_a_fork_in_one_command(remote_and_clone, monkeypatch, c
     monkeypatch.delenv("DATA_REPO", raising=False)
     monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
     calls = []
-    monkeypatch.setattr(cli, "gh", fake_gh(calls, fail=[("api", "-X", "POST")]))
+    monkeypatch.setattr(github, "gh", fake_gh(calls, fail=[("api", "-X", "POST")]))
 
     code = main(["--repo", str(clone), "setup", "--categories", "cs.CV, cs.LG", "--provider", "gemini", "--model", "g-1", "--run"])
 

@@ -15,7 +15,7 @@ from argparse import Namespace
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from summaries import cli
+from summaries import datafiles, localtask
 
 CHUNK_TIMEOUT = 900
 run_command = subprocess.run
@@ -63,31 +63,31 @@ def run_chunk(chunk, plan, args):
 
 def summarise_day(day_args, args, budget):
     """Prepare, run and merge one day; return (chunks run, failures)."""
-    plan = cli.write_chunks(day_args)
+    plan = localtask.write_chunks(day_args)
     chunks = plan["chunks"] if budget is None else plan["chunks"][:budget]
     failures = []
     for start in range(0, len(chunks), args.merge_every):
         batch = chunks[start : start + args.merge_every]
         with ThreadPoolExecutor(max_workers=args.parallel) as pool:
             failures += [f for f in pool.map(lambda c: run_chunk(c, plan, args), batch) if f]
-        cli.merge_outputs(day_args)
+        localtask.merge_outputs(day_args)
     return len(chunks), failures
 
 
 def cmd_run_local(args):
     client_argv(args.client, "probe", args.model, args.command)  # fail fast on a bad client setting
     root = Path(args.work_dir)
-    holder = cli.acquire_lock(root, False)
+    holder = localtask.acquire_lock(root, False)
     if holder:
-        cli.emit(locked=True, holder=holder)
+        datafiles.emit(locked=True, holder=holder)
         return 3
     report = {"client": args.client, "dates": [], "failures": [], "stopped": None}
     budget = args.max_chunks
     try:
-        branch = cli.make_branch(args)
+        branch = datafiles.make_branch(args)
         branch.fetch()
-        for day in cli.recent_days(branch, args.days):
-            stats = cli.counts(cli.read_records(branch, cli.raw_path(day)), cli.read_records(branch, cli.ai_path(day, args.language)))
+        for day in datafiles.recent_days(branch, args.days):
+            stats = datafiles.counts(datafiles.read_records(branch, datafiles.raw_path(day)), datafiles.read_records(branch, datafiles.ai_path(day, args.language)))
             if stats["pending"] == 0:
                 continue
             if budget is not None and budget <= 0:
@@ -99,13 +99,13 @@ def cmd_run_local(args):
             if budget is not None:
                 budget -= ran
             reason = f"{ran} chunks, {len(failures)} failed"
-            entry = cli.record_run(branch, day, args.language, f"local-{args.client}", reason)
+            entry = datafiles.record_run(branch, day, args.language, f"local-{args.client}", reason)
             report["dates"].append({k: entry[k] for k in ("date", "total", "done", "pending")})
             if budget is not None and budget <= 0 and entry["pending"] > 0:
                 report["stopped"] = "chunk budget reached"
                 break
     finally:
-        cli.release_lock(root)
+        localtask.release_lock(root)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

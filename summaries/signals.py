@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import requests
 
-from summaries import cli
+from summaries import datafiles
 
 HF_DAILY = "https://huggingface.co/api/daily_papers"
 USER_AGENT = "daily-arxiv-signals/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
@@ -70,17 +70,17 @@ def cmd_hf_signals(args):
     today = date.fromisoformat(args.today) if args.today else datetime.now(timezone.utc).date()
     lists = [(today - timedelta(days=n)).isoformat() for n in range(args.days)]
     upvotes = hf_upvotes(lists, fetch_hf_list)
-    branch = cli.make_branch(args)
+    branch = datafiles.make_branch(args)
     branch.fetch()
     start = (today - timedelta(days=args.days + 7)).isoformat()
-    days = sorted(d for p in branch.list_files("data/") if (m := cli.RAW_FILE.match(p)) and start <= (d := m.group(1)) <= today.isoformat())
+    days = sorted(d for p in branch.list_files("data/") if (m := datafiles.RAW_FILE.match(p)) and start <= (d := m.group(1)) <= today.isoformat())
     changed = []
 
     def build(current):
         files = {}
         changed.clear()
         for day in days:
-            ids = {r["id"] for r in cli.read_records(current, cli.raw_path(day))}
+            ids = {r["id"] for r in datafiles.read_records(current, datafiles.raw_path(day))}
             found = {paper_id: count for paper_id, count in upvotes.items() if paper_id in ids}
             if found and found != read_signals(current, day):
                 files[signals_path(day)] = dump_signals(found)
@@ -89,7 +89,7 @@ def cmd_hf_signals(args):
 
     if build(branch):
         branch.publish(build, f"signals: Hugging Face upvotes for {', '.join(changed)}")
-    cli.emit(lists=len(lists), papers=len(upvotes), changed=list(changed))
+    datafiles.emit(lists=len(lists), papers=len(upvotes), changed=list(changed))
     return 0
 
 

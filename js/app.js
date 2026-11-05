@@ -370,7 +370,7 @@ function openLinkedPaper(id) {
   select(id);
 }
 
-// --- URL JSON mode (used by SKILL/scripts/fetch.sh) -------------------------
+// --- URL JSON mode (?json=<category>&keywords=a,b&author=x, for scripts) ------
 
 function jsonParams() {
   const params = new URLSearchParams(window.location.search);

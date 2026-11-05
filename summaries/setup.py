@@ -7,7 +7,7 @@ the logged-in `gh` CLI and never asks for, reads or stores an API key.
 
 import subprocess
 
-from summaries import cli
+from summaries import github
 from summaries.providers import KEY_ENV
 
 DEFAULT_CATEGORIES = "cs.CV, cs.AI, cs.LG, cs.CL, stat.ML"
@@ -16,7 +16,7 @@ DEFAULT_CATEGORIES = "cs.CV, cs.AI, cs.LG, cs.CL, stat.ML"
 def _try(*args):
     """Run gh; return None on success or the error text."""
     try:
-        cli.gh(*args)
+        github.gh(*args)
         return None
     except subprocess.CalledProcessError as error:
         return (error.stderr or str(error)).strip()
@@ -29,7 +29,7 @@ def site_url(slug):
 
 
 def cmd_setup(args):
-    slug = cli.repo_slug(args.repo)
+    slug = github.repo_slug(args.repo)
     variables = {"CATEGORIES": args.categories, "LANGUAGE": args.language, "SUMMARY_MODE": args.mode}
     if args.provider:
         variables["SUMMARY_PROVIDER"] = args.provider
@@ -38,7 +38,7 @@ def cmd_setup(args):
     if args.commit_name and args.commit_email:
         variables.update(COMMIT_NAME=args.commit_name, COMMIT_EMAIL=args.commit_email)
     for name, value in variables.items():
-        cli.gh("variable", "set", name, "-R", slug, "--body", value)
+        github.gh("variable", "set", name, "-R", slug, "--body", value)
     notes = [f"Set {', '.join(variables)} on {slug}."]
 
     blocked = [wf for wf in ("run.yml", "summarize-api.yml", "tests.yml") if _try("workflow", "enable", wf, "-R", slug)]

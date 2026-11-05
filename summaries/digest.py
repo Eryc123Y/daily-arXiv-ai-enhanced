@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 import requests
 
-from summaries import cli
+from summaries import datafiles, github
 from summaries.databranch import PublishError
 from summaries.interests import load_topics, topics_for
 from summaries.records import dedupe_by_id, has_summary
@@ -352,7 +352,7 @@ def deepen(picks, found, brief, args, work, problems):
 
 
 def site_url(repo_dir):
-    owner, name = cli.repo_slug(repo_dir).split("/", 1)
+    owner, name = github.repo_slug(repo_dir).split("/", 1)
     return f"https://{owner.lower()}.github.io/{name}/"
 
 
@@ -496,19 +496,19 @@ def _read(path):
 
 def previous_hot(branch, day):
     """The most upvoted papers of the batch before `day`, from its data/<day>_hf.json."""
-    earlier = sorted(d for p in branch.list_files("data/") if (m := cli.RAW_FILE.match(p)) and (d := m.group(1)) < day)
+    earlier = sorted(d for p in branch.list_files("data/") if (m := datafiles.RAW_FILE.match(p)) and (d := m.group(1)) < day)
     if not earlier:
         return []
     prev = earlier[-1]
     upvotes = read_signals(branch, prev)
-    titles = {r["id"]: r.get("title", "") for r in cli.read_records(branch, cli.raw_path(prev))}
+    titles = {r["id"]: r.get("title", "") for r in datafiles.read_records(branch, datafiles.raw_path(prev))}
     ranked = sorted(((n, pid) for pid, n in upvotes.items() if pid in titles and n >= HOT_UPVOTES), reverse=True)
     return [(prev, pid, titles[pid], n) for n, pid in ranked[:HOT_PAPERS]]
 
 
 def newest_day(branch, today, days):
     start = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
-    found = (m.group(1) for p in branch.list_files("data/") if (m := cli.RAW_FILE.match(p)))
+    found = (m.group(1) for p in branch.list_files("data/") if (m := datafiles.RAW_FILE.match(p)))
     candidates = sorted((d for d in found if start <= d <= today), reverse=True)
     return candidates[0] if candidates else None
 
@@ -556,15 +556,15 @@ def cmd_digest(args):
     if report_path.exists() and not args.force:
         emit(status="exists", path=str(report_path))
         return 0
-    branch = cli.make_branch(args)
+    branch = datafiles.make_branch(args)
     branch.fetch()
     site = args.site or site_url(args.repo)
     day = args.date or newest_day(branch, today, args.days)
     if day is None or (ledger_marker(day) in _read(vault / "ledger.md") and not args.force):
         return nothing_new(args, vault, today, day, site, report_path)
 
-    raw = cli.read_records(branch, cli.raw_path(day))
-    ai_records = cli.read_records(branch, cli.ai_path(day, args.language))
+    raw = datafiles.read_records(branch, datafiles.raw_path(day))
+    ai_records = datafiles.read_records(branch, datafiles.ai_path(day, args.language))
     brief, feedback = _read(vault / "project-brief.md"), _read(vault / "feedback.md")
     topics = load_topics()
     found = build_candidates(raw, ai_records, topics, radar_patterns(brief), known_ids(vault, today))
@@ -586,7 +586,7 @@ def cmd_digest(args):
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)
     try:
-        cli.record_run(branch, day, args.language, "report")
+        datafiles.record_run(branch, day, args.language, "report")
     except (PublishError, subprocess.SubprocessError) as error:
         problems.append(f"run log not updated: {error}")
     emit(
