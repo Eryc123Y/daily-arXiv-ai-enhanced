@@ -118,3 +118,18 @@ def test_missed_warns_about_rows_it_skips(tmp_path, remote_and_clone, monkeypatc
     assert out["added"] == 1
     assert out["skipped"] == {"project-radar.md": [swapped], "missed.md": ["| 11-01 | 2610.33333 | Short date | 中 | 2026-10-20 | Eric |"]}
     assert "project-radar.md" in captured.err and "missed.md" in captured.err
+
+
+def test_a_skipped_row_is_not_counted_and_does_not_block_a_valid_row():
+    bad = "| 2026-11-07 | 2610.40564 | Single Algorithm | 低 | 2026-10-30 | Eric |"
+    text = missed.HEADER + bad + "\n"
+    assert missed.unreadable_rows(text) == [bad]
+    assert missed.recent_misses(text, "2026-11-08") == (0, 0)
+    rows = missed.backfill_rows(RADAR)
+    known = {paper_id for _, paper_id, _, _ in missed._rows(text)}
+    assert [m.row.paper_id for m in missed.find_misses(rows, {"2610.40564": "2026-10-30"}, known)] == ["2610.40564"]
+
+
+def test_a_bad_row_mentioning_arxiv_id_is_not_taken_for_the_header():
+    bad = "| 2610.40564 | 2026-11-08 | Why the arXiv ID is not enough | 中（回溯） | r | a |"
+    assert missed.unreadable_rows(RADAR + bad + "\n") == [bad]

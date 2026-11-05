@@ -43,33 +43,46 @@ class Miss:
     listed: str
 
 
-def _rows(text):
+def _is_header(line):
+    cells = line.split("|")
+    return len(cells) > 2 and cells[2].strip() == "arXiv ID"
+
+
+def _parse(text):
+    """(rows, unreadable) of a radar or missed table.
+
+    A row is (found, arXiv ID, title, level) with a date, an ID and a level of
+    high, medium or 可借鉴 in those columns. Any other table line except the
+    header and the separator is unreadable (a hand edit that moved a column or
+    used another level) and is left out of every count.
+    """
+    rows, unreadable = [], []
     for line in (text or "").splitlines():
+        if not line.startswith("|") or SEPARATOR.match(line) or _is_header(line):
+            continue
         match = ROW.match(line)
-        if match:
-            found, paper_id, title, level = (part.strip() for part in match.groups())
-            yield found, paper_id, title, level
+        row = tuple(part.strip() for part in match.groups()) if match else None
+        if row and LEVEL.match(row[3]):
+            rows.append(row)
+        else:
+            unreadable.append(line)
+    return rows, unreadable
+
+
+def _rows(text):
+    return _parse(text)[0]
 
 
 def unreadable_rows(text):
-    """Table rows that `_rows` skips or whose level is not high, medium or 可借鉴: a hand edit that moved a column."""
-    bad = []
-    for line in (text or "").splitlines():
-        if not line.startswith("|") or SEPARATOR.match(line) or "arXiv ID" in line:
-            continue
-        match = ROW.match(line)
-        if not match or not LEVEL.match(match.group(4).strip()):
-            bad.append(line)
-    return bad
+    return _parse(text)[1]
 
 
 def backfill_rows(radar_text):
     """The radar rows Sunday's look-back added, with their level without the "（回溯…）" note."""
     rows = []
     for found, paper_id, title, level in _rows(radar_text):
-        grade = LEVEL.match(level)
-        if "回溯" in level and grade:
-            rows.append(Row(found, paper_id, title, grade.group(1)))
+        if "回溯" in level:
+            rows.append(Row(found, paper_id, title, LEVEL.match(level).group(1)))
     return rows
 
 
