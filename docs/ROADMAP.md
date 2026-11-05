@@ -6,7 +6,7 @@ Updated 2026-11-04 after aligning with the reader (Eric). The competitor compari
 
 - **Who it is for**: Eric first, and soon something he can share. What sharing needs (a clear licence, labels, a fork that deploys cleanly) comes before the server. The radar and the project brief stay private in his vault.
 - **Capacity**: Eric is in exams until 2026-11-16 and has no time for it before then. From 11-16 he has 3 hours or more a week, for decisions, reviews and trying new features; Claude does the building. Feature work stops in January for the ICML 2027 deadline (late January; check the official date).
-- **Server**: a hosted service, Cloudflare Pages + D1 or Supabase (picked in the M2 spec), not the VPS. The `data` branch stays the source of truth, and `js/data-source.js` is the only page code that changes backend.
+- **Server**: a hosted service, Cloudflare Pages + D1 with Cloudflare Access (decided 2026-11-05, see the M2 spec), not the VPS. The `data` branch stays the source of truth, and `js/data-source.js` is the only page code that changes backend.
 
 ## Objectives and how they are measured
 
@@ -30,15 +30,17 @@ Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on
 | Push notifications that reach the phone: cause found (a scheduled run is unattended and cannot turn Remote Control on); the messenger routine is the phone channel, and the run's last line says when the push was not sent | Claude | **Done** (11-04, docs only) |
 | Sharing groundwork that needs no decision: summaries labelled as written from the abstract and failed loads shown as failures (both already done), the measured cost in the README, a guard that keeps vault files off the public branch | Claude | **Done** (11-04) |
 | Specs for M1 and M2: [m1-shareable.md](specs/m1-shareable.md), [m2-reading-state-and-ratings.md](specs/m2-reading-state-and-ratings.md); open questions for Eric in each | Claude | **Done** (11-04) |
-| Maintainability notes, [maintainability.md](maintainability.md): four decisions for Eric (types, module layout, record shapes, upstream leftovers) and fixes that need none | Claude | **Done** (11-04) |
+| Maintainability notes, [maintainability.md](maintainability.md): four decisions (types, module layout, record shapes, upstream leftovers), decided 11-05; D2 and D4 in M0, D1 and D3 in M1 | Claude | **Done** (11-04, decided 11-05) |
+| Delete upstream leftovers (D4) and move shared helpers out of `cli.py` (D2) | Claude | On Track |
 | Messenger at 11:30 Sun-Fri, task model set to Sonnet, three idle routines deleted | Eric | **Needs Eric** |
 
 ### M1 · 2026-11-16 to 11-29 · shareable
 
 | Item | Owner | Status |
 |---|---|---|
-| Licence: README already names upstream's Modified Apache License (section 9); Eric decides whether to ask upstream anything | Eric | **Needs Eric** |
-| "Deploy your own" checked on a fresh fork end to end (needs Eric's OK to create a throwaway repository) | Claude | **Needs Eric** |
+| Licence: README already names upstream's Modified Apache License (section 9); share as it is, ask upstream only before a wide launch (Eric, 11-05) | Eric | **Done** |
+| "Deploy your own" checked on a fresh fork end to end, in a temporary repository `arxiv-deploy-test` (approved 11-05; Claude asks again before deleting it) | Claude | Not Started |
+| Types: pyright and ruff in CI, JSDoc checked by `tsc --checkJs`, record shapes named once (maintainability D1, D3) | Claude | Not Started |
 | A short shareable README and a link Eric can send | Claude; Eric approves | Not Started |
 | Feedback from the first two weeks of reports folded into `feedback.md` | Eric 30 min, Claude summarises | Not Started |
 
@@ -46,7 +48,7 @@ Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on
 
 | Item | Owner | Status |
 |---|---|---|
-| Backend: Cloudflare Pages + D1 or Supabase, fed from the `data` branch after each push; one login for Eric | Claude; Eric creates the account | Not Started |
+| Backend: Cloudflare Pages + D1 with Cloudflare Access (decided 11-05), fed from the `data` branch after each push; one login for Eric | Claude; Eric creates the account | Not Started |
 | Reading state: read/unread, star, read later, "since my last visit" | Claude | Not Started |
 | Ratings: up or down on each paper, on the page and by reply in the messenger chat; the writer sees recent ratings; the hit-rate measure goes live | Claude | Not Started |
 | Followed authors: a weekly line on Sunday's page | Claude | Not Started |
@@ -79,7 +81,7 @@ Only fixes to the daily pipeline. Nothing that needs Eric's time.
 - Trends: a topic-by-week chart and rising keywords.
 - A status page with a re-run button and usage or API cost.
 - The report's picks on the site, behind the login (they reveal the research direction).
-- **Other sources come from a separate project.** Multi-source aggregation and an academic search MCP (OpenAlex or Crossref metadata; alphaXiv, Hugging Face, OpenReview, Semantic Scholar, GitHub, X and Reddit signals; publisher APIs such as Elsevier and IEEE Xplore with the reader's own keys for full text) are the job of **LitScout** ([Eryc123Y/litscout-mcp](https://github.com/Eryc123Y/litscout-mcp); first called Ibid), Eric's open-source scholar MCP planned on 2026-10-22: self-hosted on the user's Cloudflare account, v0.1 sources Semantic Scholar, OpenAlex, arXiv, OpenReview, CORE and a venue table; implementation after his exams. Publisher APIs are not in its v0.1 plan. This site does not build its own fetchers (Eric, 2026-11-04); once LitScout is ready, the pipeline reads its records, merged per paper by arXiv ID or DOI. Why it matters: [measurements/arxiv-coverage.md](measurements/arxiv-coverage.md) found that 62-85% of top ML and CV conference papers are on arXiv, but only 8-50% of IEEE, Elsevier and graphics journal papers and none of Journal of Vision, which is where much of the stereo and 3D-video work appears. Division of work from the 2026-11-02 measurements still holds: code fetches, dedupes and tags; a cheap model screens by meaning; one stronger model writes the report; full text only where the grade depends on it. Publisher abstracts are often copyrighted, so they are stored only behind the M2 login.
+- **Other sources come from a separate project.** Multi-source aggregation and an academic search MCP (OpenAlex or Crossref metadata; alphaXiv, Hugging Face, OpenReview, Semantic Scholar, GitHub, X and Reddit signals; publisher APIs such as Elsevier and IEEE Xplore with the reader's own keys for full text) are the job of **LitScout** ([Eryc123Y/litscout-mcp](https://github.com/Eryc123Y/litscout-mcp); first called Ibid), Eric's open-source scholar MCP planned on 2026-10-22: self-hosted on the user's Cloudflare account, v0.1 sources Semantic Scholar, OpenAlex, arXiv, OpenReview, CORE and a venue table; v0.1 is built from 2026-11-16 in parallel with M1, in its own repository (Eric, 11-05). Publisher APIs are not in its v0.1 plan. This site does not build its own fetchers (Eric, 2026-11-04); once LitScout is ready, the pipeline reads its records, merged per paper by arXiv ID or DOI. Why it matters: [measurements/arxiv-coverage.md](measurements/arxiv-coverage.md) found that 62-85% of top ML and CV conference papers are on arXiv, but only 8-50% of IEEE, Elsevier and graphics journal papers and none of Journal of Vision, which is where much of the stereo and 3D-video work appears. Division of work from the 2026-11-02 measurements still holds: code fetches, dedupes and tags; a cheap model screens by meaning; one stronger model writes the report; full text only where the grade depends on it. Publisher abstracts are often copyrighted, so they are stored only behind the M2 login.
 
 ## Done
 
