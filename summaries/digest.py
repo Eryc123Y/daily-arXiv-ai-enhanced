@@ -13,6 +13,7 @@ the model), project-brief.md (radar regex and collision levels),
 project-radar.md and ledger.md (both appended), and digests/<today>.md.
 """
 
+import argparse
 import json
 import os
 import re
@@ -307,12 +308,25 @@ def model_argv(command, model):
     return [part.replace("{model}", model) for part in template]
 
 
+def fallback_argv(value):
+    """--fallback: '' for none, otherwise a JSON list of non-empty strings."""
+    if value == "":
+        return None
+    try:
+        argv = json.loads(value)
+    except json.JSONDecodeError as error:
+        raise argparse.ArgumentTypeError(f"not JSON: {error}") from error
+    if not (isinstance(argv, list) and argv and all(isinstance(part, str) and part for part in argv)):
+        raise argparse.ArgumentTypeError("expected a JSON list of non-empty strings")
+    return argv
+
+
 def clients(args):
     """The writer client, then the fallback; an explicit --command or an empty --fallback has none."""
     primary = model_argv(args.command, args.model)
     if args.command or not args.fallback:
         return [primary]
-    return [primary, json.loads(args.fallback)]
+    return [primary, args.fallback]
 
 
 def ask(argvs, prompt, cwd):
@@ -566,7 +580,7 @@ def choose(args, day, found, topics, brief, feedback, work):
     picks, parse_problems = parse_picks(answer, found.listed, [t["name"] for t in topics])
     problems = [*(f"{error}; {argv[0]} wrote the report instead" for error in failed), *parse_problems]
     if not (picks["topics"] or picks["radar"] or picks["other"] or picks["note"]):
-        raise RuntimeError(f"no usable lines in the answer (see {work / 'writer.out.txt'})")
+        raise RuntimeError("; ".join([*failed, f"no usable lines in the answer from {argv[0]} (see {work / 'writer.out.txt'})"]))
     picks = deepen(picks, found, brief, argv, args.repo, work, problems)
     titles = {pid: found.records[pid].get("title", "") for pid in picked_ids(picks)}
     saved = {"day": day, "total": found.total, **picks, "titles": titles}
@@ -637,7 +651,7 @@ def add_parser(sub):
     digest.add_argument("--force", action="store_true", help="rewrite today's report and report a day again")
     digest.add_argument("--model", default="sonnet")
     digest.add_argument("--command", help='headless client, JSON list with {model}; the prompt comes on stdin')
-    digest.add_argument("--fallback", default=json.dumps(FALLBACK_COMMAND), help="client tried when the default one fails (JSON list, no fallback with --command); '' for none")
+    digest.add_argument("--fallback", type=fallback_argv, default=FALLBACK_COMMAND, help="client tried when the default one fails (JSON list, no fallback with --command); '' for none")
     digest.add_argument("--site", help="reading page URL; default from the repository")
     digest.add_argument("--cache", default=".cache/digest", help="work files (prompts, answers, picks)")
     digest.set_defaults(func=cmd_digest)

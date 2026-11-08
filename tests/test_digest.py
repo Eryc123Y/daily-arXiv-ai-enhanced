@@ -508,3 +508,21 @@ def test_the_error_names_both_clients_when_both_fail(tmp_path, remote_and_clone,
 
     assert out["status"] == "error" and calls == ["claude", "codex"]
     assert "claude exited" in out["reason"] and "codex exited" in out["reason"]
+
+
+@pytest.mark.parametrize("value", ["not-json", "[]", "null", "[123]", '["codex", ""]'])
+def test_a_malformed_fallback_is_refused_before_any_call(value, capsys):
+    with pytest.raises(SystemExit):
+        main(["digest", "--dir", "v", "--fallback", value])
+    assert "--fallback" in capsys.readouterr().err
+
+
+def test_an_unusable_fallback_answer_keeps_the_claude_error(tmp_path, remote_and_clone, monkeypatch, capsys):
+    def model(argv, prompt, cwd):
+        if argv[0] == "claude":
+            raise RuntimeError("claude exited with 1: OAuth session expired")
+        return "Sorry, I cannot produce the report."
+
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
+
+    assert out["status"] == "error" and "OAuth session expired" in out["reason"] and "codex" in out["reason"]
