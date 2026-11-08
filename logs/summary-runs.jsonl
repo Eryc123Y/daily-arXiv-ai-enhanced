@@ -16,3 +16,4 @@
 {"date": "2026-11-06", "path": "crawl", "at": "2026-11-06T12:33:55+00:00", "total": 492, "added": 492}
 {"date": "2026-11-06", "path": "local-claude", "at": "2026-11-06T13:35:04+00:00", "total": 492, "done": 0, "pending": 492, "reason": "12 chunks, 12 failed"}
 {"date": "2026-11-06", "path": "claude-code", "at": "2026-11-06T13:40:55+00:00", "total": 492, "done": 492, "pending": 0}
+{"date": "2026-11-06", "path": "report", "at": "2026-11-08T06:02:07+00:00", "total": 492, "done": 492, "pending": 0}
