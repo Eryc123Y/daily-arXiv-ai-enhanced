@@ -47,6 +47,8 @@ REFERENCES = re.compile(r"\n\s*(References|REFERENCES|Bibliography)\s*\n")
 FULLTEXT_CHARS = 60_000
 MODEL_TIMEOUT = 900
 DEFAULT_COMMAND = ["claude", "-p", "--model", "{model}", "--tools", "", "--strict-mcp-config"]
+# Tried when the default client fails, for example when the claude sign-in has expired.
+FALLBACK_COMMAND = ["codex", "exec", "-s", "read-only", "--skip-git-repo-check", "-c", 'model_reasoning_effort="medium"', "-"]
 USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
 NO_STEREO = "今日无 2D→3D / 立体视觉相关论文"
 UNREAD_ACTION = "仅摘要；需要时读全文"
@@ -305,6 +307,25 @@ def model_argv(command, model):
     return [part.replace("{model}", model) for part in template]
 
 
+def clients(args):
+    """The writer client, then the fallback; an explicit --command or an empty --fallback has none."""
+    primary = model_argv(args.command, args.model)
+    if args.command or not args.fallback:
+        return [primary]
+    return [primary, json.loads(args.fallback)]
+
+
+def ask(argvs, prompt, cwd):
+    """Try each client in turn: (the argv that answered, its answer, the errors of those that failed)."""
+    errors = []
+    for argv in argvs:
+        try:
+            return argv, run_model(argv, prompt, cwd), errors
+        except RuntimeError as error:
+            errors = [*errors, str(error)]
+    raise RuntimeError("; ".join(errors))
+
+
 def run_model(argv, prompt, cwd):
     """One headless call with the prompt on stdin; caching is off because nothing is reused."""
     try:
@@ -327,7 +348,7 @@ def run_model(argv, prompt, cwd):
     return result.stdout
 
 
-def deepen(picks, found, brief, args, work, problems):
+def deepen(picks, found, brief, argv, cwd, work, problems):
     """Read the full text of the radar papers marked `check` and regrade them.
 
     Without a PDF or an answer the abstract grades stay, marked 仅摘要.
@@ -340,7 +361,7 @@ def deepen(picks, found, brief, args, work, problems):
     if not papers:
         return picks
     try:
-        answer = run_model(model_argv(args.command, args.model), deep_prompt(brief, papers), args.repo)
+        answer = run_model(argv, deep_prompt(brief, papers), cwd)
     except RuntimeError as error:
         problems.append(f"full-text check failed: {error}")
         return picks
@@ -534,19 +555,23 @@ def nothing_new(args, vault, today, day, site, report_path):
 
 
 def choose(args, day, found, topics, brief, feedback, work):
-    """The model's picks (writer call, then the full-text check), and the problems met."""
+    """The model's picks (writer call, then the full-text check), the problems met and the client that wrote them.
+
+    The full-text check uses the client that answered the writer call, so a failed one is not tried twice.
+    """
     prompt = writer_prompt(day, found, topics, feedback, brief)
     (work / "writer.prompt.txt").write_text(prompt, encoding="utf-8")
-    answer = run_model(model_argv(args.command, args.model), prompt, args.repo)
+    argv, answer, failed = ask(clients(args), prompt, args.repo)
     (work / "writer.out.txt").write_text(answer, encoding="utf-8")
-    picks, problems = parse_picks(answer, found.listed, [t["name"] for t in topics])
+    picks, parse_problems = parse_picks(answer, found.listed, [t["name"] for t in topics])
+    problems = [*(f"{error}; {argv[0]} wrote the report instead" for error in failed), *parse_problems]
     if not (picks["topics"] or picks["radar"] or picks["other"] or picks["note"]):
         raise RuntimeError(f"no usable lines in the answer (see {work / 'writer.out.txt'})")
-    picks = deepen(picks, found, brief, args, work, problems)
+    picks = deepen(picks, found, brief, argv, args.repo, work, problems)
     titles = {pid: found.records[pid].get("title", "") for pid in picked_ids(picks)}
     saved = {"day": day, "total": found.total, **picks, "titles": titles}
     (work / "picks.json").write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
-    return picks, problems
+    return picks, problems, argv[0]
 
 
 def cmd_digest(args):
@@ -574,7 +599,7 @@ def cmd_digest(args):
     work = Path(args.cache) / day
     work.mkdir(parents=True, exist_ok=True)
     try:
-        picks, problems = choose(args, day, found, topics, brief, feedback, work)
+        picks, problems, client = choose(args, day, found, topics, brief, feedback, work)
     except RuntimeError as error:
         emit(status="error", date=day, reason=str(error))
         return 1
@@ -595,6 +620,7 @@ def cmd_digest(args):
         date=day,
         push=push_message(day, found, picks, site),
         report=report,
+        client=client,
         problems=problems[:20],
     )
     return 0
@@ -611,6 +637,7 @@ def add_parser(sub):
     digest.add_argument("--force", action="store_true", help="rewrite today's report and report a day again")
     digest.add_argument("--model", default="sonnet")
     digest.add_argument("--command", help='headless client, JSON list with {model}; the prompt comes on stdin')
+    digest.add_argument("--fallback", default=json.dumps(FALLBACK_COMMAND), help="client tried when the default one fails (JSON list, no fallback with --command); '' for none")
     digest.add_argument("--site", help="reading page URL; default from the repository")
     digest.add_argument("--cache", default=".cache/digest", help="work files (prompts, answers, picks)")
     digest.set_defaults(func=cmd_digest)

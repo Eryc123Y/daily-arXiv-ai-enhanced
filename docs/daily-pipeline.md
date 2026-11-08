@@ -88,6 +88,8 @@ On 2026-11-02, in two reruns, the new report's radar named the same two papers a
 
 ## Usage gate and fallback
 
+When the report's `claude -p` call fails (on 2026-11-05 and 11-06 its sign-in had expired: "OAuth session expired and could not be refreshed", and both days had no report until it was rerun by hand), `digest` asks Codex instead (`codex exec -s read-only`, `--fallback` to change or `''` to turn off; never with an explicit `--command`). The full-text check then goes to the client that answered. The output's `client` names the writer, `problems` carries the claude error, and the task adds a line asking Eric to sign in again. The summaries already had a fallback: Haiku subagents when every headless chunk fails.
+
 At 80% of the 5-hour or weekly window the task stops using the subscription and runs `summaries handover`, which dispatches `summarize-api.yml` when the provider's key secret exists and otherwise pauses until a later run (`paused-no-key` in `logs/summary-runs.jsonl`, as on 2026-11-02). With Haiku 5.5 an API fallback costs about $0.15 for a 450-paper day. To turn it on, set the secret once (the value is typed at the prompt, not on the command line):
 
 ```bash
