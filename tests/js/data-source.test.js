@@ -13,7 +13,7 @@ function source(routes) {
     const answer = route ? routes[route] : 404;
     return answer instanceof Error ? Promise.reject(answer) : respond(...[].concat(answer));
   };
-  return createStaticSource({ fetch: fetchImpl, url: path => `https://example.test/${path}`, api: path => `https://api.example.test/${path}` });
+  return createStaticSource({ fetch: fetchImpl, url: path => `https://example.test/${path}` });
 }
 
 test('a day without summaries yet loads its papers as pending', async () => {
@@ -53,12 +53,10 @@ test('upvotes are optional: a missing, broken or unreachable file leaves the day
   }
 });
 
-test('the pipeline status reads the run log and the latest crawl run, and tolerates both missing', async () => {
-  const log = '{"date":"2026-11-02","path":"local-claude","at":"2026-11-02T13:59:36+00:00","total":1,"done":1,"pending":0}\n';
-  const runs = JSON.stringify({ workflow_runs: [{ status: 'completed', conclusion: 'success', updated_at: '2026-11-02T08:07:02Z' }] });
-  const status = await source({ 'logs/summary-runs.jsonl': [200, log], 'actions/workflows/run.yml/runs?per_page=1': [200, runs] }).loadStatus();
+test('the pipeline status reads the run log and tolerates it missing', async () => {
+  const log = '{"date":"2026-11-02","path":"crawl","at":"2026-11-02T02:07:02+00:00","total":1,"added":1}\n';
+  const status = await source({ 'logs/summary-runs.jsonl': [200, log] }).loadStatus();
   assert.equal(status.log.length, 1);
-  assert.equal(status.crawl.conclusion, 'success');
-  const empty = await source({ 'actions/workflows/run.yml/runs?per_page=1': 403 }).loadStatus();
-  assert.deepEqual(empty, { log: [], crawl: null });
+  const empty = await source({}).loadStatus();
+  assert.deepEqual(empty, { log: [] });
 });

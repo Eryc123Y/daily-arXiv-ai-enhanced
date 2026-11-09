@@ -1,6 +1,6 @@
 import os
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import scrapy
 
@@ -12,6 +12,10 @@ CODE_REPO = re.compile(
     r"|anonymous\.4open\.science/r/[\w.-]+)"
 )
 PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/[\w.\-/]*)?")
+# "Fri, 6 Nov 2026 (showing 11 of 11 entries )", or "(continued, showing ...)" on a later page.
+DAY_HEADING = re.compile(r"^\s*\w{3}, (\d{1,2} \w{3} \d{4})")
+TOTAL = re.compile(r"Total of (\d+) entries")
+PAGE_SIZE = 2000
 
 
 def _text(selector):
@@ -34,13 +38,22 @@ class ArxivSpider(scrapy.Spider):
     name = "arxiv"
     allowed_domains = ["arxiv.org"]
 
-    def __init__(self, categories=None, *args, **kwargs):
+    def __init__(self, categories=None, listing="new", *args, **kwargs):
         super().__init__(*args, **kwargs)
         raw = categories or os.environ.get("CATEGORIES", "cs.CV")
         self.target_categories = {c.strip() for c in raw.split(",") if c.strip()}
-        self.start_urls = [
-            f"https://arxiv.org/list/{cat}/new?show=2000" for cat in self.target_categories
-        ]
+        self.listing = listing
+        if listing == "recent":
+            # The last five announcements, one <dl> per day, without abstracts.
+            self.start_urls = [self._recent_url(cat, 0) for cat in self.target_categories]
+        else:
+            self.start_urls = [
+                f"https://arxiv.org/list/{cat}/new?show=2000" for cat in self.target_categories
+            ]
+
+    @staticmethod
+    def _recent_url(category, skip):
+        return f"https://arxiv.org/list/{category}/recent?skip={skip}&show={PAGE_SIZE}"
 
     @staticmethod
     def cross_list_cutoff(new_papers, today=None):
@@ -109,6 +122,9 @@ class ArxivSpider(scrapy.Spider):
         return None
 
     def parse(self, response):
+        if self.listing == "recent":
+            yield from self.parse_recent(response)
+            return
         cross_start, replace_start = self._sections(response)
         new, cross = [], []
         for dt in response.css("div[id=dlpage] dl dt"):
@@ -130,3 +146,29 @@ class ArxivSpider(scrapy.Spider):
                 self.logger.info(f"Skipping late cross-list {paper['id']}")
                 continue
             yield paper
+
+    def parse_recent(self, response):
+        """Papers of the recent listing, each tagged with the day it was announced ("announced").
+
+        The listing does not separate cross-lists, so a paper whose primary
+        category is another one counts as a late cross-list when it is numbered
+        before the month of that day's oldest paper of this category.
+        """
+        category = re.search(r"/list/([^/]+)/recent", response.url).group(1)
+        for block in response.css("div[id=dlpage] dl"):
+            heading = DAY_HEADING.match(block.css("h3::text").get() or "")
+            if not heading:
+                continue
+            day = datetime.strptime(heading.group(1), "%d %b %Y").date().isoformat()
+            papers = [self._paper(dt, dt.xpath("following-sibling::dd[1]")) for dt in block.css("dt")]
+            own = [p for p in papers if p["categories"][:1] == [category]]
+            cutoff = self.cross_list_cutoff(own, today=day)
+            for paper in papers:
+                if paper["categories"][:1] != [category] and self.is_late_cross_list(paper["id"], cutoff):
+                    self.logger.info(f"Skipping late cross-list {paper['id']}")
+                    continue
+                yield {**paper, "announced": day}
+        total = TOTAL.search(response.text)
+        skip = int(re.search(r"skip=(\d+)", response.url).group(1)) if "skip=" in response.url else 0
+        if total and skip + PAGE_SIZE < int(total.group(1)):
+            yield response.follow(self._recent_url(category, skip + PAGE_SIZE), callback=self.parse)

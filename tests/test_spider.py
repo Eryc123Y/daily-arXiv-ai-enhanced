@@ -95,3 +95,51 @@ def test_a_repo_link_wins_over_a_project_page():
     assert code_url_of("https://me.github.io/proj", "https://github.com/me/proj") == "https://github.com/me/proj"
     assert code_url_of("https://me.gitlab.io/proj/") == "https://me.gitlab.io/proj/"
     assert code_url_of("https://example.com/proj") is None
+
+
+RECENT_FIXTURE = Path(__file__).parent / "fixtures" / "arxiv_recent_cs_CV.html"
+RECENT_URL = "https://arxiv.org/list/cs.CV/recent?skip=0&show=2000"
+
+
+def parse_recent(body=None, url=RECENT_URL):
+    response = HtmlResponse(url=url, body=body or RECENT_FIXTURE.read_bytes(), encoding="utf-8", request=Request(url))
+    return list(ArxivSpider(categories="cs.CV", listing="recent").parse(response))
+
+
+def test_recent_listing_mode_reads_the_last_announcements(monkeypatch):
+    monkeypatch.setenv("CATEGORIES", "cs.CV, stat.ML")
+    urls = sorted(ArxivSpider(listing="recent").start_urls)
+    assert urls == [
+        "https://arxiv.org/list/cs.CV/recent?skip=0&show=2000",
+        "https://arxiv.org/list/stat.ML/recent?skip=0&show=2000",
+    ]
+
+
+def test_recent_listing_tags_each_paper_with_its_announcement_day():
+    """Fixture: Monday has a new paper, a same-month cross-list and a late cross-list; Friday one paper."""
+    items = parse_recent()
+    assert [(i["id"], i["announced"]) for i in items] == [
+        ("2611.00001", "2026-11-09"),
+        ("2611.00002", "2026-11-09"),
+        ("2611.00004", "2026-11-06"),
+    ]
+    friday = items[-1]
+    assert friday["title"] == "A Friday Paper"
+    assert friday["authors"] == ["Edsger Dijkstra"]
+    assert friday["categories"] == ["cs.CV"]
+    assert friday["code_url"] == "https://github.com/ed/friday"
+    assert items[1]["categories"] == ["cs.LG", "cs.CV"]
+
+
+def test_recent_listing_follows_the_next_page_when_there_are_more_entries():
+    body = RECENT_FIXTURE.read_text().replace("Total of 4 entries", "Total of 2500 entries").encode()
+    results = parse_recent(body)
+    requests = [r for r in results if isinstance(r, Request)]
+    assert [r.url for r in requests] == ["https://arxiv.org/list/cs.CV/recent?skip=2000&show=2000"]
+    assert sum(1 for r in results if isinstance(r, dict)) == 3
+
+
+def test_recent_listing_continued_page_keeps_the_day_heading():
+    body = RECENT_FIXTURE.read_text().replace("Fri, 6 Nov 2026 (showing 1 of 1 entries )", "Fri, 6 Nov 2026 (continued, showing 1 of 1 entries )")
+    items = parse_recent(body.encode(), url="https://arxiv.org/list/cs.CV/recent?skip=2000&show=2000")
+    assert items[-1]["announced"] == "2026-11-06"

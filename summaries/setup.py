@@ -1,8 +1,9 @@
-"""One-command setup for a fork: `uv run python -m summaries setup --run`.
+"""One-command setup for a fork: `uv run python -m summaries setup`.
 
-Sets the repository variables, enables the workflows and GitHub Pages,
-optionally starts the first crawl, and prints what is left to do. It uses
-the logged-in `gh` CLI and never asks for, reads or stores an API key.
+Sets the repository variables (the local crawl reads CATEGORIES), enables
+Actions for the test workflow and GitHub Pages' builds, enables Pages, and
+prints what is left to do. The crawl and summaries run on your machine. It
+uses the logged-in `gh` CLI and never asks for, reads or stores an API key.
 """
 
 import subprocess
@@ -41,11 +42,10 @@ def cmd_setup(args):
         github.gh("variable", "set", name, "-R", slug, "--body", value)
     notes = [f"Set {', '.join(variables)} on {slug}."]
 
-    blocked = [wf for wf in ("run.yml", "summarize-api.yml", "tests.yml") if _try("workflow", "enable", wf, "-R", slug)]
-    if blocked:
+    if _try("workflow", "enable", "tests.yml", "-R", slug):
         notes.append(
-            f"Could not enable {', '.join(blocked)}: open https://github.com/{slug}/actions and click "
-            "'I understand my workflows, go ahead and enable them', then run setup again."
+            f"Actions is off on this fork, so GitHub Pages cannot build: open https://github.com/{slug}/actions "
+            "and click 'I understand my workflows, go ahead and enable them' (no workflow runs on a schedule)."
         )
 
     pages = _try("api", "-X", "POST", f"repos/{slug}/pages", "-f", "build_type=legacy", "-f", "source[branch]=main", "-f", "source[path]=/")
@@ -56,21 +56,19 @@ def cmd_setup(args):
     else:
         notes.append(f"Could not enable GitHub Pages ({pages}); set Settings > Pages > Deploy from a branch: main, /.")
 
-    if args.run:
-        started = _try("workflow", "run", "run.yml", "-R", slug)
-        notes.append("Started the first crawl; the first day appears a few minutes after it finishes." if started is None else f"Could not start the crawl: {started}")
-
     key = KEY_ENV.get(args.provider or "anthropic")
     print("\n".join(notes))
     print(
         f"""
 Your page: {site_url(slug)}
 
+Crawl today's papers on this machine (and backfill missed days):
+  uv run python -m summaries ensure-day
+
 Summaries (pick one):
-  Local coding agent (default mode): uv run python -m summaries run-local --client claude|codex|antigravity
-    Schedule it with cron or launchd; for a Claude Code scheduled task see docs/claude-code-task.md.
-  API in GitHub Actions: gh secret set {key} -R {slug}
-    then: gh variable set SUMMARY_MODE --body api -R {slug}
+  Local coding agent: uv run python -m summaries run-local --client claude|codex|antigravity
+    Schedule both with cron or launchd; for a Claude Code scheduled task see docs/claude-code-task.md.
+  API: export {key} in the scheduled job's environment, then uv run python -m summaries api --days 3
 
 Your interests: edit js/interest-presets.js, or use Keywords & authors on the page."""
     )
@@ -78,7 +76,7 @@ Your interests: edit js/interest-presets.js, or use Keywords & authors on the pa
 
 
 def add_parser(sub):
-    setup = sub.add_parser("setup", help="configure this fork on GitHub (variables, workflows, Pages)")
+    setup = sub.add_parser("setup", help="configure this fork on GitHub (variables, Pages)")
     setup.add_argument("--categories", default=DEFAULT_CATEGORIES, help="comma-separated arXiv categories")
     setup.add_argument("--language", default="English", help="language of the summaries")
     setup.add_argument("--mode", default="claude-code", choices=["claude-code", "api"])
@@ -86,5 +84,4 @@ def add_parser(sub):
     setup.add_argument("--model", help="model for the API provider (required for openai and gemini)")
     setup.add_argument("--commit-name", help="name for data commits (default: the github-actions bot)")
     setup.add_argument("--commit-email", help="email for data commits, e.g. your GitHub noreply address")
-    setup.add_argument("--run", action="store_true", help="start the first crawl")
     setup.set_defaults(func=cmd_setup)
