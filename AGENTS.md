@@ -1,6 +1,6 @@
 # Notes for coding agents
 
-Daily arXiv: GitHub Actions crawls arXiv's `/new` listings into the `data` branch; summaries are written either by a local coding agent (default) or by an LLM API in Actions; the static site in this branch reads both. See README.md for the full picture.
+Daily arXiv: a scheduled task on the maintainer's Mac crawls arXiv's `/new` listings into the `data` branch (`summaries ensure-day`, which also backfills missed days; no GitHub Actions schedule since 2026-11-09); summaries are written either by a local coding agent (default) or by an LLM API in Actions; the static site in this branch reads both. See README.md for the full picture.
 
 ## Layout
 
@@ -12,7 +12,7 @@ Daily arXiv: GitHub Actions crawls arXiv's `/new` listings into the `data` branc
 
 ## Working on the code
 
-- Tests: `uv run pytest -q` and `node --test tests/js/*.test.js`. Write the failing test first.
+- Tests: `uv run pytest -q` and `node --test tests/js/*.test.js`. Write the failing test first. No CI runs (Actions is disabled on the repository), so run both before merging.
 - Commits: `<type>: <description>` (feat, fix, refactor, docs, test, chore), no attribution lines, identity `Eryc123Y <145822832+Eryc123Y@users.noreply.github.com>`.
 - After changing anything under `js/` or `css/`, bump every `?v=` in `index.html`, or GitHub Pages' cache serves the old file.
 - Never edit the `data` branch by hand or check it out; the CLI commits to it with git plumbing. `.cache/` is local scratch and is not committed.

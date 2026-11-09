@@ -5,6 +5,9 @@ agent task summarises. api: Actions summarises through the provider chosen
 by SUMMARY_PROVIDER (see summaries.providers). A provider that is not ready
 (no key, no model) or an unknown value falls back to claude-code with a
 warning, so a configuration slip never blocks the crawl.
+
+This instance no longer runs Actions (2026-11-09); the command stays for forks
+that run `ingest` and `api` in their own CI.
 """
 
 from dataclasses import dataclass

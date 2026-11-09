@@ -80,15 +80,17 @@ def test_setup_configures_a_fork_in_one_command(remote_and_clone, monkeypatch, c
     calls = []
     monkeypatch.setattr(github, "gh", fake_gh(calls, fail=[("api", "-X", "POST")]))
 
-    code = main(["--repo", str(clone), "setup", "--categories", "cs.CV, cs.LG", "--provider", "gemini", "--model", "g-1", "--run"])
+    code = main(["--repo", str(clone), "setup", "--categories", "cs.CV, cs.LG", "--provider", "gemini", "--model", "g-1"])
 
     out = capsys.readouterr().out
     assert code == 0
     assert ("variable", "set", "CATEGORIES", "-R", "alice/my-arxiv", "--body", "cs.CV, cs.LG") in calls
     assert ("variable", "set", "SUMMARY_MODE", "-R", "alice/my-arxiv", "--body", "claude-code") in calls
     assert ("variable", "set", "SUMMARY_PROVIDER", "-R", "alice/my-arxiv", "--body", "gemini") in calls
-    assert ("workflow", "run", "run.yml", "-R", "alice/my-arxiv") in calls
+    assert not any(c[:2] == ("workflow", "run") for c in calls), "the crawl runs locally, not in Actions"
+    assert ("workflow", "enable", "tests.yml", "-R", "alice/my-arxiv") in calls
+    assert "summaries ensure-day" in out
     assert not any(c[0] == "secret" for c in calls), "setup never handles keys"
     assert "https://alice.github.io/my-arxiv/" in out
     assert "already" in out  # Pages was enabled before
-    assert "gh secret set GEMINI_API_KEY" in out
+    assert "export GEMINI_API_KEY" in out
