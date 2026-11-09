@@ -8,6 +8,7 @@ Written 2026-11-02, when two jobs produced the same daily digest: an older claud
 |---|---|---|
 | Crawl the `/new` listings, dedupe against the past week, publish `data/<date>.jsonl` | Code (GitHub Actions, `run.yml`) | It takes 25 seconds and no tokens. The routine needed double fetches and SHA-256 checks to trust a browser crawl, and its runbook lists the failure modes: cached WebFetch pages, proxy 403s, HTTP 429 after a 45-second script. |
 | Start the crawl when GitHub's schedule skipped it | Code (`summaries ensure-day`, from the Mac) | The 01:30 UTC run of 2026-11-02 never fired. |
+| Crawl on the Mac when Actions refuses the dispatch | Code (`summaries ensure-day` runs the spider and `ingest`'s publishing locally, today's listing only) | GitHub disabled workflows on this fork on 2026-11-08; no day was crawled until the 11-09 fallback. |
 | Topic tagging and radar candidates | Code (`summaries/interests.py`, the brief's regex) | The page already tags topics with these keywords. Keywords alone found 6 of 8 past radar picks and 6 of 7 stereo picks, so they make the shortlist, not the decision. |
 | Five-part English summaries | Haiku, abstract only, headless (`run-local --client claude`) | See the cost and PDF measurements below. |
 | Picks, radar grades and the report text | One Sonnet call over the day's candidates and every title and TL;DR; code renders the report | Sonnet on abstracts recovered every past radar and stereo pick (15 of 15); Haiku on abstracts recovered 2 of 7 stereo picks. |

@@ -1,8 +1,9 @@
 """Command line for the daily pipeline.
 
 Actions:      ingest (crawl -> data branch), mode, api (API-mode summaries)
-Local task:   ensure-day (start a skipped crawl), run-local (summaries through
-              a headless coding agent), digest (the short Chinese report),
+Local task:   ensure-day (start a skipped crawl, or crawl here when Actions
+              refuses), run-local (summaries through a headless coding
+              agent), digest (the short Chinese report),
               status, prepare, merge, finish (subagent summaries),
               handover (usage gate reached: API job or pause), record (run log)
 """
@@ -17,7 +18,7 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from summaries import digest, github, local_runner, missed, setup, signals, weekly
+from summaries import digest, github, local_runner, localcrawl, missed, setup, signals, weekly
 from summaries.datafiles import (
     RAW_FILE,
     RUN_LOG,
@@ -41,6 +42,7 @@ API_WORKFLOW = "summarize-api.yml"
 CRAWL_WORKFLOW = "run.yml"
 ACTIVE_RUN = {"queued", "in_progress", "waiting", "pending", "requested"}
 POLL_SECONDS = 20
+INGEST_HISTORY_DAYS = 7
 # --- Actions -----------------------------------------------------------------
 
 
@@ -54,41 +56,41 @@ def history_ids(branch, day, days):
     return ids
 
 
-def cmd_ingest(args):
-    """Publish the crawl as the day's raw file, minus papers seen in the last week."""
-    day = date.fromisoformat(args.date)
-    crawled = dedupe_by_id(parse_jsonl(Path(args.input).read_text(encoding="utf-8")))
-    branch = make_branch(args)
+def publish_crawl(branch, day, crawled, history_days, language, dry_run=None):
+    """Publish crawled rows as the day's raw file, minus papers seen in the last `history_days`.
+
+    Returns what `ingest` reports. `dry_run` is a path to write the day's file to instead of pushing.
+    """
+    crawled = dedupe_by_id(crawled)
     branch.fetch()
-    seen = history_ids(branch, day, args.history_days)
+    seen = history_ids(branch, date.fromisoformat(day), history_days)
     fresh = [p for p in crawled if p["id"] not in seen]
     result = {}
     at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def build(current):
-        existing = read_records(current, raw_path(args.date))
+        existing = read_records(current, raw_path(day))
         combined = dedupe_by_id(existing + fresh)
         result.update(added=len(combined) - len(existing), papers=len(combined))
         # When the papers landed, for the week's health table and the status line.
-        entry = {"date": args.date, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
+        entry = {"date": day, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
         log = (current.read(RUN_LOG) or "") + dump_jsonl([entry])
-        return {raw_path(args.date): dump_jsonl(combined), RUN_LOG: log, **site_settings(args.language)}
+        return {raw_path(day): dump_jsonl(combined), RUN_LOG: log, **site_settings(language)}
 
     content = build(branch)
+    report = {"crawled": len(crawled), "already_seen": len(crawled) - len(fresh)}
     if result["added"] == 0:
-        emit(has_new_content=False, crawled=len(crawled), already_seen=len(crawled) - len(fresh), added=0)
-        return 0
-    commit = None if args.dry_run else branch.publish(build, f"update: {args.date} arXiv papers")
-    if args.dry_run:
-        Path(args.dry_run).write_text(content[raw_path(args.date)], encoding="utf-8")
-    emit(
-        has_new_content=True,
-        crawled=len(crawled),
-        already_seen=len(crawled) - len(fresh),
-        added=result["added"],
-        papers=result["papers"],
-        commit=commit or "",
-    )
+        return {"has_new_content": False, **report, "added": 0}
+    commit = None if dry_run else branch.publish(build, f"update: {day} arXiv papers")
+    if dry_run:
+        Path(dry_run).write_text(content[raw_path(day)], encoding="utf-8")
+    return {"has_new_content": True, **report, "added": result["added"], "papers": result["papers"], "commit": commit or ""}
+
+
+def cmd_ingest(args):
+    """Publish the crawl as the day's raw file, minus papers seen in the last week."""
+    crawled = parse_jsonl(Path(args.input).read_text(encoding="utf-8"))
+    emit(**publish_crawl(make_branch(args), args.date, crawled, args.history_days, args.language, args.dry_run))
     return 0
 
 
@@ -230,9 +232,38 @@ def wait_for_crawl(slug, seen, watch, wait):
     return None
 
 
+def utc_today():
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def crawl_here(args, branch, day, slug, actions_error):
+    """Actions could not start the crawl: run it on this machine and publish it the same way."""
+    try:
+        crawled = localcrawl.crawl(args.repo, slug)
+    except localcrawl.CrawlError as error:
+        emit(date=day, status="error", reason=f"Actions: {actions_error}; local crawl: {error}")
+        return 1
+    result = publish_crawl(branch, day, crawled, INGEST_HISTORY_DAYS, args.language)
+    branch.fetch()
+    total = len(dedupe_by_id(read_records(branch, raw_path(day))))
+    emit(
+        date=day,
+        status="present" if total else "missing",
+        dispatched=False,
+        crawled_locally=True,
+        actions_error=actions_error,
+        added=result["added"],
+        total=total,
+    )
+    return 0
+
+
 def cmd_ensure_day(args):
-    """Make sure a weekday's crawl ran: start it from here when GitHub's schedule skipped it."""
-    day = args.date or datetime.now(timezone.utc).date().isoformat()
+    """Make sure a weekday's crawl ran: start it from here when GitHub's schedule skipped it.
+
+    When Actions refuses the dispatch (disabled, or GitHub unreachable), today's crawl runs on this machine.
+    """
+    day = args.date or utc_today()
     if date.fromisoformat(day).weekday() >= 5:
         emit(date=day, status="weekend")
         return 0
@@ -250,7 +281,10 @@ def cmd_ensure_day(args):
             github.gh("workflow", "run", CRAWL_WORKFLOW, "-R", slug)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         detail = (getattr(error, "stderr", None) or str(error)).strip() or str(error)
-        emit(date=day, status="error", reason=detail.splitlines()[-1][:200])
+        reason = detail.splitlines()[-1][:200]
+        if day == utc_today():
+            return crawl_here(args, branch, day, slug, reason)
+        emit(date=day, status="error", reason=reason)
         return 1
     conclusions = wait_for_crawl(slug, {r["databaseId"] for r in runs}, running, args.wait)
     branch.fetch()
@@ -318,7 +352,7 @@ def build_parser():
     ingest = sub.add_parser("ingest", help="publish the crawl as data/<date>.jsonl")
     ingest.add_argument("--date", required=True)
     ingest.add_argument("--input", required=True)
-    ingest.add_argument("--history-days", type=int, default=7)
+    ingest.add_argument("--history-days", type=int, default=INGEST_HISTORY_DAYS)
     ingest.add_argument("--dry-run", metavar="PATH", help="write the day's file here instead of pushing")
     ingest.set_defaults(func=cmd_ingest)
 
