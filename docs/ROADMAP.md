@@ -33,6 +33,7 @@ Status labels: **Done**, **On Track**, **Not Started**, **Needs Eric** (waits on
 | Maintainability notes, [maintainability.md](maintainability.md): four decisions (types, module layout, record shapes, upstream leftovers), decided 11-05; D2 and D4 in M0, D1 and D3 in M1 | Claude | **Done** (11-04, decided 11-05) |
 | Delete upstream leftovers (D4) and move shared helpers out of `cli.py` (D2) | Claude | **Done** (11-05) |
 | Messenger at 11:30 Sun-Fri, task model set to Sonnet, three idle routines deleted | Eric | **Needs Eric** |
+| No GitHub Actions: GitHub disabled workflows on the fork (11-08); the crawl, missed-day backfill, Hugging Face upvotes and the API fallback now run from the local task (Eric's decision, 11-09) | Claude | **Done** (11-09) |
 
 ### M1 · 2026-11-16 to 11-29 · shareable
 
