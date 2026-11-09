@@ -564,3 +564,91 @@ def test_ensure_day_reports_a_dispatch_it_could_not_make(tmp_path, remote_and_cl
 
     report = json.loads(out)
     assert code == 1 and report["status"] == "error" and "api.github.com" in report["reason"]
+
+
+ACTIONS_DISABLED = "could not create workflow dispatch event: HTTP 422: Actions has been disabled for this repository."
+
+
+def actions_disabled_gh(calls):
+    """GitHub CLI stand-in for a repository whose Actions GitHub has switched off."""
+
+    def gh(*args):
+        calls.append(args)
+        if args[:2] == ("run", "list"):
+            return "[]"
+        if args[:2] == ("workflow", "run"):
+            raise subprocess.CalledProcessError(1, ["gh"], stderr=ACTIONS_DISABLED)
+        raise AssertionError(args)
+
+    return gh
+
+
+@pytest.fixture
+def actions_off(tmp_path, remote_and_clone, monkeypatch):
+    """Actions refuses the dispatch, today is 2026-11-09, and the local crawl is a stub."""
+    from summaries import cli, github, localcrawl
+
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {"data/2026-11-06.jsonl": dump_jsonl([paper("A")])})
+    monkeypatch.setattr(github, "gh", actions_disabled_gh([]))
+    monkeypatch.setattr(cli, "utc_today", lambda: "2026-11-09")
+    crawls = []
+    result = {"papers": [paper("A"), paper("B"), paper("C")]}
+
+    def crawl(repo_dir, slug):
+        crawls.append((Path(repo_dir), slug))
+        if isinstance(result["papers"], Exception):
+            raise result["papers"]
+        return result["papers"]
+
+    monkeypatch.setattr(localcrawl, "crawl", crawl)
+    return SimpleNamespace(remote=remote, clone=clone, crawls=crawls, result=result)
+
+
+def test_ensure_day_crawls_locally_when_actions_refuses_the_dispatch(actions_off, capsys):
+    code, out = run(actions_off.clone, "ensure-day", "--date", "2026-11-09", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0
+    assert (report["status"], report["dispatched"], report["crawled_locally"]) == ("present", False, True)
+    assert (report["added"], report["total"]) == (2, 2)
+    assert "disabled" in report["actions_error"]
+    assert actions_off.crawls == [(actions_off.clone, "alice/my-arxiv")]
+    published = parse_jsonl(branch_file(actions_off.remote, "data/2026-11-09.jsonl"))
+    assert [p["id"] for p in published] == ["B", "C"]
+    [entry] = parse_jsonl(branch_file(actions_off.remote, "logs/summary-runs.jsonl"))
+    assert (entry["date"], entry["path"], entry["added"]) == ("2026-11-09", "crawl", 2)
+
+
+def test_ensure_day_local_crawl_with_nothing_new_reports_missing(actions_off, capsys):
+    actions_off.result["papers"] = [paper("A")]
+
+    code, out = run(actions_off.clone, "ensure-day", "--date", "2026-11-09", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0 and (report["status"], report["crawled_locally"], report["added"]) == ("missing", True, 0)
+
+
+def test_ensure_day_reports_a_local_crawl_that_failed_too(actions_off, capsys):
+    from summaries import localcrawl
+
+    actions_off.result["papers"] = localcrawl.CrawlError("arXiv returned no papers")
+
+    code, out = run(actions_off.clone, "ensure-day", "--date", "2026-11-09", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 1 and report["status"] == "error"
+    assert "disabled" in report["reason"] and "arXiv returned no papers" in report["reason"]
+
+
+def test_ensure_day_does_not_crawl_a_past_day_locally(actions_off, capsys):
+    """arXiv's /new page only lists the latest announcement, so it cannot stand in for an older day."""
+    code, out = run(actions_off.clone, "ensure-day", "--date", "2026-11-06", capsys=capsys)
+
+    assert json.loads(out)["status"] == "present" and actions_off.crawls == []
+
+    code, out = run(actions_off.clone, "ensure-day", "--date", "2026-11-05", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 1 and report["status"] == "error" and "disabled" in report["reason"]
+    assert actions_off.crawls == []
