@@ -1,10 +1,11 @@
 """Command line for the daily pipeline.
 
-Actions:      ingest (crawl -> data branch), mode, api (API-mode summaries)
-Local task:   ensure-day (start a skipped crawl), run-local (summaries through
-              a headless coding agent), digest (the short Chinese report),
+Crawl:        ensure-day (crawl arXiv on this machine, backfill missed days),
+              ingest (publish a crawl file), hf-signals (Hugging Face upvotes)
+Summaries:    run-local (headless coding agent), api (LLM API), mode,
               status, prepare, merge, finish (subagent summaries),
-              handover (usage gate reached: API job or pause), record (run log)
+              handover (usage gate reached: API here or pause), record (run log)
+Reports:      digest (the short Chinese report), digest-week, missed
 """
 
 import argparse
@@ -13,11 +14,10 @@ import os
 import shutil
 import subprocess
 import sys
-import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from summaries import digest, github, local_runner, missed, setup, signals, weekly
+from summaries import digest, github, local_runner, localcrawl, missed, setup, signals, weekly
 from summaries.datafiles import (
     RAW_FILE,
     RUN_LOG,
@@ -34,13 +34,12 @@ from summaries.datafiles import (
 )
 from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
-from summaries.providers import KEY_ENV, resolve_provider
+from summaries.providers import resolve_provider
 from summaries.records import dedupe_by_id, dump_jsonl, parse_jsonl, pending_papers
 
-API_WORKFLOW = "summarize-api.yml"
-CRAWL_WORKFLOW = "run.yml"
-ACTIVE_RUN = {"queued", "in_progress", "waiting", "pending", "requested"}
-POLL_SECONDS = 20
+INGEST_HISTORY_DAYS = 7
+HANDOVER_BATCH = 50
+HANDOVER_WORKERS = 8
 # --- Actions -----------------------------------------------------------------
 
 
@@ -54,41 +53,41 @@ def history_ids(branch, day, days):
     return ids
 
 
-def cmd_ingest(args):
-    """Publish the crawl as the day's raw file, minus papers seen in the last week."""
-    day = date.fromisoformat(args.date)
-    crawled = dedupe_by_id(parse_jsonl(Path(args.input).read_text(encoding="utf-8")))
-    branch = make_branch(args)
+def publish_crawl(branch, day, crawled, history_days, language, dry_run=None):
+    """Publish crawled rows as the day's raw file, minus papers seen in the last `history_days`.
+
+    Returns what `ingest` reports. `dry_run` is a path to write the day's file to instead of pushing.
+    """
+    crawled = dedupe_by_id(crawled)
     branch.fetch()
-    seen = history_ids(branch, day, args.history_days)
+    seen = history_ids(branch, date.fromisoformat(day), history_days)
     fresh = [p for p in crawled if p["id"] not in seen]
     result = {}
     at = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def build(current):
-        existing = read_records(current, raw_path(args.date))
+        existing = read_records(current, raw_path(day))
         combined = dedupe_by_id(existing + fresh)
         result.update(added=len(combined) - len(existing), papers=len(combined))
         # When the papers landed, for the week's health table and the status line.
-        entry = {"date": args.date, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
+        entry = {"date": day, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
         log = (current.read(RUN_LOG) or "") + dump_jsonl([entry])
-        return {raw_path(args.date): dump_jsonl(combined), RUN_LOG: log, **site_settings(args.language)}
+        return {raw_path(day): dump_jsonl(combined), RUN_LOG: log, **site_settings(language)}
 
     content = build(branch)
+    report = {"crawled": len(crawled), "already_seen": len(crawled) - len(fresh)}
     if result["added"] == 0:
-        emit(has_new_content=False, crawled=len(crawled), already_seen=len(crawled) - len(fresh), added=0)
-        return 0
-    commit = None if args.dry_run else branch.publish(build, f"update: {args.date} arXiv papers")
-    if args.dry_run:
-        Path(args.dry_run).write_text(content[raw_path(args.date)], encoding="utf-8")
-    emit(
-        has_new_content=True,
-        crawled=len(crawled),
-        already_seen=len(crawled) - len(fresh),
-        added=result["added"],
-        papers=result["papers"],
-        commit=commit or "",
-    )
+        return {"has_new_content": False, **report, "added": 0}
+    commit = None if dry_run else branch.publish(build, f"update: {day} arXiv papers")
+    if dry_run:
+        Path(dry_run).write_text(content[raw_path(day)], encoding="utf-8")
+    return {"has_new_content": True, **report, "added": result["added"], "papers": result["papers"], "commit": commit or ""}
+
+
+def cmd_ingest(args):
+    """Publish the crawl as the day's raw file, minus papers seen in the last week."""
+    crawled = parse_jsonl(Path(args.input).read_text(encoding="utf-8"))
+    emit(**publish_crawl(make_branch(args), args.date, crawled, args.history_days, args.language, args.dry_run))
     return 0
 
 
@@ -101,10 +100,32 @@ def cmd_mode(args):
     return 0
 
 
-def cmd_api(args):
+def api_summaries(branch, days, language, batch_size, max_workers, config):
+    """Summarise the days' pending papers through the API; returns (requested, summarised, failures)."""
     from summaries import providers
     from summaries.llm import summarize_all
 
+    call = None
+    requested = summarised = 0
+    failures = []
+    for day in days:
+        raw = read_records(branch, raw_path(day))
+        todo = pending_papers(raw, read_records(branch, ai_path(day, language)))
+        if not todo:
+            continue
+        call = call or providers.make_summarizer(config, os.environ)
+        for start in range(0, len(todo), batch_size):
+            batch = todo[start : start + batch_size]
+            outcomes = summarize_all(call, batch, language, max_workers=max_workers)
+            new = {o.paper_id: o.ai for o in outcomes if o.ai}
+            publish_summaries(branch, day, language, new, "api")
+            requested += len(batch)
+            summarised += len(new)
+            failures += [(day, o) for o in outcomes if o.ai is None]
+    return requested, summarised, failures
+
+
+def cmd_api(args):
     config, problem = resolve_provider(os.environ)
     if problem:
         print(f"::error::Cannot summarise with the API: {problem}.")
@@ -112,23 +133,8 @@ def cmd_api(args):
     print(f"Summarising with {config.provider} ({config.model})")
     branch = make_branch(args)
     branch.fetch()
-    call = None
-    requested = summarised = 0
-    failures = []
-    for day in [args.date] if args.date else recent_days(branch, args.days):
-        raw = read_records(branch, raw_path(day))
-        todo = pending_papers(raw, read_records(branch, ai_path(day, args.language)))
-        if not todo:
-            continue
-        call = call or providers.make_summarizer(config, os.environ)
-        for start in range(0, len(todo), args.batch_size):
-            batch = todo[start : start + args.batch_size]
-            outcomes = summarize_all(call, batch, args.language, max_workers=args.max_workers)
-            new = {o.paper_id: o.ai for o in outcomes if o.ai}
-            publish_summaries(branch, day, args.language, new, "api")
-            requested += len(batch)
-            summarised += len(new)
-            failures += [(day, o) for o in outcomes if o.ai is None]
+    days = [args.date] if args.date else recent_days(branch, args.days)
+    requested, summarised, failures = api_summaries(branch, days, args.language, args.batch_size, args.max_workers, config)
     for day, failure in failures[:20]:
         print(f"::warning::{failure.paper_id} left pending: {failure.error}")
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -149,55 +155,23 @@ def cmd_record(args):
     return 0
 
 
-class SettingsUnavailable(RuntimeError):
-    pass
-
-
-def gh_variable(slug, name):
-    """A repository variable's value, "" when it is not set."""
-    try:
-        return github.gh("variable", "get", name, "-R", slug).strip()
-    except subprocess.CalledProcessError as error:
-        if "not found" in (error.stderr or ""):
-            return ""
-        raise SettingsUnavailable(f"could not read {name}: {(error.stderr or str(error)).strip()}") from error
-
-
-def remote_api_problem(slug):
-    """What keeps the repository's API job from running, or None.
-
-    Reads the SUMMARY_PROVIDER and SUMMARY_MODEL variables and only the
-    names of the secrets; no key value is ever read.
-    """
-    try:
-        secrets = {s["name"] for s in json.loads(github.gh("secret", "list", "-R", slug, "--json", "name") or "[]")}
-        env = {name: gh_variable(slug, name) for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL")}
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-        return f"could not read the repository secrets: {(getattr(error, 'stderr', None) or str(error)).strip()}"
-    except SettingsUnavailable as error:
-        return str(error)
-    env.update({name: "set" for name in KEY_ENV.values() if name in secrets})
-    return resolve_provider(env)[1]
-
-
-def api_key_configured(slug):
-    return remote_api_problem(slug) is None
-
-
 def cmd_handover(args):
-    """Usage gate reached: hand the day's remainder to the Actions API job, or pause.
+    """Usage gate reached: finish the day through the API here when a key is configured, or pause.
 
-    Only the secrets' names are checked; key values never leave GitHub.
+    The key is read from this machine's environment only by the provider
+    client; it is never printed or stored. A paused day resumes on the next
+    scheduled run once usage allows.
     """
     merged = merge_outputs(args)
     problem = None
     if merged["pending"] == 0:
         path = "claude-code"
     else:
-        slug = github.repo_slug(args.repo)
-        problem = remote_api_problem(slug)
+        config, problem = resolve_provider(os.environ)
         if problem is None:
-            github.gh("workflow", "run", API_WORKFLOW, "-R", slug, "-f", f"date={args.date}")
+            branch = make_branch(args)
+            branch.fetch()
+            api_summaries(branch, [args.date], args.language, HANDOVER_BATCH, HANDOVER_WORKERS, config)
             path = "api-fallback"
         else:
             path = "paused-no-key"
@@ -207,61 +181,75 @@ def cmd_handover(args):
     return 0
 
 
-def crawl_runs(slug):
-    fields = "databaseId,status,conclusion"
-    return json.loads(github.gh("run", "list", "--workflow", CRAWL_WORKFLOW, "-R", slug, "-L", "5", "--json", fields) or "[]")
+def published_days(branch):
+    return sorted(m.group(1) for path in branch.list_files("data/") if (m := RAW_FILE.match(path)))
 
 
-def wait_for_crawl(slug, seen, watch, wait):
-    """Poll until the watched runs have finished: the ones in `watch`, or else the first new run.
+def weekdays_between(start, end):
+    """Weekdays strictly between two ISO days."""
+    current, last = date.fromisoformat(start) + timedelta(days=1), date.fromisoformat(end)
+    days = []
+    while current < last:
+        if current.weekday() < 5:
+            days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
 
-    Returns their conclusions, or None if the wait ran out. A failed listing is retried.
+
+def utc_today():
+    return datetime.now(timezone.utc).date().isoformat()
+
+
+def backfill(args, branch, slug, missing):
+    """Publish missed weekdays from the /recent listing.
+
+    Days older than the listing's five announcements cannot be recovered and
+    are reported as `gap`; a weekday inside its range that it does not show
+    had no announcement (a holiday) and is neither.
     """
-    deadline = time.monotonic() + wait
-    while time.monotonic() < deadline:
-        time.sleep(POLL_SECONDS)
-        try:
-            runs = crawl_runs(slug)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            continue
-        mine = [r for r in runs if r["databaseId"] in watch] if watch else [r for r in runs if r["databaseId"] not in seen]
-        if mine and not any(r["status"] in ACTIVE_RUN for r in mine):
-            return [r.get("conclusion") or "" for r in mine]
-    return None
+    try:
+        listing = localcrawl.recent(args.repo, slug, missing)
+    except localcrawl.CrawlError as error:
+        return {"backfilled": {}, "gap": missing, "backfill_error": str(error)}
+    backfilled = {}
+    for day in missing:
+        if day in listing.days:
+            backfilled[day] = publish_crawl(branch, day, listing.days[day], INGEST_HISTORY_DAYS, args.language)["added"]
+    oldest = listing.covered[0] if listing.covered else None
+    gap = [d for d in missing if d not in listing.days and (oldest is None or d < oldest)]
+    return {"backfilled": backfilled, "gap": gap}
 
 
 def cmd_ensure_day(args):
-    """Make sure a weekday's crawl ran: start it from here when GitHub's schedule skipped it."""
-    day = args.date or datetime.now(timezone.utc).date().isoformat()
-    if date.fromisoformat(day).weekday() >= 5:
-        emit(date=day, status="weekend")
-        return 0
+    """Make sure a weekday's papers are published: crawl today's on this machine, backfill missed days."""
+    today = utc_today()
+    day = args.date or today
     branch = make_branch(args)
     branch.fetch()
-    raw = read_records(branch, raw_path(day))
-    if raw:
-        emit(date=day, status="present", dispatched=False, total=len(dedupe_by_id(raw)))
-        return 0
     slug = github.repo_slug(args.repo)
-    try:
-        runs = crawl_runs(slug)
-        running = {r["databaseId"] for r in runs if r["status"] in ACTIVE_RUN}
-        if not running:
-            github.gh("workflow", "run", CRAWL_WORKFLOW, "-R", slug)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
-        detail = (getattr(error, "stderr", None) or str(error)).strip() or str(error)
-        emit(date=day, status="error", reason=detail.splitlines()[-1][:200])
-        return 1
-    conclusions = wait_for_crawl(slug, {r["databaseId"] for r in runs}, running, args.wait)
+    weekday = date.fromisoformat(day).weekday() < 5
+    earlier = [d for d in published_days(branch) if d < day]
+    missing = weekdays_between(earlier[-1], day) if earlier else []
+    if weekday and day != today and not read_records(branch, raw_path(day)):
+        missing.append(day)
+    report = backfill(args, branch, slug, missing) if missing else {}
+    if not weekday:
+        emit(date=day, status="weekend", **report)
+        return 0
     branch.fetch()
     raw = read_records(branch, raw_path(day))
-    if raw:
-        status = "present"
-    elif conclusions is None:
-        status = "waiting"
-    else:
-        status = "crawl-failed" if "failure" in conclusions else "missing"
-    emit(date=day, status=status, dispatched=not running, total=len(dedupe_by_id(raw)))
+    if raw or day != today:
+        emit(date=day, status="present" if raw else "missing", total=len(dedupe_by_id(raw)), **report)
+        return 0
+    try:
+        crawled = localcrawl.crawl(args.repo, slug)
+    except localcrawl.CrawlError as error:
+        emit(date=day, status="error", reason=str(error), **report)
+        return 1
+    result = publish_crawl(branch, day, crawled, INGEST_HISTORY_DAYS, args.language)
+    branch.fetch()
+    total = len(dedupe_by_id(read_records(branch, raw_path(day))))
+    emit(date=day, status="present" if total else "missing", added=result["added"], total=total, **report)
     return 0
 
 
@@ -318,7 +306,7 @@ def build_parser():
     ingest = sub.add_parser("ingest", help="publish the crawl as data/<date>.jsonl")
     ingest.add_argument("--date", required=True)
     ingest.add_argument("--input", required=True)
-    ingest.add_argument("--history-days", type=int, default=7)
+    ingest.add_argument("--history-days", type=int, default=INGEST_HISTORY_DAYS)
     ingest.add_argument("--dry-run", metavar="PATH", help="write the day's file here instead of pushing")
     ingest.set_defaults(func=cmd_ingest)
 
@@ -359,9 +347,8 @@ def build_parser():
     handover.add_argument("--reason", help="why, e.g. 'weekly 81%%'")
     handover.set_defaults(func=cmd_handover)
 
-    ensure = sub.add_parser("ensure-day", help="start the crawl if a weekday's papers are not published yet")
+    ensure = sub.add_parser("ensure-day", help="crawl today's papers here and backfill missed days")
     ensure.add_argument("--date", help="UTC day, default today")
-    ensure.add_argument("--wait", type=int, default=480, help="seconds to wait for the crawl")
     ensure.set_defaults(func=cmd_ensure_day)
 
     record = sub.add_parser("record", help="log which summary path ran for a day")

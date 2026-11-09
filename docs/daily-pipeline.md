@@ -6,8 +6,10 @@ Written 2026-11-02, when two jobs produced the same daily digest: an older claud
 
 | Step | Done by | Why |
 |---|---|---|
-| Crawl the `/new` listings, dedupe against the past week, publish `data/<date>.jsonl` | Code (GitHub Actions, `run.yml`) | It takes 25 seconds and no tokens. The routine needed double fetches and SHA-256 checks to trust a browser crawl, and its runbook lists the failure modes: cached WebFetch pages, proxy 403s, HTTP 429 after a 45-second script. |
-| Start the crawl when GitHub's schedule skipped it | Code (`summaries ensure-day`, from the Mac) | The 01:30 UTC run of 2026-11-02 never fired. |
+| Crawl the `/new` listings, dedupe against the past week, publish `data/<date>.jsonl` | Code (`summaries ensure-day` on the Mac; GitHub Actions `run.yml` until 2026-11-08) | It takes 25 seconds and no tokens. The routine needed double fetches and SHA-256 checks to trust a browser crawl, and its runbook lists the failure modes: cached WebFetch pages, proxy 403s, HTTP 429 after a 45-second script. |
+| Crawl on the Mac, not in GitHub Actions | Code (`summaries ensure-day`) | GitHub skipped scheduled runs (01:30 UTC on 2026-11-02) and then disabled workflows on this fork (from 2026-11-08, HTTP 422 on dispatch); Eric decided on 11-09 to run everything from the local task. |
+| Backfill days the Mac missed | Code (`ensure-day`: `/recent` listing plus the arXiv API for abstracts) | `/new` shows only the latest announcement. `/recent` shows the last five; a live check on 11-09 matched the published 11-05 (512 of 512) and 11-06 (492 of 492) exactly. Older days are reported as a gap. |
+| Hugging Face upvotes | Code (`summaries hf-signals --days 7`, each task run) | Was `signals.yml` every four hours in Actions. |
 | Topic tagging and radar candidates | Code (`summaries/interests.py`, the brief's regex) | The page already tags topics with these keywords. Keywords alone found 6 of 8 past radar picks and 6 of 7 stereo picks, so they make the shortlist, not the decision. |
 | Five-part English summaries | Haiku, abstract only, headless (`run-local --client claude`) | See the cost and PDF measurements below. |
 | Picks, radar grades and the report text | One Sonnet call over the day's candidates and every title and TL;DR; code renders the report | Sonnet on abstracts recovered every past radar and stereo pick (15 of 15); Haiku on abstracts recovered 2 of 7 stereo picks. |
@@ -21,8 +23,7 @@ Times are Malaysia time (UTC+8). arXiv announces at 20:00 US Eastern, which is 0
 
 | When | What |
 |---|---|
-| 09:17, 09:47, 11:23, 15:37 (Mon-Fri) | GitHub Actions crawl (`run.yml`). A run that finds nothing new publishes nothing. |
-| 10:20 (Mon-Fri) | Scheduled task: `ensure-day` (starts the crawl and waits if the day is missing), usage gate, `run-local` summaries, `digest`, one push notification. The report is the task's final message and `digests/<date>.md` in the vault. |
+| 10:20 (Mon-Fri) | Scheduled task: `ensure-day` (crawls the day if it is missing, backfills missed days), `hf-signals`, usage gate, `run-local` summaries, `digest`, one push notification. The report is the task's final message and `digests/<date>.md` in the vault. |
 | 12:20, 16:20 (Mon-Fri) | Same task as the morning, for days when arXiv announces late. The listing was still the previous day's at 10:34 on 2026-11-05 (it appeared before 13:03) and at 12:15 on 11-04; on 11-03 it appeared between 16:30 and 19:00. On a normal day the report already exists and the run stops after a few calls. |
 | 21:20 (Mon-Fri) | Same task again with `digest --final`: resumes summaries stopped by the usage gate, writes the report if the morning had no batch yet, and on a day without any batch writes a two-line note. Otherwise it stops after a few calls. |
 | 10:20 (Sun) | `missed` (look-back radar papers from earlier Sundays that were in one of our batches go to `missed.md` in the vault), then `digest-week` (the week's radar rows and topic counts, no model call), then one Sonnet subagent looks for up to three older papers for the radar (two alphaXiv searches). The 21:20 Sunday run stops at once. |
@@ -90,15 +91,13 @@ On 2026-11-02, in two reruns, the new report's radar named the same two papers a
 
 When the report's `claude -p` call fails (on 2026-11-05 and 11-06 its sign-in had expired: "OAuth session expired and could not be refreshed", and both days had no report until it was rerun by hand), `digest` asks Codex instead (`codex exec -s read-only`, `--fallback` to change or `''` to turn off; never with an explicit `--command`). The full-text check then goes to the client that answered. The output's `client` names the writer, `problems` carries the claude error, and the task adds a line asking Eric to sign in again. The summaries already had a fallback: Haiku subagents when every headless chunk fails.
 
-At 80% of the 5-hour or weekly window the task stops using the subscription and runs `summaries handover`, which dispatches `summarize-api.yml` when the provider's key secret exists and otherwise pauses until a later run (`paused-no-key` in `logs/summary-runs.jsonl`, as on 2026-11-02). With Haiku 5.5 an API fallback costs about $0.15 for a 450-paper day. To turn it on, set the secret once (the value is typed at the prompt, not on the command line):
-
-```bash
-gh secret set ANTHROPIC_API_KEY -R Eryc123Y/daily-arXiv-ai-enhanced
-```
+At 80% of the 5-hour or weekly window the task stops using the subscription and runs `summaries handover`, which summarises the rest of the day through the API on the Mac when a provider key is in the task's environment and otherwise pauses until a later run (`paused-no-key` in `logs/summary-runs.jsonl`, as on 2026-11-02). With Haiku 5.5 an API fallback costs about $0.15 for a 450-paper day. Until 2026-11-08 this dispatched `summarize-api.yml` in Actions with the key as a repository secret; that workflow is deleted, and the Mac has no key, so the fallback pauses.
 
 `SUMMARY_PROVIDER` defaults to `anthropic` and `SUMMARY_MODEL` to `claude-haiku-5-5`.
 
 ## Open items
 
 - The scheduled task's model cannot be set through the scheduled-tasks tool, so it runs on the app's default model (Opus 5.5 on 2026-11-02, Sonnet on 2026-10-30). It now makes few calls; choosing Sonnet for the task in the app would halve its cost again.
+- Everything runs only while the Mac is awake and the Claude app is open. A trip longer than a week leaves days that `/recent` no longer lists; `ensure-day` names them in `gap`, and they would need a crawl of the arXiv API by submission date, which does not match announcement days exactly.
+- GitHub Pages builds also run on Actions: data updates need no build (the page reads the `data` branch directly), but a change to `index.html`, `js/` or `css/` is only deployed after Actions is allowed again on the repository (the button on its Actions page; no workflow runs on a schedule any more).
 - The radar regex lives in `DIGEST/project-brief.md` (lines `SUP =`, `REUSE =`, `INFO =`, `GROUND =`), which Eric's project session maintains; the digest reads it on every run.

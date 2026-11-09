@@ -254,79 +254,8 @@ def test_prepare_releases_the_lock_when_it_fails(tmp_path, remote_and_clone, cap
     assert not (clone / ".cache" / "summaries" / "LOCK").exists()
 
 
-def fake_gh(secrets, calls, variables=None):
-    """Stand-in for the gh CLI: lists `secrets`, reads `variables`, records dispatches."""
-    import subprocess
-
-    def gh(*args):
-        calls.append(args)
-        if args[:2] == ("secret", "list"):
-            return json.dumps([{"name": n} for n in secrets])
-        if args[:2] == ("variable", "get"):
-            if variables == "unreachable":
-                raise subprocess.CalledProcessError(1, ["gh", *args], stderr="HTTP 502: Bad Gateway")
-            if args[2] not in (variables or {}):
-                raise subprocess.CalledProcessError(1, ["gh", *args], stderr=f"variable {args[2]} was not found")
-            return variables[args[2]] + "\n"
-        return ""
-
-    return gh
-
-
 def log_lines(remote):
     return parse_jsonl(git(remote, "show", "data:logs/summary-runs.jsonl"))
-
-
-def test_handover_dispatches_the_api_job_when_the_secret_exists(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
-    run(clone, "prepare", "--date", DAY, capsys=capsys)
-    (clone / ".cache" / "summaries" / DAY / "chunk-000.out.txt").write_text("=== 1\n" + FIELDS.format(n=1))
-    calls = []
-    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
-
-    code, out = run(clone, "handover", "--date", DAY, "--reason", "weekly 81%", capsys=capsys)
-
-    result = json.loads(out)
-    assert code == 0
-    assert result["path"] == "api-fallback" and result["pending"] == 1
-    assert ("workflow", "run", "summarize-api.yml", "-R", "alice/my-arxiv", "-f", f"date={DAY}") in calls
-    assert [r["id"] for r in parse_jsonl(branch_file(remote, AI_FILE))] == ["1"]
-    entry = log_lines(remote)[-1]
-    assert (entry["date"], entry["path"], entry["done"], entry["pending"]) == (DAY, "api-fallback", 1, 1)
-    assert entry["reason"] == "weekly 81%"
-
-
-def test_handover_without_a_key_pauses_and_logs_it(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
-    calls = []
-    monkeypatch.setattr(github, "gh", fake_gh([], calls))
-
-    code, out = run(clone, "handover", "--date", DAY, capsys=capsys)
-
-    assert json.loads(out)["path"] == "paused-no-key"
-    assert not any(c[:2] == ("workflow", "run") for c in calls)
-    assert log_lines(remote)[-1]["path"] == "paused-no-key"
-
-
-def test_handover_with_nothing_pending_needs_no_fallback(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    remote, clone = remote_and_clone
-    ai = [{**paper("1"), "AI": {k: "x" for k in ("tldr", "motivation", "method", "result", "conclusion")}}]
-    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")]), AI_FILE: dump_jsonl(ai)})
-    calls = []
-    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls))
-
-    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
-
-    assert json.loads(out)["path"] == "claude-code"
-    assert calls == []
 
 
 def test_record_appends_the_day_path_to_the_run_log(tmp_path, remote_and_clone, capsys):
@@ -394,173 +323,225 @@ def test_mode_command_accepts_a_ready_gemini_provider(tmp_path, remote_and_clone
     assert "mode=api" in gh_output.read_text()
 
 
-def test_handover_checks_the_configured_providers_secret_and_model(tmp_path, remote_and_clone, monkeypatch, capsys):
+@pytest.fixture
+def pipeline(tmp_path, remote_and_clone, monkeypatch):
+    """ensure-day with today 2026-11-09 and both crawls stubbed; GitHub must not be called.
+
+    state.today: papers today's /new crawl returns (or an exception to raise);
+    state.recent: day -> papers on the /recent listing; state.covered: its days.
+    """
+    from summaries import cli, github, localcrawl
+
+    remote, clone = remote_and_clone
+    state = SimpleNamespace(
+        remote=remote, clone=clone, today="2026-11-09", crawls=[], wanted=[],
+        new=[paper("A"), paper("B"), paper("C")], recent={}, covered=[], recent_error=None,
+    )
+
+    def seed(files):
+        seed_data_branch(tmp_path, remote, {f"data/{d}.jsonl": dump_jsonl(rows) for d, rows in files.items()})
+
+    def crawl(repo_dir, slug):
+        state.crawls.append((Path(repo_dir), slug))
+        if isinstance(state.new, Exception):
+            raise state.new
+        return state.new
+
+    def recent(repo_dir, slug, wanted):
+        state.wanted.append(list(wanted))
+        if state.recent_error:
+            raise state.recent_error
+        days = {d: state.recent[d] for d in wanted if d in state.recent}
+        return localcrawl.Listing(days=days, covered=sorted(state.covered or state.recent))
+
+    monkeypatch.setattr(github, "gh", lambda *args: pytest.fail(f"GitHub was called: {args}"))
+    monkeypatch.setattr(cli, "utc_today", lambda: state.today)
+    monkeypatch.setattr(localcrawl, "crawl", crawl)
+    monkeypatch.setattr(localcrawl, "recent", recent)
+    state.seed = seed
+    state.run = lambda *argv, capsys: run(clone, "ensure-day", *argv, capsys=capsys)
+    return state
+
+
+def ids_on(remote, day):
+    return [p["id"] for p in parse_jsonl(branch_file(remote, f"data/{day}.jsonl"))]
+
+
+def test_ensure_day_does_nothing_when_the_day_is_published(pipeline, capsys):
+    pipeline.seed({"2026-11-06": [paper("A")], "2026-11-09": [paper("B")]})
+
+    code, out = pipeline.run(capsys=capsys)
+
+    assert code == 0 and json.loads(out) == {"date": "2026-11-09", "status": "present", "total": 1}
+    assert pipeline.crawls == [] and pipeline.wanted == []
+
+
+def test_ensure_day_skips_weekends(pipeline, capsys):
+    pipeline.seed({"2026-11-06": [paper("A")]})
+    pipeline.today = "2026-11-08"
+
+    code, out = pipeline.run(capsys=capsys)
+
+    assert json.loads(out)["status"] == "weekend" and pipeline.crawls == []
+
+
+def test_ensure_day_crawls_today_on_this_machine(pipeline, capsys):
+    pipeline.seed({"2026-11-06": [paper("A")]})
+
+    code, out = pipeline.run(capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0
+    assert (report["status"], report["added"], report["total"]) == ("present", 2, 2)
+    assert pipeline.crawls == [(pipeline.clone, "alice/my-arxiv")]
+    assert ids_on(pipeline.remote, "2026-11-09") == ["B", "C"]
+    entry = parse_jsonl(branch_file(pipeline.remote, "logs/summary-runs.jsonl"))[-1]
+    assert (entry["date"], entry["path"], entry["added"]) == ("2026-11-09", "crawl", 2)
+
+
+def test_ensure_day_before_the_announcement_reports_missing(pipeline, capsys):
+    """/new still shows Friday's papers: all seen already, nothing published."""
+    pipeline.seed({"2026-11-06": [paper("A")]})
+    pipeline.new = [paper("A")]
+
+    code, out = pipeline.run(capsys=capsys)
+
+    assert code == 0 and (json.loads(out)["status"], json.loads(out)["added"]) == ("missing", 0)
+
+
+def test_ensure_day_reports_a_failed_crawl(pipeline, capsys):
+    from summaries import localcrawl
+
+    pipeline.seed({"2026-11-06": [paper("A")]})
+    pipeline.new = localcrawl.CrawlError("the crawl returned no papers; arXiv may be unreachable")
+
+    code, out = pipeline.run(capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 1 and report["status"] == "error" and "arXiv may be unreachable" in report["reason"]
+
+
+def test_ensure_day_backfills_missed_days_from_the_recent_listing(pipeline, capsys):
+    pipeline.seed({"2026-11-04": [paper("A")]})
+    pipeline.recent = {"2026-11-05": [paper("A"), paper("D"), paper("E")], "2026-11-06": [paper("F")], "2026-11-09": [paper("B")]}
+    pipeline.new = [paper("B")]
+
+    code, out = pipeline.run(capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0 and report["status"] == "present"
+    assert report["backfilled"] == {"2026-11-05": 2, "2026-11-06": 1} and report["gap"] == []
+    assert pipeline.wanted == [["2026-11-05", "2026-11-06"]]
+    assert ids_on(pipeline.remote, "2026-11-05") == ["D", "E"]
+    assert ids_on(pipeline.remote, "2026-11-06") == ["F"]
+    assert ids_on(pipeline.remote, "2026-11-09") == ["B"]
+
+
+def test_ensure_day_reports_days_older_than_the_listing_as_a_gap(pipeline, capsys):
+    """The listing covers five announcements; 11-04 had none (a holiday) and is neither backfilled nor a gap."""
+    pipeline.seed({"2026-10-22": [paper("A")]})
+    pipeline.recent = {d: [paper(d)] for d in ("2026-11-02", "2026-11-03", "2026-11-05", "2026-11-06", "2026-11-09")}
+
+    code, out = pipeline.run(capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0 and report["status"] == "present"
+    assert sorted(report["backfilled"]) == ["2026-11-02", "2026-11-03", "2026-11-05", "2026-11-06"]
+    assert report["gap"] == ["2026-10-23", "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30"]
+
+
+def test_ensure_day_still_crawls_today_when_the_backfill_fails(pipeline, capsys):
+    from summaries import localcrawl
+
+    pipeline.seed({"2026-11-04": [paper("A")]})
+    pipeline.recent_error = localcrawl.CrawlError("the arXiv API did not answer: timed out")
+
+    code, out = pipeline.run(capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0 and report["status"] == "present"
+    assert "timed out" in report["backfill_error"]
+    assert report["gap"] == ["2026-11-05", "2026-11-06"]
+
+
+def test_ensure_day_for_a_past_day_uses_the_recent_listing(pipeline, capsys):
+    pipeline.seed({"2026-11-05": [paper("A")], "2026-11-09": [paper("B")]})
+    pipeline.recent = {"2026-11-06": [paper("F")]}
+
+    code, out = pipeline.run("--date", "2026-11-06", capsys=capsys)
+
+    report = json.loads(out)
+    assert code == 0 and (report["status"], report["total"]) == ("present", 1)
+    assert pipeline.crawls == [] and ids_on(pipeline.remote, "2026-11-06") == ["F"]
+
+
+AI = {k: f"{k}内容" for k in ("tldr", "motivation", "method", "result", "conclusion")}
+
+
+@pytest.fixture
+def handover_day(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """Two papers, one summarised by a subagent chunk; no provider settings or keys; GitHub must not be called."""
     from summaries import github
 
     remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
-    calls = []
-    monkeypatch.setattr(github, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini"}))
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
+    run(clone, "prepare", "--date", DAY, capsys=capsys)
+    (clone / ".cache" / "summaries" / DAY / "chunk-000.out.txt").write_text("=== 1\n" + FIELDS.format(n=1))
+    for name in ("SUMMARY_PROVIDER", "SUMMARY_MODEL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(github, "gh", lambda *args: pytest.fail(f"GitHub was called: {args}"))
+    return remote, clone
+
+
+def test_handover_summarises_the_rest_through_the_api_here_when_a_key_is_set(handover_day, monkeypatch, capsys):
+    remote, clone = handover_day
+    client = MagicMock()
+    client.messages.create.return_value = SimpleNamespace(
+        stop_reason="end_turn", content=[SimpleNamespace(type="text", text=json.dumps(AI))]
+    )
+    monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    code, out = run(clone, "handover", "--date", DAY, "--reason", "weekly 81%", capsys=capsys)
+
+    result = json.loads(out)
+    assert code == 0 and result["path"] == "api-fallback"
+    assert [r["id"] for r in parse_jsonl(branch_file(remote, AI_FILE))] == ["1", "2"]
+    entry = log_lines(remote)[-1]
+    assert (entry["date"], entry["path"], entry["done"], entry["pending"]) == (DAY, "api-fallback", 2, 0)
+    assert entry["reason"] == "weekly 81%"
+
+
+def test_handover_without_a_key_pauses_and_logs_why(handover_day, capsys):
+    remote, clone = handover_day
+
+    code, out = run(clone, "handover", "--date", DAY, "--reason", "weekly 81%", capsys=capsys)
+
+    assert code == 0 and json.loads(out)["path"] == "paused-no-key"
+    entry = log_lines(remote)[-1]
+    assert (entry["path"], entry["done"], entry["pending"]) == ("paused-no-key", 1, 1)
+    assert entry["reason"].startswith("weekly 81%; ") and "ANTHROPIC_API_KEY" in entry["reason"]
+
+
+def test_handover_checks_the_configured_provider_and_model(handover_day, monkeypatch, capsys):
+    remote, clone = handover_day
+    monkeypatch.setenv("SUMMARY_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", "x")
 
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
+
     assert json.loads(out)["path"] == "paused-no-key"
     assert "SUMMARY_MODEL" in log_lines(remote)[-1]["reason"]
 
-    monkeypatch.setattr(github, "gh", fake_gh(["GEMINI_API_KEY"], calls, {"SUMMARY_PROVIDER": "gemini", "SUMMARY_MODEL": "g"}))
-    _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
-    assert json.loads(out)["path"] == "api-fallback"
 
-
-
-def test_handover_pauses_when_the_repository_settings_cannot_be_read(tmp_path, remote_and_clone, monkeypatch, capsys):
-    """A failed gh call must not be mistaken for an unset SUMMARY_PROVIDER."""
+def test_handover_with_nothing_pending_needs_no_fallback(tmp_path, remote_and_clone, monkeypatch, capsys):
     from summaries import github
 
     remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
-    calls = []
-    monkeypatch.setattr(github, "gh", fake_gh(["ANTHROPIC_API_KEY"], calls, "unreachable"))
+    ai = [{**paper("1"), "AI": AI}]
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")]), AI_FILE: dump_jsonl(ai)})
+    monkeypatch.setattr(github, "gh", lambda *args: pytest.fail(f"GitHub was called: {args}"))
 
     _, out = run(clone, "handover", "--date", DAY, capsys=capsys)
 
-    assert json.loads(out)["path"] == "paused-no-key"
-    assert "could not read" in log_lines(remote)[-1]["reason"]
-    assert not any(c[:2] == ("workflow", "run") for c in calls)
-
-
-def crawl_gh(calls, on_dispatch=None, runs=None, conclusion="success", flaky=0):
-    """GitHub CLI stand-in: records calls, lists `runs`, runs `on_dispatch` for `workflow run`.
-
-    The first `flaky` run listings after a dispatch fail as an offline `gh` would.
-    """
-    runs = runs if runs is not None else [{"databaseId": 1, "status": "completed", "conclusion": "success"}]
-    failures = [flaky]
-
-    def gh(*args):
-        calls.append(args)
-        if args[:2] == ("workflow", "run"):
-            if on_dispatch:
-                on_dispatch()
-            runs.insert(0, {"databaseId": 100 + len(runs), "status": "completed", "conclusion": conclusion})
-            return ""
-        if args[:2] == ("run", "list"):
-            if any(c[:2] == ("workflow", "run") for c in calls) and failures[0] > 0:
-                failures[0] -= 1
-                raise subprocess.CalledProcessError(1, ["gh"], stderr="connection reset")
-            return json.dumps(runs)
-        raise AssertionError(args)
-
-    return gh
-
-
-def test_ensure_day_does_nothing_when_the_crawl_already_published(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-11-02.jsonl": dump_jsonl([paper("A")])})
-    calls = []
-    monkeypatch.setattr(github, "gh", crawl_gh(calls))
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    assert code == 0 and json.loads(out)["status"] == "present" and calls == []
-
-
-def test_ensure_day_skips_weekends(remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    _, clone = remote_and_clone
-    calls = []
-    monkeypatch.setattr(github, "gh", crawl_gh(calls))
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-01", capsys=capsys)
-
-    assert json.loads(out)["status"] == "weekend" and calls == []
-
-
-def test_ensure_day_starts_the_crawl_and_waits_for_it(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli, github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-
-    def crawl():
-        work = tmp_path / "data-seed"
-        (work / "data" / "2026-11-02.jsonl").write_text(dump_jsonl([paper("B")]))
-        git(work, "add", ".")
-        git(work, "commit", "-m", "crawl")
-        git(work, "push", str(remote), "HEAD:refs/heads/data")
-
-    calls = []
-    monkeypatch.setattr(github, "gh", crawl_gh(calls, on_dispatch=crawl))
-    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    report = json.loads(out)
-    assert (report["status"], report["dispatched"], report["total"]) == ("present", True, 1)
-    assert ("workflow", "run", "run.yml", "-R", "alice/my-arxiv") in calls
-
-
-def test_ensure_day_reports_a_crawl_that_found_nothing(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli, github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-    calls = []
-    monkeypatch.setattr(github, "gh", crawl_gh(calls))
-    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    assert json.loads(out)["status"] == "missing"
-
-
-def test_ensure_day_does_not_start_a_second_crawl_while_one_runs(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli, github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-    runs = [{"databaseId": 7, "status": "in_progress", "conclusion": ""}]
-
-    def finish(seconds):
-        runs[0]["status"] = "completed"
-
-    calls = []
-    monkeypatch.setattr(github, "gh", crawl_gh(calls, runs=runs))
-    monkeypatch.setattr(cli.time, "sleep", finish)
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    assert not any(c[:2] == ("workflow", "run") for c in calls)
-    assert json.loads(out)["dispatched"] is False
-
-
-def test_ensure_day_reports_a_failed_crawl(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import cli, github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-    monkeypatch.setattr(github, "gh", crawl_gh([], conclusion="failure", flaky=2))
-    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    assert json.loads(out)["status"] == "crawl-failed"
-
-
-def test_ensure_day_reports_a_dispatch_it_could_not_make(tmp_path, remote_and_clone, monkeypatch, capsys):
-    from summaries import github
-
-    remote, clone = remote_and_clone
-    seed_data_branch(tmp_path, remote, {"data/2026-10-30.jsonl": dump_jsonl([paper("A")])})
-
-    def offline(*args):
-        raise subprocess.CalledProcessError(1, ["gh"], stderr="error connecting to api.github.com")
-
-    monkeypatch.setattr(github, "gh", offline)
-
-    code, out = run(clone, "ensure-day", "--date", "2026-11-02", capsys=capsys)
-
-    report = json.loads(out)
-    assert code == 1 and report["status"] == "error" and "api.github.com" in report["reason"]
+    assert json.loads(out)["path"] == "claude-code"

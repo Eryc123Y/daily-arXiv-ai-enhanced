@@ -11,7 +11,7 @@ Every new paper of the day in your arXiv categories (this instance: cs.CV, cs.AI
 
 ## Deploy your own
 
-Everything runs on GitHub's free tier; the page reads its data from whichever repository serves it, so a fork needs no code changes.
+The crawl and the summaries run on your own machine (no GitHub Actions schedule); GitHub stores the `data` branch and serves the page for free. The page reads its data from whichever repository serves it, so a fork needs no code changes.
 
 1. Fork this repository (the main branch is enough; the first crawl creates the `data` branch), then clone your fork.
 2. With [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com/) logged in to your account:
@@ -21,13 +21,14 @@ Everything runs on GitHub's free tier; the page reads its data from whichever re
    ```
 
    ```bash
-   uv run python -m summaries setup --categories "cs.CV, cs.LG" --run
+   uv run python -m summaries setup --categories "cs.CV, cs.LG"
    ```
 
-   This sets the repository variables, enables the workflows and GitHub Pages, starts the first crawl and prints your page's address. If GitHub has not enabled workflows on the fork yet, it tells you which button to click on the Actions tab; run it again afterwards. Add `--commit-name` and `--commit-email` (your GitHub noreply address) to make data commits under your name instead of the github-actions bot.
-3. Choose who writes the summaries:
-   - a local coding agent on your machine (default): `uv run python -m summaries run-local --client claude` (or `codex`, `antigravity`), on a cron or launchd schedule; or a Claude Code scheduled task with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md);
-   - an LLM API inside GitHub Actions: add your provider's key with `gh secret set` and set `SUMMARY_MODE` to `api` (see API providers below).
+   This sets the repository variables (the crawl reads `CATEGORIES`), enables GitHub Pages and prints your page's address. GitHub Pages builds need Actions to be allowed on the repository; if GitHub has disabled it on the fork, setup tells you which button to click (no workflow runs on a schedule). Add `--commit-name` and `--commit-email` (your GitHub noreply address) to make data commits under your name.
+3. Crawl and summarise on a schedule, Monday to Friday after arXiv's announcement (00:00 UTC in summer, 01:00 UTC in winter):
+   - `uv run python -m summaries ensure-day` crawls today's papers on your machine and backfills days it missed;
+   - `uv run python -m summaries run-local --client claude` (or `codex`, `antigravity`) writes the summaries, and `uv run python -m summaries hf-signals --days 7` the Hugging Face upvotes;
+   - run them from cron or launchd, or as a Claude Code scheduled task with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md).
 4. Put your own interests in [`js/interest-presets.js`](js/interest-presets.js) (named topics with keywords), or edit them per browser in the page's Settings.
 
 ### What it costs
@@ -36,7 +37,7 @@ Measured on this instance (details in [docs/daily-pipeline.md](docs/daily-pipeli
 
 | Step | Per day |
 |---|---|
-| Crawl and Hugging Face upvotes (GitHub Actions) | free |
+| Crawl and Hugging Face upvotes (on the Mac) | free |
 | Summaries, Haiku, 40 papers a call | about $0.27 for 450 papers, $0.53 for 910 |
 | Chinese report, one Sonnet call | about $0.16-0.21 |
 | The scheduled task around them | 7-9 tool calls; a few percent of a 5-hour window |
@@ -45,22 +46,22 @@ On 2026-11-03 a 1,335-paper day took the 5-hour window from 5% to 9% and left th
 
 ## How a day flows
 
-1. **GitHub Actions** ([`run.yml`](.github/workflows/run.yml), Monday to Friday at 01:17, 01:47, 03:23 and 07:37 UTC, because GitHub delays or skips scheduled runs; the local task also starts it when the day is missing) reads each category's `/new` listing, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day.
+1. **The crawl** (`summaries ensure-day`, run by the local task) reads each category's `/new` listing on the Mac, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day. Weekdays the Mac missed (asleep, off, travelling) are backfilled on the next run from the `/recent` listing, which shows the last five announcements, with abstracts from the arXiv API; anything older is reported as a gap. GitHub Actions ran this crawl until 2026-11-08, when GitHub disabled workflows on this fork.
 2. **Summaries** are written to `data/<date>_AI_enhanced_English.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its abstract, says the summary is not written yet, and a progress bar shows how many are ready.
 3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
 
 ## Summary modes
 
-Set by the repository variable `SUMMARY_MODE`.
-
 | Mode | Who summarises | Needs |
 |---|---|---|
-| `claude-code` (default, also when unset) | A local coding agent: a scheduled Claude Code task (headless Haiku through `run-local`), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
-| `api` | The Actions job, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key secret |
+| Local coding agent (default) | A scheduled Claude Code task (headless Haiku through `run-local`), or `run-local` with Codex, Antigravity or another CLI | That client's subscription; the machine awake |
+| API | `uv run python -m summaries api --days 3` on the same machine, through the provider chosen by `SUMMARY_PROVIDER` (below) | That provider's key in the job's environment |
 
 ### API providers
 
-| `SUMMARY_PROVIDER` | Key secret | `SUMMARY_MODEL` | Notes |
+The settings are environment variables of the job that runs `summaries api` (or `handover`).
+
+| `SUMMARY_PROVIDER` | Key variable | `SUMMARY_MODEL` | Notes |
 |---|---|---|---|
 | `anthropic` (default) | `ANTHROPIC_API_KEY` | optional, default `claude-haiku-5-5` | Anthropic SDK, low effort, structured output |
 | `openai` | `OPENAI_API_KEY` | required | Chat Completions with a strict JSON schema. Set `OPENAI_BASE_URL` to use any OpenAI-compatible server (DeepSeek, OpenRouter, vLLM, Ollama, ...) |
@@ -68,36 +69,18 @@ Set by the repository variable `SUMMARY_MODE`.
 
 Optional variables for `openai`/`gemini`: `SUMMARY_REASONING_EFFORT` (for example `low`, only for models that accept it) and `SUMMARY_RESPONSE_FORMAT=json_object` for servers without JSON-schema support. All providers share one retry policy: 429, 5xx and network errors are retried with backoff; another 4xx or a refusal leaves that paper pending; a wrong key or model name stops the run.
 
-Switch to API mode, for example with Gemini:
+For example with Gemini, in the job's environment: `SUMMARY_PROVIDER=gemini`, `SUMMARY_MODEL=<gemini-model-id>` and `GEMINI_API_KEY`. The local task can run alongside: it finds nothing pending and only fills papers the API skipped.
 
-```bash
-gh secret set GEMINI_API_KEY -R Eryc123Y/daily-arXiv-ai-enhanced
-```
-
-```bash
-gh variable set SUMMARY_PROVIDER --body gemini -R Eryc123Y/daily-arXiv-ai-enhanced
-```
-
-```bash
-gh variable set SUMMARY_MODEL --body <gemini-model-id> -R Eryc123Y/daily-arXiv-ai-enhanced
-```
-
-```bash
-gh variable set SUMMARY_MODE --body api -R Eryc123Y/daily-arXiv-ai-enhanced
-```
-
-Switch back with `gh variable set SUMMARY_MODE --body claude-code -R Eryc123Y/daily-arXiv-ai-enhanced`. If `api` is set but the provider is not ready (no key secret, no model), the job warns and falls back to `claude-code`. In API mode the local task finds nothing pending and only fills papers the API skipped; it can also be paused in the Claude app.
-
-### The local task (claude-code mode)
+### The local task
 
 Scheduled task `daily-arxiv-summaries`, at 10:20, 12:20, 16:20 and 21:20 local time (MYT) Sunday to Friday, with the prompt in [docs/claude-code-task.md](docs/claude-code-task.md). A weekday run:
 
-1. `uv run python -m summaries ensure-day` starts the crawl from the Mac when the day's papers are still missing, and waits for it;
+1. `uv run python -m summaries ensure-day` crawls the day's papers when they are still missing and backfills missed weekdays (see How a day flows), then `uv run python -m summaries hf-signals --days 7` refreshes the Hugging Face upvotes;
 2. checks plan usage (so the job never crowds out your other work on the same subscription; see the fallback below);
 3. `uv run python -m summaries run-local --client claude` summarises 40 pending papers per headless Haiku call (`--tools Read,Write --strict-mcp-config`, so each call starts at about 11,500 tokens instead of 70,000), merging and pushing as it goes;
 4. `uv run python -m summaries digest --dir <folder>` writes the day's short Chinese report (one Sonnet call over the site data; code renders it with links that open each paper on the page) and prints a push message.
 
-The evening run resumes anything the morning could not finish. On Sunday `digest-week` puts the week's radar and topic counts on one page. Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md); the design and its measurements (cost per run, PDFs versus abstracts, how accurate abstract-only picks are): [docs/daily-pipeline.md](docs/daily-pipeline.md).
+The evening run resumes anything the morning could not finish. Everything runs only while the Mac is awake and the Claude app is open; days missed for longer than a week cannot be crawled from the listings and are reported as a gap in the task's message. On Sunday `digest-week` puts the week's radar and topic counts on one page. Progress is committed as it goes and finished papers are skipped, so a run that stops (usage gate, app closed) continues where it left off. Details: [docs/claude-code-mode.md](docs/claude-code-mode.md); the design and its measurements (cost per run, PDFs versus abstracts, how accurate abstract-only picks are): [docs/daily-pipeline.md](docs/daily-pipeline.md).
 
 ### Other coding agents (Codex, Antigravity, ...)
 
@@ -121,18 +104,18 @@ Useful flags: `--model`, `--parallel 2` (calls at once), `--max-chunks N` (a per
 When the 5-hour window or the weekly limit reaches **80%**, the task stops using the subscription and runs `uv run python -m summaries handover --date D`:
 
 - it merges and publishes what the subagents finished;
-- if the configured API provider is ready (its key secret exists, checked by name with `gh secret list`, and `SUMMARY_MODEL` is set where required), it dispatches [`summarize-api.yml`](.github/workflows/summarize-api.yml) for that date. That Actions job summarises the remaining papers through the same `api` code path, so the day still ends complete;
-- without the secret it pauses: the rest of the day stays "summary pending" on the page and the next scheduled run resumes on the subscription.
+- if an API provider is ready in the task's environment (its key variable is set, and `SUMMARY_MODEL` where required), it summarises the remaining papers through the same `api` code path on the Mac, so the day still ends complete;
+- otherwise it pauses: the rest of the day stays "summary pending" on the page and the next scheduled run resumes on the subscription. This instance has no key on the Mac, so it pauses.
 
-Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`date`, `path` = `claude-code` / `api` / `api-fallback` / `paused-no-key`, `total`, `done`, `pending`, time, reason). The key lives only in the GitHub secret, never on the Mac.
+Every outcome is appended to `logs/summary-runs.jsonl` on the `data` branch (`date`, `path` = `claude-code` / `api` / `api-fallback` / `paused-no-key`, `total`, `done`, `pending`, time, reason). Keys are never printed or stored by the code.
 
 ## Data branch
 
 - `data/<date>.jsonl`: one paper per line (`id`, `title`, `authors`, `categories` with the primary first, `summary` = abstract, `comment`, `abs`, `pdf`, optional `code_url`).
 - `data/<date>_AI_enhanced_English.jsonl` (`LANGUAGE` variable; older days also have upstream's `_Chinese` files): the same records plus `AI` = `{tldr, motivation, method, result, conclusion}`, only for papers whose summary is complete.
-- `data/<date>_hf.json`: upvotes on Hugging Face Daily Papers for that day's papers that were listed there (`{arXiv id: upvotes}`), refreshed every four hours by [`signals.yml`](.github/workflows/signals.yml) (`uv run python -m summaries hf-signals`); the page shows them as ▲ badges.
+- `data/<date>_hf.json`: upvotes on Hugging Face Daily Papers for that day's papers that were listed there (`{arXiv id: upvotes}`), refreshed by each run of the local task (`uv run python -m summaries hf-signals --days 7`); the page shows them as ▲ badges.
 - `assets/file-list.txt`: every jsonl file on the branch, rebuilt on each commit.
-- `logs/summary-runs.jsonl`: which summary path ran for each day, and when the daily report was written (`path` = `report`). The page turns it, with the latest crawl run from the GitHub API, into a status line under the day: crawled, summaries done and by whom (or why they paused), report written.
+- `logs/summary-runs.jsonl`: when each day was crawled (`path` = `crawl`), which summary path ran, and when the daily report was written (`path` = `report`). The page turns it into a status line under the day: crawled, summaries done and by whom (or why they paused), report written.
 
 Raw URL pattern: `https://raw.githubusercontent.com/Eryc123Y/daily-arXiv-ai-enhanced/data/data/<date>.jsonl`.
 
@@ -146,13 +129,15 @@ uv sync && uv run pytest -q
 node --test tests/js/*.test.js
 ```
 
+No CI runs while Actions is disabled on this repository, so run both before merging to `main`. The suite never touches the network or the real remote (see `conftest.py`).
+
 Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page).
 
 ## Changes from upstream
 
 - Metadata comes from the listing page itself, not one arXiv API call per paper; cross-lists are included.
 - Deduplication against the past week of the `data` branch, so weekend reruns do not republish Friday.
-- The workflow no longer commits to `main`, and has the `contents: write` permission it needs.
+- The crawl runs on the maintainer's machine instead of a GitHub Actions schedule, and backfills days it missed; nothing commits to `main`.
 - `assets/file-list.txt` lists every day, which fixes the date-range view (upstream #136).
 - Summaries are produced by Claude (two modes above); papers without one are shown as pending instead of being dropped.
 - Keyword matching uses whole words over title, abstract and TL;DR.

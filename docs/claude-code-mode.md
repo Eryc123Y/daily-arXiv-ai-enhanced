@@ -1,6 +1,6 @@
 # Claude Code summary mode
 
-The default mode. GitHub Actions publishes the day's papers; a scheduled Claude Code task on Eric's Mac writes the English summaries with headless Haiku calls, pushes them to the `data` branch and then writes the short Chinese report. No API key is involved. Why it works this way, with measurements: [daily-pipeline.md](daily-pipeline.md); the task's prompt: [claude-code-task.md](claude-code-task.md).
+The default mode. A scheduled Claude Code task on Eric's Mac crawls and publishes the day's papers, refreshes the Hugging Face upvotes, writes the English summaries with headless Haiku calls, pushes them to the `data` branch and then writes the short Chinese report. No API key is involved. Why it works this way, with measurements: [daily-pipeline.md](daily-pipeline.md); the task's prompt: [claude-code-task.md](claude-code-task.md).
 
 ## Commands
 
@@ -8,7 +8,8 @@ All run from the repository root with `uv run python -m summaries ...`:
 
 | Command | What it does |
 |---|---|
-| `ensure-day [--date D] [--wait 480]` | On a weekday whose papers are not on the `data` branch yet, starts the `run.yml` crawl (unless one is running) and waits for it. Prints `present`, `missing` (the crawl found nothing new), `crawl-failed`, `waiting` (still running) or `weekend`. |
+| `ensure-day [--date D]` | Crawls today's `/new` listings on this machine when the day is not on the `data` branch yet, and first backfills weekdays missed since the newest published day from the `/recent` listing (last five announcements; abstracts from the arXiv API). Prints `status` (`present`, `missing` = nothing new yet, `error`, `weekend`) and, when there were missed days, `backfilled` (day: papers added), `gap` (days too old for the listing) and `backfill_error`. |
+| `hf-signals --days 7` | Hugging Face Daily Papers upvotes for the last week's days, as `data/<date>_hf.json`. |
 | `run-local --client claude [--parallel 4] [--max-chunks N]` | The summaries: 40 pending papers per headless `claude -p --model haiku --tools Read,Write --strict-mcp-config` call, merged and pushed every few chunks, logged as `local-claude`. Takes the same lock as `prepare`. |
 | `digest --dir DIGEST [--wait-summaries] [--final]` | The day's Chinese report from the site data (see below). |
 | `digest-week --dir DIGEST` | Sunday: the week's reports on one page, with no model call. |
@@ -16,10 +17,10 @@ All run from the repository root with `uv run python -m summaries ...`:
 | `prepare --date D [--chunk-size 20]` | Merges any outputs left by an interrupted run, takes the run lock (`.cache/summaries/LOCK`, exit code 3 while another run holds it, expires after 3 hours), and writes `INSTRUCTIONS.md` plus `chunk-NNN.in.txt` for the pending papers. Prints the chunk list as JSON. |
 | `merge --date D` | Parses every `chunk-*.out.txt`, keeps complete blocks for papers of that day, merges them into `data/D_AI_enhanced_English.jsonl` and pushes. Existing summaries are never overwritten. Prints `done`, `pending` and any problems. |
 | `finish` | Releases the lock and deletes work folders older than 14 days. |
-| `handover --date D [--reason ...]` | Usage gate reached: merges finished outputs, then dispatches the `summarize-api` workflow for D if the configured API provider is ready (key secret by name, model where required), otherwise pauses and logs why. |
+| `handover --date D [--reason ...]` | Usage gate reached: merges finished outputs, then summarises the rest of D through the API on this machine if a provider is ready in the environment (key variable, model where required), otherwise pauses and logs why. |
 | `record --date D --path P` | Appends a line to `logs/summary-runs.jsonl` on the `data` branch. |
 
-Pushes go through git plumbing on a temporary index: the checkout's branch and working tree are untouched, commits carry the `Eryc123Y` noreply identity, and a push that races the Actions job is rebuilt on top of the newer remote state.
+Pushes go through git plumbing on a temporary index: the checkout's branch and working tree are untouched, commits carry the `Eryc123Y` noreply identity, and a push that races another run is rebuilt on top of the newer remote state.
 
 ## The report (`digest`)
 

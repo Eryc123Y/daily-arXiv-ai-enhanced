@@ -7,7 +7,7 @@
  *                        categories: crawled categories from assets/site.json, or null }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
  *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
- *   loadStatus()    -> { log: [run log entries], crawl: latest crawl workflow run or null }
+ *   loadStatus()    -> { log: [run log entries] } (crawl, summary and report runs)
  *                      for the pipeline line; never rejects
  *
  * Both reject with a LoadError when a file that should be there cannot be
@@ -38,8 +38,8 @@
     });
   }
 
-  /** url(path): a data-branch file; api(path): the repository on the GitHub REST API (optional). */
-  function createStaticSource({ fetch: fetchImpl, url, api }) {
+  /** url(path): a data-branch file. */
+  function createStaticSource({ fetch: fetchImpl, url }) {
     let languages = new Map();
 
     async function fetchText(path, { optional = false } = {}) {
@@ -61,18 +61,6 @@
         return parsed && typeof parsed === 'object' ? parsed : {};
       } catch (error) {
         return {};
-      }
-    }
-
-    async function latestCrawl() {
-      if (!api) return null;
-      try {
-        const response = await fetchImpl(api('actions/workflows/run.yml/runs?per_page=1'), { cache: 'no-cache' });
-        if (!response.ok) return null;
-        const runs = JSON.parse(await response.text()).workflow_runs || [];
-        return runs[0] || null;
-      } catch (error) {
-        return null;
       }
     }
 
@@ -106,11 +94,8 @@
         return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
       },
       async loadStatus() {
-        const [logText, crawl] = await Promise.all([
-          fetchText('logs/summary-runs.jsonl', { optional: true }).catch(() => ''),
-          latestCrawl(),
-        ]);
-        return { log: parseLines(logText), crawl };
+        const logText = await fetchText('logs/summary-runs.jsonl', { optional: true }).catch(() => '');
+        return { log: parseLines(logText) };
       },
     };
   }
@@ -124,6 +109,5 @@
   root.DataSource = createStaticSource({
     fetch: (...args) => root.fetch(...args),
     url: path => root.DATA_CONFIG.getDataUrl(path),
-    api: path => `https://api.github.com/repos/${root.DATA_CONFIG.repoOwner}/${root.DATA_CONFIG.repoName}/${path}`,
   });
 })(typeof self !== 'undefined' ? self : this);
