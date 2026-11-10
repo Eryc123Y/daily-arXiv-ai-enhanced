@@ -450,3 +450,79 @@ def test_digest_reads_upvotes_of_the_previous_batch(tmp_path, remote_and_clone, 
     code, out, _ = run_digest(clone, vault, monkeypatch, capsys, ["note | n\n"])
 
     assert code == 0 and "[Popular paper]" in out["report"] and "Quiet paper" not in out["report"]
+
+
+def clients_model(calls, failing=("claude",)):
+    """A run_model stand-in: clients named in `failing` fail as a signed-out claude does, the others answer in turn."""
+    answers = ["radar | 中 | 2611.2 | 复用轴相近 | check\nnote | n\n", "radar | 可借鉴 | 2611.2 | 读完全文 | 引用\n"]
+
+    def model(argv, prompt, cwd):
+        calls.append(argv[0])
+        if argv[0] in failing:
+            raise RuntimeError(f"{argv[0]} exited with 1: Failed to authenticate: OAuth session expired")
+        return answers.pop(0)
+
+    return model
+
+
+def run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model, *extra):
+    remote, clone = remote_and_clone
+    seed_day(tmp_path, remote)
+    vault = make_vault(tmp_path)
+    monkeypatch.setattr(digest, "run_model", model)
+    monkeypatch.setattr(digest, "fetch_fulltext", lambda paper_id, work: "text")
+    monkeypatch.setattr(digest, "load_topics", lambda: TOPICS)
+    code = main(["--repo", str(clone), "digest", "--dir", str(vault), "--today", DAY, "--cache", str(tmp_path / "c"), *extra])
+    return code, json.loads(capsys.readouterr().out)
+
+
+def test_codex_writes_the_report_when_claude_fails(tmp_path, remote_and_clone, monkeypatch, capsys):
+    calls = []
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls))
+
+    assert code == 0 and out["status"] == "written" and out["client"] == "codex"
+    assert calls == ["claude", "codex", "codex"]  # the full-text check goes straight to the client that answered
+    assert "（可借鉴，已读全文）" in out["report"]
+    assert any("OAuth session expired" in p and "codex" in p for p in out["problems"])
+
+
+def test_the_report_names_claude_when_it_answers(tmp_path, remote_and_clone, monkeypatch, capsys):
+    calls = []
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=()))
+
+    assert (code, out["client"], calls) == (0, "claude", ["claude", "claude"])
+    assert not any("codex" in p for p in out["problems"])
+
+
+@pytest.mark.parametrize("extra", [["--command", '["mycli", "{model}"]'], ["--fallback", ""]])
+def test_no_fallback_with_an_explicit_client_or_an_empty_fallback(tmp_path, remote_and_clone, monkeypatch, capsys, extra):
+    calls = []
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "mycli")), *extra)
+
+    assert out["status"] == "error" and "codex" not in calls and len(calls) == 1
+
+
+def test_the_error_names_both_clients_when_both_fail(tmp_path, remote_and_clone, monkeypatch, capsys):
+    calls = []
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "codex")))
+
+    assert out["status"] == "error" and calls == ["claude", "codex"]
+    assert "claude exited" in out["reason"] and "codex exited" in out["reason"]
+
+
+@pytest.mark.parametrize("value", ["not-json", "[]", "null", "[123]", '["codex", ""]'])
+def test_a_malformed_fallback_is_refused_before_any_call(value, capsys):
+    with pytest.raises(SystemExit):
+        main(["digest", "--dir", "v", "--fallback", value])
+    assert "--fallback" in capsys.readouterr().err
+
+
+def test_an_unusable_fallback_answer_keeps_the_claude_error(tmp_path, remote_and_clone, monkeypatch, capsys):
+    def model(argv, prompt, cwd):
+        if argv[0] == "claude":
+            raise RuntimeError("claude exited with 1: OAuth session expired")
+        return "Sorry, I cannot produce the report."
+
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
+
+    assert out["status"] == "error" and "OAuth session expired" in out["reason"] and "codex" in out["reason"]
