@@ -24,9 +24,34 @@ def test_keywords_match_like_the_reading_page():
 def test_the_shipped_presets_load_with_their_keywords():
     topics = load_topics()
     names = [t["name"] for t in topics]
-    assert names[0] == "2D-to-3D and stereo"
-    assert len(names) == 4 and all(t["keywords"] for t in topics)
-    assert "RLVR" in next(t for t in topics if t["name"] == "Weak supervision and data reuse")["keywords"]
+    assert names == [
+        "2D-to-3D and stereo",
+        "Weak supervision and data reuse",
+        "Continual learning",
+        "Data and representation",
+        "Formal languages and reasoning",
+        "Reinforcement learning and agents",
+        "Language, cognition and learnability",
+        "Learning theory and information",
+    ]
+    assert all(t["keywords"] for t in topics)
+    keywords = {t["name"]: t["keywords"] for t in topics}
+    assert "RLVR" in keywords["Weak supervision and data reuse"]
+    assert {"Lean", "autoformalization", "Chomsky hierarchy"} <= set(keywords["Formal languages and reasoning"])
+    assert {"RLHF", "Markov decision process", "credit assignment"} <= set(keywords["Reinforcement learning and agents"])
+    assert {"BabyLM", "poverty of the stimulus", "iterated learning"} <= set(keywords["Language, cognition and learnability"])
+    assert {"rate-distortion", "minimum description length", "PAC learning"} <= set(keywords["Learning theory and information"])
+
+
+def test_a_capitalised_one_word_keyword_is_a_name_and_keeps_its_case():
+    """"Lean" the proof assistant, not "lean" the adjective; phrases and acronyms match in any case."""
+    assert keyword_matches("Formal proofs in Lean 4", "Lean")
+    assert not keyword_matches("A lean, fast tokenizer", "Lean")
+    assert keyword_matches("Training with rlhf", "RLHF")
+    assert keyword_matches("Markov Decision Processes", "Markov decision process")
+    topics = [{"name": "Formal", "keywords": ["Lean"]}]
+    assert topics_for({"title": "Lean models for edge devices", "summary": "We keep the network lean."}, topics) == ["Formal"]
+    assert topics_for({"title": "Small models for edge devices", "summary": "We keep the network lean."}, topics) == []
 
 
 def test_topics_read_title_abstract_and_tldr():

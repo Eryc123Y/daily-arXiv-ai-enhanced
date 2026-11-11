@@ -1,9 +1,11 @@
 """Interest topics and keyword matching, the same as the reading page's.
 
 Topics come from js/interest-presets.js, and a keyword matches as in
-js/paper-data.js: a whole word or phrase, case-insensitive, hyphens and spaces
-interchangeable, with an optional plural "s"/"es", over the title, abstract
-and TL;DR.
+js/paper-data.js: a whole word or phrase, hyphens and spaces interchangeable,
+with an optional plural "s"/"es", over the title, abstract and TL;DR. Case
+does not matter, except for a name: a one-word keyword with a capital first
+letter and a lowercase letter after it ("Lean", "BabyLM") matches only as
+written, so "Lean" the proof assistant is not "lean" the adjective.
 """
 
 import re
@@ -23,9 +25,27 @@ def load_topics(path=PRESETS):
     return [{"name": name, "keywords": QUOTED.findall(words)} for name, words in TOPIC.findall(body)]
 
 
+def _is_name(words):
+    word = words[0] if len(words) == 1 else ""
+    return bool(word) and word[0].isupper() and any(c.islower() for c in word[1:])
+
+
+def _caseless(text):
+    """`text` as a pattern that matches it in any case, one character class per cased letter."""
+    def one(c):
+        lower, upper = c.lower(), c.upper()
+        return f"[{lower}{upper}]" if lower != upper and len(lower) == len(upper) == 1 else re.escape(c)
+
+    return "".join(map(one, text))
+
+
 def _term_pattern(term):
-    words = [re.escape(w) for w in re.split(SEPARATOR, term.strip()) if w]
-    return f"{SEPARATOR.join(words)}(?:e?s)?" if words else None
+    words = [w for w in re.split(SEPARATOR, term.strip()) if w]
+    if not words:
+        return None
+    if _is_name(words):
+        return f"{re.escape(words[0])}(?:e?s)?"
+    return f"{SEPARATOR.join(map(_caseless, words))}(?:[eE]?[sS])?"
 
 
 @lru_cache(maxsize=256)
@@ -33,7 +53,7 @@ def _keyword_regex(terms):
     patterns = [p for p in map(_term_pattern, sorted(terms, key=len, reverse=True)) if p]
     if not patterns:
         return None
-    return re.compile(rf"(^|[^A-Za-z0-9])({'|'.join(patterns)})(?![A-Za-z0-9])", re.IGNORECASE)
+    return re.compile(rf"(^|[^A-Za-z0-9])({'|'.join(patterns)})(?![A-Za-z0-9])")
 
 
 def keyword_matches(text, keyword):

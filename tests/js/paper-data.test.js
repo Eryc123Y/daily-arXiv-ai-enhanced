@@ -87,8 +87,13 @@ test('preset topics hold exactly the flat keyword list', () => {
     'Weak supervision and data reuse',
     'Continual learning',
     'Data and representation',
+    'Formal languages and reasoning',
+    'Reinforcement learning and agents',
+    'Language, cognition and learnability',
+    'Learning theory and information',
   ]);
-  for (const noisy of ['disparity', 'off-policy', 'information-theoretic', 'sample efficiency', 'PPO', 'data quality']) {
+  // information-theoretic came back on 2026-11-12 inside its own topic (about two papers a day, half on topic).
+  for (const noisy of ['disparity', 'off-policy', 'sample efficiency', 'PPO', 'data quality', 'exploration', 'multi-agent', 'compression']) {
     assert.ok(!INTEREST_PRESETS.keywords.includes(noisy), `${noisy} matches mostly unrelated papers`);
   }
 });
@@ -102,6 +107,13 @@ test('nothing saved means the current defaults', () => {
 test('a saved copy of an earlier default list follows the new defaults', () => {
   const earlier = [...INTEREST_PRESETS.previousDefaults[0]].reverse();
   assert.deepEqual(keywordsFor(earlier), { keywords: INTEREST_PRESETS.keywords, clearSaved: true });
+});
+
+test('a browser that saved the four-topic defaults of 2026-10-31 follows the new ones', () => {
+  const fourTopics = INTEREST_PRESETS.previousDefaults.find(list => list.includes('knowledge injection') && !list.includes('Lean'));
+  assert.ok(fourTopics && fourTopics.includes('tokenizer') && fourTopics.includes('cross-situational'));
+  assert.deepEqual(keywordsFor([...fourTopics]), { keywords: INTEREST_PRESETS.keywords, clearSaved: true });
+  assert.ok(INTEREST_PRESETS.version > '2026-10-31');
 });
 
 test('a customised list is kept as it is', () => {

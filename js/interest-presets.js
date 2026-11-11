@@ -7,6 +7,14 @@
  * data representations are most learnable). Keywords that mostly matched
  * unrelated papers (disparity, off-policy, PPO, sample efficiency, ...) are
  * left out or narrowed.
+ * 2026-11-12: four more topics for the watch list's new areas (formal
+ * languages, RL, language and cognition, learning theory). The cognition and
+ * theory keywords of "Weak supervision and data reuse" (ideal observer,
+ * Bayes-optimal, PAC learning, cross-situational, word learning, referential
+ * game, emergent communication) and "learnability" moved to them; a keyword
+ * lives in one topic only. "exploration", "multi-agent" and "compression"
+ * matched mostly unrelated papers and were narrowed or left out. A one-word
+ * keyword with a capital ("Lean", "BabyLM") keeps its case (paper-data.js).
  */
 (function (root) {
   const TOPICS = [
@@ -52,13 +60,6 @@
         'repeated epochs',
         'multiple epochs',
         'multi-epoch',
-        'ideal observer',
-        'Bayes-optimal',
-        'PAC learning',
-        'cross-situational',
-        'word learning',
-        'referential game',
-        'emergent communication',
       ],
     },
     {
@@ -78,11 +79,81 @@
       keywords: [
         'tokenization',
         'tokenizer',
-        'learnability',
         'data-constrained',
         'repeated data',
         'data repetition',
         'data representation',
+      ],
+    },
+    {
+      name: 'Formal languages and reasoning',
+      keywords: [
+        'formal language',
+        'regular language',
+        'context-free grammar',
+        'automata',
+        'grammatical inference',
+        'expressivity of transformers',
+        'Chomsky hierarchy',
+        'theorem proving',
+        'proof assistant',
+        'Lean',
+        'autoformalization',
+        'formal verification',
+        'neural theorem prover',
+        'proof search',
+        'type theory',
+      ],
+    },
+    {
+      name: 'Reinforcement learning and agents',
+      keywords: [
+        'reinforcement learning',
+        'policy gradient',
+        'bandit',
+        'reward model',
+        'RLHF',
+        'preference learning',
+        'exploration-exploitation',
+        'Markov decision process',
+        'multi-agent learning',
+        'MARL',
+        'credit assignment',
+        'value function',
+      ],
+    },
+    {
+      name: 'Language, cognition and learnability',
+      keywords: [
+        'language acquisition',
+        'child language',
+        'word learning',
+        'cross-situational',
+        'emergent communication',
+        'referential game',
+        'iterated learning',
+        'grounded language',
+        'poverty of the stimulus',
+        'learnability',
+        'Bayesian cognition',
+        'ideal observer',
+        'compositionality',
+        'BabyLM',
+        'statistical learning',
+      ],
+    },
+    {
+      name: 'Learning theory and information',
+      keywords: [
+        'sample complexity',
+        'PAC learning',
+        'generalization bound',
+        'minimax rate',
+        'information-theoretic',
+        'mutual information',
+        'rate-distortion',
+        'minimum description length',
+        'Bayes-optimal',
       ],
     },
   ];
@@ -90,6 +161,63 @@
   // Default lists shipped before; a browser that saved one of these unchanged
   // gets the current defaults instead of a frozen copy.
   const PREVIOUS_DEFAULTS = [
+    [
+      'stereo',
+      'stereoscopic',
+      '2D-to-3D',
+      'monocular-to-stereo',
+      'disparity estimation',
+      'disparity map',
+      'binocular',
+      'novel view',
+      'view synthesis',
+      '3D video',
+      'spatial video',
+      'VR video',
+      'depth-based rendering',
+      'dual-view',
+      'anaglyph',
+      'monocular depth',
+      'video depth',
+      'weak supervision',
+      'weakly supervised',
+      'partial label',
+      'complementary label',
+      'candidate label',
+      'bandit feedback',
+      'binary reward',
+      'verifiable reward',
+      'RLVR',
+      'outcome reward',
+      'GRPO',
+      'data reuse',
+      'sample reuse',
+      'rollout reuse',
+      'repeated epochs',
+      'multiple epochs',
+      'multi-epoch',
+      'ideal observer',
+      'Bayes-optimal',
+      'PAC learning',
+      'cross-situational',
+      'word learning',
+      'referential game',
+      'emergent communication',
+      'continual learning',
+      'lifelong learning',
+      'catastrophic forgetting',
+      'loss of plasticity',
+      'test-time training',
+      'incremental learning',
+      'knowledge injection',
+      'tokenization',
+      'tokenizer',
+      'learnability',
+      'data-constrained',
+      'repeated data',
+      'data repetition',
+      'data representation',
+    ],
     [
       'stereo',
       'stereoscopic',
@@ -139,7 +267,7 @@
   ];
 
   const INTEREST_PRESETS = {
-    version: '2026-10-31',
+    version: '2026-11-12',
     topics: TOPICS,
     keywords: TOPICS.flatMap(topic => topic.keywords),
     previousDefaults: PREVIOUS_DEFAULTS,

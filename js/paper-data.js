@@ -120,18 +120,43 @@
   }
 
   /**
-   * A keyword as a whole word or phrase: case-insensitive, hyphens and spaces
-   * interchangeable, an optional plural "s"/"es". "stereo" does not match
-   * "stereotypes"; "PPO" does not match "support".
+   * A one-word keyword with a capital first letter and a lowercase letter
+   * after it ("Lean", "BabyLM") is a name and keeps its case.
+   * @param {string[]} words
+   */
+  function isName(words) {
+    return words.length === 1 && /^\p{Lu}/u.test(words[0]) && /\p{Ll}/u.test(words[0].slice(1));
+  }
+
+  /**
+   * `text` as a pattern that matches it in any case, one character class per cased letter.
+   * @param {string} text
+   */
+  function caseless(text) {
+    return [...text].map(c => {
+      const lower = c.toLowerCase();
+      const upper = c.toUpperCase();
+      return lower !== upper && lower.length === 1 && upper.length === 1 ? `[${lower}${upper}]` : escapeRegExp(c);
+    }).join('');
+  }
+
+  /**
+   * A keyword as a whole word or phrase: hyphens and spaces interchangeable,
+   * an optional plural "s"/"es", any case except for a name (isName).
+   * "stereo" does not match "stereotypes"; "PPO" does not match "support";
+   * "Lean" does not match "lean".
    * @param {string} term
    * @returns {string | null}
    */
   function termPattern(term) {
-    const words = term.trim().split(/[\s\-‐-—_/]+/).filter(Boolean).map(escapeRegExp);
-    return words.length ? `${words.join(SEPARATOR)}(?:e?s)?` : null;
+    const words = term.trim().split(/[\s\-‐-—_/]+/).filter(Boolean);
+    if (!words.length) return null;
+    if (isName(words)) return `${escapeRegExp(words[0])}(?:e?s)?`;
+    return `${words.map(caseless).join(SEPARATOR)}(?:[eE]?[sS])?`;
   }
 
   /**
+   * One pattern for every term; case is in the pattern, so `flags` never needs "i".
    * @param {string[]} terms
    * @param {string} flags
    */
@@ -150,7 +175,7 @@
    * @param {string} keyword
    */
   function keywordMatches(text, keyword) {
-    const regex = keywordRegex([keyword], 'i');
+    const regex = keywordRegex([keyword], '');
     return Boolean(text && regex && regex.test(text));
   }
 
@@ -162,7 +187,7 @@
    * @returns {string}
    */
   function highlight(text, terms, className) {
-    const regex = text && terms && terms.length ? keywordRegex(terms, 'gi') : null;
+    const regex = text && terms && terms.length ? keywordRegex(terms, 'g') : null;
     if (!regex) return text;
     return text.replace(regex, (/** @type {string} */ match, /** @type {string} */ before, /** @type {string} */ word) => `${before}<mark class="${className}">${word}</mark>`);
   }
