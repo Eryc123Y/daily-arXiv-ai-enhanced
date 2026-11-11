@@ -39,16 +39,20 @@
  * OpenReview. The publisher's abstract is not published (Q3), so there is no
  * `summary`, `abs` or `pdf`.
  * @typedef {object} VenueRecord
- * @property {string} id               "doi:<doi>" or "openreview:<forum id>"
+ * @property {string} id               "doi:<doi>", "openreview:<forum id>", or a bare arXiv ID
+ *                                     when the paper has an arXiv version (then `source` still
+ *                                     decides how it looks; the arXiv link is added as a secondary link)
  * @property {'openalex' | 'crossref' | 'openreview'} source
  * @property {string} title
  * @property {string[]} authors
- * @property {string} venue            e.g. "IEEE TCSVT"
+ * @property {string} venue            stable watch-list name, e.g. "IEEE TCSVT" or "ICLR" (no year)
  * @property {string} published        YYYY-MM-DD
  * @property {string | null} doi       without the https://doi.org/ prefix
  * @property {string | null} oa_url    a lawful open-access copy (OpenAlex or Unpaywall)
  * @property {string} url              the publisher's page, usually https://doi.org/<doi>
  * @property {string[]} categories     always empty
+ * @property {boolean} [has_abstract]  the pipeline holds the abstract, so a summary will come;
+ *                                     missing means false
  * @property {string} [code_url]
  */
 
@@ -61,8 +65,8 @@
 /**
  * What the page renders (PaperData.mergeDay, then DataSource.loadDay). `AI`
  * is present when the summary is complete. `pending` is true only for an
- * arXiv paper still waiting for its summary; a VenueRecord without `AI` is
- * not pending, because without a published abstract it may never get one.
+ * arXiv paper, or a VenueRecord with `has_abstract: true`, still waiting
+ * for its summary; any other VenueRecord without `AI` will never get one.
  * @typedef {(ArxivRecord | VenueRecord) & {
  *   AI?: AiSummary,
  *   pending: boolean,

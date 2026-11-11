@@ -61,8 +61,9 @@
    * One day's records: the raw crawl decides which papers exist and their
    * order; a paper with a complete summary uses the summary record (over the
    * raw fields it does not repeat), any other arXiv paper is marked
-   * `pending`. A paper from another source without a summary is not pending:
-   * its abstract is not published, so it may never get one. Summary records
+   * `pending`. A paper from another source without a summary is pending only
+   * when the pipeline has its abstract (`has_abstract: true`); otherwise it
+   * will never get one. Summary records
    * without a raw entry (older days) are kept.
    */
   function mergeDay(rawText, aiText) {
@@ -76,7 +77,7 @@
       if (seen.has(r.id)) return;
       seen.add(r.id);
       const summary = summaries.get(r.id);
-      records.push(summary ? { ...r, ...summary, pending: false } : { ...r, pending: isArxiv(r) });
+      records.push(summary ? { ...r, ...summary, pending: false } : { ...r, pending: isArxiv(r) || r.has_abstract === true });
     });
     summaries.forEach((r, id) => {
       if (!seen.has(id)) records.push({ ...r, pending: false });

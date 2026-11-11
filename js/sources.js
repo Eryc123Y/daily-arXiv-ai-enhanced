@@ -15,12 +15,22 @@
 })(typeof self !== 'undefined' ? self : this, function (PaperData) {
   const ARXIV = 'arxiv';
   const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const ARXIV_ID = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/;
   const SOURCE_NAMES = { openreview: 'OpenReview' };
   const NO_VENUE = 'Journal or conference';
 
   /** The filter key: 'arxiv', or 'venue:<venue>' for every other paper. */
   function sourceKey(paper) {
     return PaperData.isArxiv(paper) ? ARXIV : `venue:${sourceLabel(paper)}`;
+  }
+
+  /**
+   * The paper's arXiv ID: the id of an arXiv record, or of a feed record
+   * whose id is a bare arXiv ID (a journal paper with an arXiv version).
+   */
+  function arxivId(paper) {
+    if (PaperData.isArxiv(paper)) return paper.id;
+    return ARXIV_ID.test(paper.id || '') ? paper.id : null;
   }
 
   /** What the page calls the source: "arXiv", the venue, or a fallback when the record has none. */
@@ -53,19 +63,25 @@
   /**
    * Buttons for a non-arXiv paper: the open-access copy when there is one,
    * labelled as such, with the publisher page beside it; else the publisher
-   * page. Never alphaXiv or arXiv, which need an arXiv ID.
+   * page. alphaXiv or arXiv (per the setting) only as a secondary link, and
+   * only when the record's id is a real arXiv ID.
    */
-  function venueLinks(paper) {
+  function venueLinks(paper, primaryLink = 'alphaxiv') {
     const openAccess = safeUrl(paper.oa_url);
     const publisher = publisherUrl(paper);
-    if (openAccess) {
-      return [
+    const main = openAccess
+      ? [
         [openAccess, 'Open the open-access copy', 'button-solid'],
         ...(publisher && publisher !== openAccess ? [[publisher, 'Publisher page', 'button-outline']] : []),
-      ];
-    }
-    return publisher ? [[publisher, 'Open the publisher page', 'button-solid']] : [];
+      ]
+      : publisher ? [[publisher, 'Open the publisher page', 'button-solid']] : [];
+    const id = arxivId(paper);
+    if (!id) return main;
+    const preprint = primaryLink === 'arxiv'
+      ? [`https://arxiv.org/abs/${encodeURIComponent(id).replace('%2F', '/')}`, 'arXiv']
+      : [`https://www.alphaxiv.org/abs/${encodeURIComponent(id)}`, 'alphaXiv'];
+    return [...main, [...preprint, 'button-outline']];
   }
 
-  return { ARXIV, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks };
+  return { ARXIV, arxivId, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks };
 });

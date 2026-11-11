@@ -162,10 +162,10 @@
   /** The reader's buttons. The alphaXiv-or-arXiv choice applies to arXiv papers only. */
   function links(paper, primaryLink = 'alphaxiv') {
     const arxiv = PaperData.isArxiv(paper);
-    const items = arxiv ? arxivLinks(paper, primaryLink) : Sources.venueLinks(paper);
+    const items = arxiv ? arxivLinks(paper, primaryLink) : Sources.venueLinks(paper, primaryLink);
     const kind = codeKind(paper);
     if (kind) items.push([paper.code_url, kind === 'code' ? 'Code' : 'Project page', 'button-outline']);
-    if (paper.hf && arxiv) items.push([`https://huggingface.co/papers/${encodeURIComponent(paper.id)}`, `Hugging Face ▲ ${Number(paper.hf)}`, 'button-outline']);
+    if (paper.hf && Sources.arxivId(paper)) items.push([`https://huggingface.co/papers/${encodeURIComponent(paper.id)}`, `Hugging Face ▲ ${Number(paper.hf)}`, 'button-outline']);
     return items
       .map(([href, label, cls]) => `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`)
       .join('');
@@ -215,7 +215,10 @@ ${tail}`;
   function readerBody(paper, ai, terms) {
     if (ai) return summaryBody(paper, ai, terms);
     const abstract = `<section class="abstract-open"><h3>Abstract</h3><p>${mark(paper.summary, terms)}</p></section>`;
-    if (paper.pending) return `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>\n${abstract}`;
+    if (paper.pending && PaperData.isArxiv(paper)) return `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>\n${abstract}`;
+    if (paper.pending) {
+      return `<p class="pending-note">This paper's summary has not been written yet.</p>\n${paper.summary ? abstract : abstractElsewhere(paper)}`;
+    }
     return paper.summary ? abstract : abstractElsewhere(paper, 'There is no summary of this paper. ');
   }
 
@@ -247,14 +250,17 @@ ${body}
   }
 
   /** Summaries written, out of the papers that can get one (every arXiv paper, and the others that have one). */
+  /** `linkOnly`: some pending paper has no abstract on the page, only a link to it. */
   function summaryProgress(records) {
+    const pending = records.filter(r => r.pending);
     const done = records.filter(r => !r.pending && PaperData.hasSummary(r)).length;
-    return { done, total: done + records.filter(r => r.pending).length };
+    return { done, total: done + pending.length, linkOnly: pending.some(r => !r.summary) };
   }
 
-  function progressText(done, total) {
-    if (done === 0) return `Summaries are being written. Each paper shows its abstract until its summary is ready.`;
-    return `Summaries ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}. The rest show their abstract for now.`;
+  function progressText(done, total, { linkOnly = false } = {}) {
+    const abstract = linkOnly ? 'its abstract, or a link to it,' : 'its abstract';
+    if (done === 0) return `Summaries are being written. Each paper shows ${abstract} until its summary is ready.`;
+    return `Summaries ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}. The rest show ${linkOnly ? 'their abstract, or a link to it,' : 'their abstract'} for now.`;
   }
 
   return {

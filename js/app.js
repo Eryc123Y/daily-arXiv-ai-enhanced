@@ -132,7 +132,7 @@ function renderNav(days) {
   $('progress').hidden = !pending;
   if (pending) {
     $('progressFill').style.width = `${Math.round((100 * progress.done) / progress.total)}%`;
-    $('progressText').textContent = Render.progressText(progress.done, progress.total);
+    $('progressText').textContent = Render.progressText(progress.done, progress.total, progress);
   }
   renderStatus(days);
 

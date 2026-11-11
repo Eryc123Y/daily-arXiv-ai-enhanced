@@ -18,6 +18,8 @@ const TCSVT_CLOSED = byId('doi:10.1109/tcsvt.2026.3400002');
 const ICLR = byId('openreview:AbCdEf123');
 const TVCG = byId('doi:10.1109/tvcg.2026.3500001');
 const ARXIV = byId('2611.04001');
+const TIP_PENDING = byId('doi:10.1109/tip.2026.3600001');
+const TPAMI_WITH_ARXIV_ID = byId('2605.01234');
 
 const MAIN = ['cs.CV', 'cs.AI', 'cs.LG', 'cs.CL', 'stat.ML', 'cs.GR'];
 const TOPICS = [{ name: 'Stereo', keywords: ['stereo', 'disparity'] }];
@@ -36,15 +38,18 @@ test('a missing source means arXiv', () => {
 });
 
 test('a mixed day keeps every paper in crawl order, with its venue', () => {
-  assert.equal(RECORDS.length, 7);
+  assert.equal(RECORDS.length, 9);
   assert.deepEqual(RECORDS.slice(0, 2).map(r => r.id), ['2611.04001', 'doi:10.1109/tcsvt.2026.3400001']);
   assert.equal(TCSVT_OA.venue, 'IEEE TCSVT');
   assert.equal(TCSVT_OA.AI.tldr, 'Converts 2D video to stereo with a disparity-aware network.');
 });
 
-test('a non-arXiv paper without a summary is not pending; an arXiv one is', () => {
+test('a non-arXiv paper without a summary is pending only when it has an abstract', () => {
+  assert.equal(TCSVT_CLOSED.has_abstract, undefined);
   assert.equal(TCSVT_CLOSED.pending, false);
+  assert.equal(TVCG.has_abstract, false);
   assert.equal(TVCG.pending, false);
+  assert.equal(TIP_PENDING.pending, true);
   assert.equal(byId('2611.04003').pending, true);
   assert.equal(TCSVT_OA.pending, false);
 });
@@ -59,8 +64,9 @@ test('a summary record keeps the raw fields it does not repeat', () => {
 });
 
 test('progress counts only papers that can get a summary', () => {
-  assert.deepEqual(Render.summaryProgress(RECORDS), { done: 4, total: 5 });
-  assert.deepEqual(Render.summaryProgress([ARXIV, TVCG]), { done: 1, total: 1 });
+  assert.deepEqual(Render.summaryProgress(RECORDS), { done: 5, total: 7, linkOnly: true });
+  assert.deepEqual(Render.summaryProgress([TIP_PENDING, TVCG]), { done: 0, total: 1, linkOnly: true });
+  assert.deepEqual(Render.summaryProgress([ARXIV, TVCG]), { done: 1, total: 1, linkOnly: false });
 });
 
 // --- Source keys and labels ----------------------------------------------------
@@ -69,7 +75,7 @@ test('each paper has a source key and label: arXiv, or its venue', () => {
   assert.equal(Sources.sourceKey(ARXIV), 'arxiv');
   assert.equal(Sources.sourceKey(TCSVT_OA), 'venue:IEEE TCSVT');
   assert.equal(Sources.sourceLabel(ARXIV), 'arXiv');
-  assert.equal(Sources.sourceLabel(ICLR), 'ICLR 2027');
+  assert.equal(Sources.sourceLabel(ICLR), 'ICLR');
   assert.equal(Sources.sourceLabel({ id: 'doi:10.1/y', source: 'openreview' }), 'OpenReview');
   assert.equal(Sources.sourceLabel({ id: 'doi:10.1/y', source: 'crossref' }), 'Journal or conference');
 });
@@ -106,7 +112,7 @@ test('source counts apply every other active filter but their own', () => {
   assert.equal(counts.sources.get('arxiv'), 1);
   assert.equal(counts.sources.get('venue:IEEE TCSVT'), 1);
   assert.equal(counts.sources.get('venue:IEEE TVCG'), 1);
-  assert.equal(counts.sources.get('venue:ICLR 2027') || 0, 0);
+  assert.equal(counts.sources.get('venue:ICLR') || 0, 0);
   assert.equal(counts.topics.get('all'), 2);
   assert.equal(counts.topics.get('matches'), 1);
   assert.equal(counts.categories.get('all'), 1);
@@ -115,10 +121,12 @@ test('source counts apply every other active filter but their own', () => {
 test('the source list is arXiv first, then venues by count, and only on a mixed day', () => {
   const counts = Filters.counts(ENTRIES, base, MAIN, ['Stereo']);
   assert.deepEqual(Filters.sourceOptions(RECORDS, counts).map(o => [o.key, o.label, o.count]), [
-    ['all', 'All sources', 7],
+    ['all', 'All sources', 9],
     ['arxiv', 'arXiv', 3],
     ['venue:IEEE TCSVT', 'IEEE TCSVT', 2],
-    ['venue:ICLR 2027', 'ICLR 2027', 1],
+    ['venue:ICLR', 'ICLR', 1],
+    ['venue:IEEE TIP', 'IEEE TIP', 1],
+    ['venue:IEEE TPAMI', 'IEEE TPAMI', 1],
     ['venue:IEEE TVCG', 'IEEE TVCG', 1],
   ]);
   const arxivOnly = ENTRIES.filter(e => PaperData.isArxiv(e.record));
@@ -186,7 +194,7 @@ test('a row shows the venue and date where arXiv rows show categories and ID', (
 
 test('the reader stamp shows venue and DOI when there is no arXiv ID', () => {
   assert.match(Render.renderReader(TCSVT_OA, info(TCSVT_OA), []), /reader-stamp" aria-hidden="true">IEEE TCSVT doi:10.1109\/tcsvt.2026.3400001 9 Nov 2026</);
-  assert.match(Render.renderReader(ICLR, info(ICLR), []), /reader-stamp" aria-hidden="true">ICLR 2027 7 Nov 2026</);
+  assert.match(Render.renderReader(ICLR, info(ICLR), []), /reader-stamp" aria-hidden="true">ICLR 7 Nov 2026</);
 });
 
 test('a summarised non-arXiv paper shows its summary and points to the abstract on the publisher page', () => {
@@ -210,4 +218,40 @@ test('a paper with neither abstract nor summary shows title, authors, venue and 
 test('an arXiv paper published in a venue names it in the reader', () => {
   const p = { ...ARXIV, venue: 'IEEE TCSVT', doi: '10.1109/x' };
   assert.match(Render.renderReader(p, info(p), []), /<span>arXiv 2611.04001<\/span><span>Published in IEEE TCSVT<\/span>/);
+});
+
+// --- has_abstract and a bare arXiv ID on a feed record ------------------------
+
+test('a venue paper with an abstract and no summary yet reads as pending', () => {
+  assert.match(Render.renderRow(TIP_PENDING, info(TIP_PENDING), false), /Summary pending/);
+  const html = Render.renderReader(TIP_PENDING, info(TIP_PENDING), []);
+  assert.match(html, /<p class="pending-note">This paper's summary has not been written yet\.<\/p>/);
+  assert.match(html, /The abstract is on the <a href="https:\/\/doi.org\/10.1109\/tip.2026.3600001"/);
+  assert.doesNotMatch(html, /Here is its abstract|<h3>Abstract<\/h3>|There is no summary|undefined/);
+});
+
+test('a feed record with an arXiv ID looks like a venue paper', () => {
+  assert.equal(PaperData.isArxiv(TPAMI_WITH_ARXIV_ID), false);
+  assert.equal(Sources.sourceKey(TPAMI_WITH_ARXIV_ID), 'venue:IEEE TPAMI');
+  assert.equal(Sources.arxivId(TPAMI_WITH_ARXIV_ID), '2605.01234');
+  assert.equal(Sources.arxivId(TCSVT_OA), null);
+  assert.equal(Sources.arxivId(ARXIV), '2611.04001');
+  assert.match(Render.renderRow(TPAMI_WITH_ARXIV_ID, info(TPAMI_WITH_ARXIV_ID), false), /row-meta is-venue"><span>IEEE TPAMI<\/span><span>6 Nov 2026/);
+  assert.match(Render.renderReader(TPAMI_WITH_ARXIV_ID, info(TPAMI_WITH_ARXIV_ID), []), /reader-stamp" aria-hidden="true">IEEE TPAMI doi:10.1109\/tpami.2026.3700001 6 Nov 2026</);
+});
+
+test('a feed record with an arXiv ID adds the arXiv or alphaXiv link after the publisher', () => {
+  const alpha = Render.links(TPAMI_WITH_ARXIV_ID);
+  assert.match(alpha, /^<a class="button-solid" href="https:\/\/doi.org\/10.1109\/tpami.2026.3700001"[^>]*>Open the publisher page<\/a><a class="button-outline" href="https:\/\/www.alphaxiv.org\/abs\/2605.01234"[^>]*>alphaXiv<\/a>$/);
+  const arxiv = Render.links(TPAMI_WITH_ARXIV_ID, 'arxiv');
+  assert.match(arxiv, /<a class="button-outline" href="https:\/\/arxiv.org\/abs\/2605.01234"[^>]*>arXiv<\/a>$/);
+  assert.doesNotMatch(alpha + arxiv, /\/pdf\/|\/html\//);
+});
+
+test('the progress line says the abstract may be a link when a pending paper has none here', () => {
+  assert.equal(Render.progressText(5, 7), 'Summaries ready for 5 of 7. The rest show their abstract for now.');
+  assert.equal(Render.progressText(5, 7, { linkOnly: true }), 'Summaries ready for 5 of 7. The rest show their abstract, or a link to it, for now.');
+  assert.equal(Render.progressText(0, 2, { linkOnly: true }), 'Summaries are being written. Each paper shows its abstract, or a link to it, until its summary is ready.');
+  assert.equal(Render.summaryProgress(RECORDS).linkOnly, true);
+  assert.equal(Render.summaryProgress([byId('2611.04003')]).linkOnly, false);
 });
