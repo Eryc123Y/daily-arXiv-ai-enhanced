@@ -103,15 +103,19 @@
 
   const format = (day, options) => toDate(day).toLocaleDateString('en-GB', { ...options, timeZone: 'UTC' });
 
+  /** Two days, oldest first, as "9–11 Nov 2026", "28 Sept – 4 Oct 2026", "29 Dec 2025 – 4 Jan 2026". */
+  function dayRange(first, last) {
+    const [y1, m1] = first.split('-');
+    const [y2, m2] = last.split('-');
+    const end = format(last, { day: 'numeric', month: 'short', year: 'numeric' });
+    if (y1 !== y2) return `${format(first, { day: 'numeric', month: 'short', year: 'numeric' })} – ${end}`;
+    if (m1 !== m2) return `${format(first, { day: 'numeric', month: 'short' })} – ${end}`;
+    return `${Number(first.slice(8))}–${end}`;
+  }
+
   /** "9–15 Nov 2026", "28 Sept – 4 Oct 2026", "29 Dec 2025 – 4 Jan 2026". */
   function weekRange(monday) {
-    const sunday = weekDays(monday)[6];
-    const [y1, m1] = monday.split('-');
-    const [y2, m2] = sunday.split('-');
-    const end = format(sunday, { day: 'numeric', month: 'short', year: 'numeric' });
-    if (y1 !== y2) return `${format(monday, { day: 'numeric', month: 'short', year: 'numeric' })} – ${end}`;
-    if (m1 !== m2) return `${format(monday, { day: 'numeric', month: 'short' })} – ${end}`;
-    return `${Number(monday.slice(8))}–${end}`;
+    return dayRange(monday, weekDays(monday)[6]);
   }
 
   /** "Week of 9 Nov 2026", for the week picker. */
@@ -162,6 +166,6 @@
 
   return {
     ARXIV, VENUES, isDay, weekOf, weekDays, daysInWeek, venueWeeks, streamRecords, venueGroups,
-    weekRange, weekLabel, weekSummary, weekSentence, weekNote, readStream,
+    dayRange, weekRange, weekLabel, weekSummary, weekSentence, weekNote, readStream,
   };
 });
