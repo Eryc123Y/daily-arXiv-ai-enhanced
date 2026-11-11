@@ -3,20 +3,21 @@
     uv run --with fonttools --with pillow python assets/brand/build.py
 
 Needs rsvg-convert (brew install librsvg) and STIX Two Text (a macOS system
-font). Writes the mono mark, wordmark, favicon, PNG exports and social preview
-next to this file. concepts.png is built separately by concepts.py because it
+font). Writes the mono mark, wordmark, PNG exports and social preview next to
+this file; favicon.svg is hand-drawn, only favicon-32.png comes from it. PNGs
+screen-blend the red and cyan layers themselves (see rendering.py). concepts.png is built separately by concepts.py because it
 needs the Codex concept images from .cache/brand/.
 """
 from __future__ import annotations
 
 import re
-import subprocess
 from pathlib import Path
 
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
+from rendering import CYAN, RED, compose, mark_png, rsvg
 
 HERE = Path(__file__).parent
 FONT = "/System/Library/Fonts/Supplemental/STIXTwoText.ttf"
@@ -26,6 +27,7 @@ PAPER_INK = "#f1eef8"
 MARK = (HERE / "litscout-mark.svg").read_text()
 DEFS = re.search(r"<defs>.*?</defs>", MARK, re.S).group(0)
 GLYPH_SHAPES = re.search(r'<g id="spyglass".*?</g>', MARK, re.S).group(0)
+USES = "\n".join(ln for ln in MARK.splitlines() if "<use" in ln)
 TILE_RX = 14
 
 
@@ -52,25 +54,13 @@ def write(name: str, text: str) -> None:
     (HERE / name).write_text(text)
 
 
-def tile(rx: int = TILE_RX) -> str:
-    return MARK.replace(f'rx="{TILE_RX}"', f'rx="{rx}"')
-
-
-def render(svg: str, png: str, width: int, height: int | None = None) -> None:
-    height = height or width
-    subprocess.run(
-        ["rsvg-convert", "-w", str(width), "-h", str(height), str(HERE / svg), "-o", str(HERE / png)],
-        check=True,
-    )
-
-
 def mono() -> None:
     # One copy, one colour: the stereo pair collapses into a single silhouette.
-    body = GLYPH_SHAPES.replace('id="spyglass"', 'id="spyglass" fill="currentColor" stroke="currentColor"')
+    body = GLYPH_SHAPES.replace('id="spyglass"', 'id="spyglass" stroke="currentColor"')
     write(
         "litscout-mark-mono.svg",
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LitScout">\n'
-        "  <!-- One colour (currentColor), no tile: the stereo pair becomes a single silhouette. -->\n"
+        "  <!-- One colour (currentColor), no tile: one copy of the strokes, no stereo pair. -->\n"
         f"  {body}\n</svg>\n",
     )
 
@@ -87,19 +77,17 @@ def wordmark() -> None:
         "  <style>.word{fill:#1c2430}@media (prefers-color-scheme:dark){.word{fill:#f1eef8}}</style>\n"
         f"  {DEFS}\n"
         f'  <rect width="64" height="64" rx="{TILE_RX}" fill="{NAVY}"/>\n'
-        '  <use href="#spyglass" fill="#e8424a" stroke="#e8424a" transform="translate(-2.6 0)"/>\n'
-        '  <use href="#spyglass" fill="#2fd0dd" stroke="#2fd0dd" transform="translate(2.6 0)"/>\n'
+        f"{USES}\n"
         f'  <path class="word" d="{d}"/>\n</svg>\n',
     )
 
 
 def favicon() -> None:
-    write("favicon.svg", tile().replace('role="img" aria-label="LitScout"', ""))
-    render("favicon.svg", "favicon-32.png", 32)
-    # Apple rounds the corners itself, so the touch icon is a full-bleed square.
-    write("_touch.svg", tile(0))
-    render("_touch.svg", "apple-touch-icon.png", 180)
-    (HERE / "_touch.svg").unlink()
+    # favicon.svg is hand-drawn like the mark (heavier strokes for 16 and 32 px).
+    fav = (HERE / "favicon.svg").read_text()
+    mark_png(fav, 32).save(HERE / "favicon-32.png")
+    # Apple rounds the corners itself, so the touch icon is a full-bleed square of the full mark.
+    mark_png(MARK, 180, rx=0).convert("RGB").save(HERE / "apple-touch-icon.png")
 
 
 def social() -> None:
@@ -107,20 +95,23 @@ def social() -> None:
     title, tagline = stix(600), stix(400)
     td, _ = outline(title, "LitScout", 150, 450, 335)
     gd, _ = outline(tagline, "Daily papers from arXiv and top venues, summarised", 31, 452, 412)
-    write(
-        "_social.svg",
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">\n'
-        f'  <rect width="{w}" height="{h}" fill="{NAVY}"/>\n'
-        f"  {DEFS}\n"
-        '  <g transform="translate(57 150) scale(5.4)">\n'
-        '    <use href="#spyglass" fill="#e8424a" stroke="#e8424a" transform="translate(-2.6 0)"/>\n'
-        '    <use href="#spyglass" fill="#2fd0dd" stroke="#2fd0dd" transform="translate(2.6 0)"/>\n'
-        "  </g>\n"
-        f'  <path fill="{PAPER_INK}" d="{td}"/>\n'
-        f'  <path fill="#aab4c3" d="{gd}"/>\n</svg>\n',
-    )
-    render("_social.svg", "social-preview.png", w, h)
-    (HERE / "_social.svg").unlink()
+
+    def scene(*, background: bool, use: str | None) -> str:
+        parts = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">', DEFS]
+        if background:
+            parts += [
+                f'<rect width="{w}" height="{h}" fill="{NAVY}"/>',
+                f'<path fill="{PAPER_INK}" d="{td}"/>',
+                f'<path fill="#aab4c3" d="{gd}"/>',
+            ]
+        if use:
+            parts.append(f'<g transform="translate(57 150) scale(5.4)">{use}</g>')
+        return "\n".join(parts + ["</svg>"])
+
+    red, cyan = (next(ln for ln in USES.splitlines() if colour in ln) for colour in (RED, CYAN))
+    base = rsvg(scene(background=True, use=None), w, h)
+    img = compose(base, rsvg(scene(background=False, use=red), w, h), rsvg(scene(background=False, use=cyan), w, h))
+    img.save(HERE / "social-preview.png")
 
 
 if __name__ == "__main__":

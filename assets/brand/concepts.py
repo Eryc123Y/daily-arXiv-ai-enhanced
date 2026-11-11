@@ -6,11 +6,10 @@ The Codex images live in .cache/brand/ (git-ignored); only the sheet is committe
 """
 from __future__ import annotations
 
-import subprocess
-import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
+from rendering import mark_png
 
 HERE = Path(__file__).parent
 CONCEPTS = HERE.parent.parent / ".cache" / "brand"
@@ -22,12 +21,6 @@ W, H = 1500, 1000
 
 def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(FONT, size, index=1 if bold else 0)
-
-
-def mark(size: int, tmp: Path) -> Image.Image:
-    out = tmp / f"m{size}.png"
-    subprocess.run(["rsvg-convert", "-w", str(size), "-h", str(size), str(HERE / "litscout-mark.svg"), "-o", str(out)], check=True)
-    return Image.open(out).convert("RGBA")
 
 
 def main() -> None:
@@ -45,9 +38,10 @@ def main() -> None:
         sheet.paste(img, (x, 90))
         d.text((x, 520), label, font=font(22, True), fill=INK)
     d.text((40, 580), "Final mark (A, hand-drawn SVG) at 16, 32 and 128 px, on the grounds it has to work on", font=font(22, True), fill=INK)
-    with tempfile.TemporaryDirectory() as t:
-        tmp = Path(t)
-        sizes = {s: mark(s, tmp) for s in (16, 32, 128)}
+    full, fav = (HERE / "litscout-mark.svg").read_text(), (HERE / "favicon.svg").read_text()
+    # What ships: the heavier favicon at 16 and 32 px, the full mark from 28 px up.
+    shown = [(fav, 16), (fav, 32), (full, 32), (full, 128)]
+    renders = [mark_png(svg, size) for svg, size in shown]
     pw = 344
     for i, (colour, name) in enumerate(GROUND):
         x = 40 + i * (pw + 14)
@@ -55,15 +49,16 @@ def main() -> None:
         sheet.paste(panel, (x, 625))
         light = colour in ("#ffffff", "#e8ebef")
         cx = x + 24
-        for s in (16, 32, 128):
-            m = sizes[s]
-            sheet.paste(m, (cx, 625 + 40 + (128 - s) // 2), m)
-            cx += s + 28
-        d.text((x + 16, 625 + 218), name, font=font(16), fill="#5f6773" if light else "#a5a1bf")
-        # 16 px and 32 px magnified so the pixels can be judged
-        mag = sizes[16].resize((64, 64), Image.NEAREST)
+        for m in renders:
+            sheet.paste(m, (cx, 625 + 40 + (128 - m.width) // 2), m)
+            cx += m.width + 16
+        muted = "#5f6773" if light else "#a5a1bf"
+        d.text((x + 16, 625 + 190), "favicon 16, 32 | mark 32, 128", font=font(14), fill=muted)
+        d.text((x + 16, 625 + 218), name, font=font(16), fill=muted)
+        # the 16 px favicon magnified 4x so the pixels can be judged
+        mag = renders[0].resize((64, 64), Image.NEAREST)
         sheet.paste(mag, (x + pw - 80, 625 + 218 - 8), mag)
-    d.text((40, 950), "Codex image generation made A, B and C; the final SVG is redrawn by hand (flat shapes, no raster). Rightmost thumbnail in each panel: the 16 px render at 4x.", font=font(15), fill="#5f6773")
+    d.text((40, 950), "Codex image generation made A, B and C; the final SVG is redrawn by hand (strokes only, no raster). Lower right of each panel: the 16 px favicon at 4x.", font=font(15), fill="#5f6773")
     sheet.save(HERE / "concepts.png", optimize=True)
 
 

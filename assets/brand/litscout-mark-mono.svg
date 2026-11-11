@@ -1,9 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LitScout">
-  <!-- One colour (currentColor), no tile: the stereo pair becomes a single silhouette. -->
-  <g id="spyglass" fill="currentColor" stroke="currentColor" transform="translate(32 32) rotate(-32) scale(1.07) translate(-30.5 -32)">
-      <rect x="6" y="28" width="10" height="8" rx="2"/>
-      <rect x="18" y="26" width="14" height="12" rx="1.5"/>
-      <rect x="34" y="24" width="14" height="16" rx="1.5"/>
-      <ellipse cx="49" cy="32" rx="4.2" ry="10.5" fill="none" stroke-width="4"/>
+  <!-- One colour (currentColor), no tile: one copy of the strokes, no stereo pair. -->
+  <g id="spyglass" stroke="currentColor" fill="none" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(32 32) rotate(-30) scale(1.04) translate(-29 -32)">
+      <path d="M8.5 27.5L22 26.5M8.5 36.5L22 37.5"/>
+      <path d="M23 22.5L44 19.5M23 41.5L44 44.5"/>
+      <ellipse cx="8.5" cy="32" rx="2.2" ry="4.5"/>
+      <ellipse cx="23" cy="32" rx="2.2" ry="9.5"/>
+      <ellipse cx="45" cy="32" rx="4.6" ry="12.5"/>
     </g>
 </svg>
