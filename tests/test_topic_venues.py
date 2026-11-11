@@ -15,6 +15,8 @@ from summaries.interests import load_topics
 # --- The watch list as chosen ------------------------------------------------------
 
 TOPIC_ONLY = {
+    # v1's large conferences: thousands of papers a year, most already on arXiv (ACM MM alone sent 871 in four weeks).
+    "CVPR", "ICCV", "ECCV", "NeurIPS", "ICML", "ICLR", "AAAI", "IJCAI", "ACM MM",
     "ACL", "EMNLP", "NAACL", "EACL", "COLM",
     "AAMAS", "JAIR", "Artificial Intelligence (Elsevier)",
     "AISTATS", "UAI", "Annals of Statistics", "Machine Learning (Springer)", "IEEE TIT",
