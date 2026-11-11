@@ -27,7 +27,7 @@ def local(ref):
     path = re.split(r"[?#]", ref, maxsplit=1)[0]
     if path in ("", "./", "."):
         return "index.html"
-    return path[2:] if path.startswith("./") else path
+    return path.removeprefix("./")
 
 
 @pytest.fixture(scope="module")
@@ -62,6 +62,11 @@ def test_the_build_copies_only_public_page_files(dist):
     assert not [f for f in files if f.startswith(PRIVATE)], files
     assert not [f for f in files if any(part.startswith(".") for part in f.split("/"))], files
     assert not [f for f in files if f.endswith((".py", ".md", ".jsonl"))], files
+
+
+def test_type_declarations_for_the_checker_stay_out(dist):
+    assert not [f for f in built(dist) if f.endswith(".d.ts")], built(dist)
+    assert "js/app.js" in built(dist)
 
 
 def test_every_extra_page_is_linked_from_the_reading_page(dist):

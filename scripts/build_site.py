@@ -31,7 +31,8 @@ FILES = (
 
 
 def _public(path):
-    return not any(part.startswith(".") for part in path.parts)
+    """Not a dot-file, and not a .d.ts file (types for tsc only; the page never loads them)."""
+    return not any(part.startswith(".") for part in path.parts) and not path.name.endswith(".d.ts")
 
 
 def site_files(root):
