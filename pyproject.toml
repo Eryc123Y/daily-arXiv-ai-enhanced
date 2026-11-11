@@ -29,7 +29,7 @@ testpaths = ["tests"]
 pythonpath = ["daily_arxiv", "."]
 
 [tool.pyright]
-include = ["summaries", "daily_arxiv"]
+include = ["summaries", "daily_arxiv", "scripts"]
 typeCheckingMode = "basic"
 pythonVersion = "3.12"
 extraPaths = ["daily_arxiv", "."]
@@ -43,4 +43,4 @@ strict = [
 
 [tool.ruff]
 target-version = "py312"
-include = ["summaries/**/*.py", "daily_arxiv/**/*.py", "tests/**/*.py", "conftest.py"]
+include = ["summaries/**/*.py", "daily_arxiv/**/*.py", "scripts/**/*.py", "tests/**/*.py", "conftest.py"]
