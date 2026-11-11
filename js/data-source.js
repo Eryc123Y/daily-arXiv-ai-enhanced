@@ -8,8 +8,14 @@
  *                        venues: the watched venues [{name, kind, area}] from assets/venues.json, or null }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
  *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
+ *   venuePapers(day) -> the venue of each journal or conference paper in the day's
+ *                      file (['ACM TOG', 'ACM TOG', 'ICLR']), for the weekly stream's
+ *                      counts; reads only data/<day>.jsonl, or the day already loaded
  *   loadStatus()    -> { log: [run log entries] } (crawl, summary and report runs)
  *                      for the pipeline line; never rejects
+ *
+ * Days and counts are kept for the page's lifetime, so switching streams or
+ * weeks does not download a day twice; a failed download is not kept.
  *
  * Both reject with a LoadError when a file that should be there cannot be
  * read, so a failed download is never shown as a day without papers. Files
@@ -43,6 +49,20 @@
   /** url(path): a data-branch file. */
   function createStaticSource({ fetch: fetchImpl, url }) {
     let languages = new Map();
+    const loadedDays = new Map();
+    const venueLists = new Map();
+
+    /** cache.get(key), else make() kept under key unless it rejects. */
+    function remember(cache, key, make) {
+      if (!cache.has(key)) {
+        const promise = make();
+        cache.set(key, promise);
+        promise.catch(() => cache.delete(key));
+      }
+      return cache.get(key);
+    }
+
+    const venueNames = records => records.filter(r => !PaperData.isArxiv(r)).map(r => (typeof r.venue === 'string' && r.venue.trim()) || '');
 
     async function fetchText(path, { optional = false } = {}) {
       let response;
@@ -98,13 +118,19 @@
         }
         return { days: list.dates, languages, categories, venues };
       },
-      async loadDay(day) {
-        const [raw, ai, hf] = await Promise.all([
-          fetchText(`data/${day}.jsonl`),
-          fetchText(`data/${day}_AI_enhanced_${summaryLanguage(day)}.jsonl`, { optional: true }),
-          fetchSignals(`data/${day}_hf.json`),
-        ]);
-        return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
+      loadDay(day) {
+        return remember(loadedDays, day, async () => {
+          const [raw, ai, hf] = await Promise.all([
+            fetchText(`data/${day}.jsonl`),
+            fetchText(`data/${day}_AI_enhanced_${summaryLanguage(day)}.jsonl`, { optional: true }),
+            fetchSignals(`data/${day}_hf.json`),
+          ]);
+          return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
+        });
+      },
+      venuePapers(day) {
+        if (loadedDays.has(day)) return loadedDays.get(day).then(venueNames);
+        return remember(venueLists, day, async () => venueNames(PaperData.parseJsonl(await fetchText(`data/${day}.jsonl`))));
       },
       async loadStatus() {
         const logText = await fetchText('logs/summary-runs.jsonl', { optional: true }).catch(() => '');

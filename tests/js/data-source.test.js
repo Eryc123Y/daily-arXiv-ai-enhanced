@@ -75,3 +75,49 @@ test('the venue list is optional: missing, broken, unreachable or not a list mea
     assert.equal(listing.venues, null);
   }
 });
+
+// --- The venue stream's counts --------------------------------------------------
+
+const VENUE_RAW = [
+  RAW,
+  JSON.stringify({ id: 'doi:10.1145/1', source: 'crossref', venue: 'ACM TOG', title: 'V1', authors: [], categories: [], published: '2026-11-04' }),
+  JSON.stringify({ id: 'doi:10.1145/2', source: 'crossref', venue: 'ACM TOG', title: 'V2', authors: [], categories: [], published: '2026-11-05' }),
+  JSON.stringify({ id: 'openreview:x', source: 'openreview', venue: 'ICLR', title: 'V3', authors: [], categories: [] }),
+].join('\n');
+
+function counting(routes) {
+  const asked = [];
+  const fetchImpl = path => {
+    asked.push(path.replace('https://example.test/', ''));
+    const route = Object.keys(routes).find(key => path.endsWith(key));
+    const answer = route ? routes[route] : 404;
+    return answer instanceof Error ? Promise.reject(answer) : respond(...[].concat(answer));
+  };
+  return { asked, source: createStaticSource({ fetch: fetchImpl, url: path => `https://example.test/${path}` }) };
+}
+
+test('a day\'s venue papers are counted from its paper file alone, once', async () => {
+  const { asked, source: s } = counting({ 'data/2026-11-11.jsonl': [200, VENUE_RAW] });
+  assert.deepEqual(await s.venuePapers('2026-11-11'), ['ACM TOG', 'ACM TOG', 'ICLR']);
+  assert.deepEqual(await s.venuePapers('2026-11-11'), ['ACM TOG', 'ACM TOG', 'ICLR']);
+  assert.deepEqual(asked, ['data/2026-11-11.jsonl']);
+});
+
+test('a day already loaded is counted without another download, and is loaded once', async () => {
+  const { asked, source: s } = counting({ 'data/2026-11-11.jsonl': [200, VENUE_RAW] });
+  const day = await s.loadDay('2026-11-11');
+  assert.equal(day.length, 4);
+  await s.loadDay('2026-11-11');
+  assert.deepEqual(await s.venuePapers('2026-11-11'), ['ACM TOG', 'ACM TOG', 'ICLR']);
+  assert.equal(asked.filter(p => p === 'data/2026-11-11.jsonl').length, 1);
+});
+
+test('a failed download is not remembered, so trying again downloads again', async () => {
+  let fail = true;
+  const fetchImpl = path => (fail ? Promise.reject(new TypeError('offline')) : respond(path.endsWith('data/2026-11-11.jsonl') ? 200 : 404, VENUE_RAW));
+  const s = createStaticSource({ fetch: fetchImpl, url: path => path });
+  await assert.rejects(s.loadDay('2026-11-11'), LoadError);
+  await assert.rejects(s.venuePapers('2026-11-11'), LoadError);
+  fail = false;
+  assert.equal((await s.loadDay('2026-11-11')).length, 4);
+});

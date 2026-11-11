@@ -146,6 +146,14 @@
 </button></li>`;
   }
 
+  const KIND_NAMES = { journal: 'Journal', conference: 'Conference' };
+
+  /** The header over one venue's papers in the weekly list: name, quietly its kind and area, and how many. */
+  function groupHead(group) {
+    const meta = [KIND_NAMES[group.kind], group.area].filter(Boolean).join(' · ');
+    return `<li class="group-head"><h3 class="group-name">${esc(group.label)}</h3>${meta ? `<span class="group-meta">${esc(meta)}</span>` : ''}<span class="count">${group.entries.length}</span></li>`;
+  }
+
   function arxivLinks(paper, primaryLink) {
     const abs = paper.abs || `https://arxiv.org/abs/${paper.id}`;
     const alphaxiv = `https://www.alphaxiv.org/abs/${encodeURIComponent(paper.id)}`;
@@ -274,6 +282,7 @@ ${body}
     topicNames,
     describe,
     renderRow,
+    groupHead,
     links,
     renderReader,
     daySentence,

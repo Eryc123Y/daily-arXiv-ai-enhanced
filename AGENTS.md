@@ -6,7 +6,7 @@ Daily arXiv: a scheduled task on the maintainer's Mac crawls arXiv's `/new` list
 
 - `daily_arxiv/` Scrapy spider for the listings.
 - `summaries/` Python package and CLI (`uv run python -m summaries --help`): data-branch publishing (`databranch.py`), the data files, run log and command output (`datafiles.py`), the GitHub CLI (`github.py`), summary merge rules (`records.py`), commands (`cli.py`), the local job (`local_runner.py`, with the work folder, lock and chunks in `localtask.py`), journal and conference papers from the feed command (`feed.py`, the venues in `watchlist.json`, matching in `dedupe.py`, local abstracts in `abstracts.py`), record shapes (`shapes.py`), the daily Chinese report (`digest.py`, Sunday's page in `weekly.py`, topic matching in `interests.py`), API providers (`providers.py`, `anthropic_api.py`, `openai_compat.py`, `llm.py`). Design and measurements of the daily pipeline: `docs/daily-pipeline.md`.
-- `index.html`, `css/site.css`, `js/` the reading page. Data access goes through `js/data-source.js` only; which papers the list shows is `js/filters.js`.
+- `index.html`, `css/site.css`, `js/` the reading page. Data access goes through `js/data-source.js` only; which papers the list shows is `js/filters.js`; the two streams (arXiv by day, journals and conferences by week) are `js/streams.js`.
 - `tests/` pytest suite and `tests/js/` node tests. `conftest.py` at the root stops any test from reaching GitHub, the network or the real remote.
 - Only `__main__.py` imports `cli`; shared helpers go in `datafiles.py`, `github.py` or `localtask.py`, so modules never import each other in a cycle.
 
