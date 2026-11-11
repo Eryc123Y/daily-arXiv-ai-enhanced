@@ -116,7 +116,7 @@ def test_report_is_short_and_links_every_pick():
         "note": "",
     }
     text = digest.render_report(DAY, DAY, found, picks, TOPICS, SITE)
-    assert text.startswith(f"# arXiv 日报 · {DAY}（周一）")
+    assert text.startswith(f"# LitScout 日报 · {DAY}（周一）")
     assert f"**2 篇新论文**（摘要 0/2）· [打开当天]({SITE}#day={DAY})" in text
     assert f"[Stereo video]({SITE}#day={DAY}&topic=2D-to-3D%20and%20stereo&paper=1) — 立体视频方法" in text
     assert "[RLVR at scale]" in text and "（中，已读全文）" in text
@@ -298,7 +298,8 @@ def test_week_review_collects_the_weeks_picks_without_a_model(tmp_path, monkeypa
     assert "本周 2 天，共 1360 篇" in text
     assert f"[bf16 Rounding]({SITE}#day=2026-11-02&topic=all&paper=2610.41073)（可借鉴，11-02）— 数值混杂" in text
     assert f"2D-to-3D and stereo：2 篇 · [本周全部]({SITE}#day=2026-11-02&from=2026-10-30&topic=2D-to-3D%20and%20stereo)" in text
-    assert out["push"].startswith("arXiv 本周：1360 篇，雷达 1 条")
+    assert out["push"].startswith("LitScout 本周：1360 篇，雷达 1 条")
+    assert text.startswith("# LitScout 本周回顾 · 2026-10-30 至 2026-11-02")
 
 
 def test_an_answer_with_nothing_usable_writes_nothing_and_fails(tmp_path, remote_and_clone, monkeypatch, capsys):
@@ -526,3 +527,8 @@ def test_an_unusable_fallback_answer_keeps_the_claude_error(tmp_path, remote_and
     code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
 
     assert out["status"] == "error" and "OAuth session expired" in out["reason"] and "codex" in out["reason"]
+
+
+def test_the_note_for_a_day_without_a_batch_carries_the_site_name():
+    note = digest.no_batch_note(DAY, "2026-10-30", SITE)
+    assert note.startswith(f"# LitScout 日报 · {DAY}（周一）") and "arXiv 今天没有新批次" in note
