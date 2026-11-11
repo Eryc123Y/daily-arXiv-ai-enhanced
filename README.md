@@ -5,13 +5,13 @@
 >
 > If your jurisdiction has censorship requirements for academic data, run this code with caution; any secondary distribution version must remove the entrance accessible to China and fulfill the content review obligations, otherwise all legal consequences will be borne by the downstream.
 
-LitScout Daily is a daily reading page for new arXiv papers with AI summaries (journals and conferences are planned; the repository, its `data` branch and the address keep the old name for now), built on [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) and released under the same licence as upstream: the Modified Apache License in [LICENSE](LICENSE), which is Apache 2.0 with an added disclaimer for third-party content such as arXiv (section 9). This fork changes many upstream files; the git history records each change. Live instance: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
+LitScout Daily is a daily reading page for new arXiv papers with AI summaries (journals and conferences are planned; the repository and its `data` branch keep the old name for now), built on [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) and released under the same licence as upstream: the Modified Apache License in [LICENSE](LICENSE), which is Apache 2.0 with an added disclaimer for third-party content such as arXiv (section 9). This fork changes many upstream files; the git history records each change. Live instance: **https://litscout.turing2234.com/** (the old address, eryc123y.github.io/daily-arXiv-ai-enhanced/, sends visitors there with their day and paper links intact)
 
 Every new paper of the day in your arXiv categories (this instance: cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR) (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords are grouped into topics (this instance: 2D-to-3D and stereo; weak supervision and data reuse; continual learning; data and representation) in [`js/interest-presets.js`](js/interest-presets.js); the page filters by topic first, then refines by "Has code" and arXiv category, with every count showing what that choice would leave; on a day with journal and conference papers it also refines by "Free to read" (arXiv papers and venue papers with an open-access copy) and by source: type (arXiv preprints, top conferences, top journals, meaning the venues of [`summaries/watchlist.json`](summaries/watchlist.json)), area (ML and vision, graphics and VR, vision science) and venue, and keywords can be changed per browser in Settings. Settings also choose a light theme (Preprint, Graphite) and a dark theme (Lilac, Lamplight, Anaglyph), whether the page follows the system or stays light or dark, and whether papers open on alphaXiv or arXiv; all of it is saved in the browser. Papers whose abstract or comments link a code repository (GitHub, GitLab, Codeberg, anonymous review repos) are marked Code, and the Has code refinement shows only those; links that appear only in the PDF are not seen. A linked project page is marked separately.
 
 ## Deploy your own
 
-The crawl and the summaries run on your own machine (no GitHub Actions schedule); GitHub stores the `data` branch and serves the page for free. The page reads its data from whichever repository serves it, so a fork needs no code changes.
+The crawl and the summaries run on your own machine (no GitHub Actions schedule); GitHub stores the `data` branch and, for a fork, serves the page for free on GitHub Pages. The page reads its data from whichever repository serves it on GitHub Pages, so a fork needs no code changes. (This instance is served from Cloudflare instead; see [Hosting](#hosting).)
 
 1. Fork this repository (the main branch is enough; the first crawl creates the `data` branch), then clone your fork.
 2. With [uv](https://docs.astral.sh/uv/) and the [GitHub CLI](https://cli.github.com/) logged in to your account:
@@ -44,11 +44,19 @@ Measured on this instance (details in [docs/daily-pipeline.md](docs/daily-pipeli
 
 On 2026-11-03 a 1,335-paper day took the 5-hour window from 5% to 9% and left the weekly window unchanged. Summaries are written from titles and abstracts only; reading the PDFs would cost 40-50 times as much.
 
+### Hosting
+
+A fork is served by **GitHub Pages** from its `main` branch (what `setup` enables); nothing else is needed. Pages builds run on Actions, so Actions must be allowed on the fork.
+
+This instance is served by **Cloudflare** at https://litscout.turing2234.com/, as the Worker `litscout-daily` with static assets only ([`wrangler.jsonc`](wrangler.jsonc)). `python3 scripts/build_site.py` copies the public page files (an allowlist: `index.html`, `statistic.html`, `css/`, `js/` and the icons) into `dist/`, and `npx wrangler deploy` uploads `dist/`. Cloudflare Workers Builds runs both on every push to `main`. The data still comes from the `data` branch on GitHub; only the page moved. `index.html` sends visitors of the old GitHub Pages address to the new one (only that exact address, so forks on their own github.io stay put) and names it as canonical.
+
+The links in the daily report and Sunday's page point at the page's address: [`summaries/sites.json`](summaries/sites.json) maps a repository (`owner/name`) to its address, and a repository without an entry gets its GitHub Pages address. A fork that hosts elsewhere adds its own entry; `digest --site URL` overrides both for one run. A fork that keeps this repository's `index.html` should also change or drop its `<link rel="canonical">` and the redirect script at the top, which only fire on this repository's old address.
+
 ## How a day flows
 
 1. **The crawl** (`summaries ensure-day`, run by the local task) reads each category's `/new` listing on the Mac, drops papers already published in the past week, and commits `data/<date>.jsonl` to the `data` branch. Days without an arXiv announcement (weekends, holidays, late batches) publish nothing and the page keeps the last day. Weekdays the Mac missed (asleep, off, travelling) are backfilled on the next run from the `/recent` listing, which shows the last five announcements, with abstracts from the arXiv API; anything older is reported as a gap. GitHub Actions ran this crawl until 2026-11-08, when GitHub disabled workflows on this fork.
 2. **Summaries** are written to `data/<date>_AI_enhanced_English.jsonl` by one of two modes (below). Until a paper has its summary, the page shows its abstract, says the summary is not written yet, and a progress bar shows how many are ready.
-3. **GitHub Pages** serves this branch's static site, which reads both files from the `data` branch.
+3. **The static site** in this branch reads both files from the `data` branch on raw.githubusercontent.com. This instance is served by Cloudflare, a fork by GitHub Pages (see [Hosting](#hosting)).
 
 ## Summary modes
 
@@ -131,7 +139,7 @@ node --test tests/js/*.test.js
 
 No CI runs while Actions is disabled on this repository, so run both before merging to `main`. The suite never touches the network or the real remote (see `conftest.py`).
 
-Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page).
+Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so browser and CDN caches do not serve stale files; `statistic.html` is upstream's keyword-trends page).
 
 ## Brand assets
 
