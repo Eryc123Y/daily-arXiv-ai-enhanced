@@ -12,12 +12,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;1,400&display=swap">
-  <script src="js/theme.js?v=26"></script>
-  <link rel="stylesheet" href="css/site.css?v=26">
-  <script src="js/data-config.js?v=26"></script>
-  <script src="js/paper-data.js?v=26"></script>
-  <script src="js/interest-presets.js?v=26"></script>
-  <script src="js/data-source.js?v=26"></script>
+  <script src="js/theme.js?v=27"></script>
+  <link rel="stylesheet" href="css/site.css?v=27">
+  <script src="js/data-config.js?v=27"></script>
+  <script src="js/paper-data.js?v=27"></script>
+  <script src="js/interest-presets.js?v=27"></script>
+  <script src="js/data-source.js?v=27"></script>
 </head>
 <body>
   <a class="skip-link" href="#paperList">Skip to the paper list</a>
@@ -75,7 +75,18 @@
 
       <section class="filter" id="sourceFilter" aria-labelledby="sourceHeading" hidden>
         <h2 id="sourceHeading">Source</h2>
-        <ul class="chip-list" id="sourceList"></ul>
+        <div class="source-row">
+          <h3 id="typeHeading">Type</h3>
+          <ul class="chip-list" id="typeList" aria-labelledby="typeHeading"></ul>
+        </div>
+        <div class="source-row" id="areaRow">
+          <h3 id="areaHeading">Area</h3>
+          <ul class="chip-list" id="areaList" aria-labelledby="areaHeading"></ul>
+        </div>
+        <div class="source-row" id="venueRow">
+          <h3 id="venueHeading">Venue</h3>
+          <ul class="chip-list" id="sourceList" aria-labelledby="venueHeading"></ul>
+        </div>
       </section>
 
       <p class="nav-foot">
@@ -146,10 +157,10 @@
     </form>
   </dialog>
 
-  <script src="js/sources.js?v=26"></script>
-  <script src="js/render.js?v=26"></script>
-  <script src="js/filters.js?v=26"></script>
-  <script src="js/status.js?v=26"></script>
-  <script src="js/app.js?v=26"></script>
+  <script src="js/sources.js?v=27"></script>
+  <script src="js/render.js?v=27"></script>
+  <script src="js/filters.js?v=27"></script>
+  <script src="js/status.js?v=27"></script>
+  <script src="js/app.js?v=27"></script>
 </body>
 </html>

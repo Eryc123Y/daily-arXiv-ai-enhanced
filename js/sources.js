@@ -1,8 +1,9 @@
 /**
  * Where a paper comes from: arXiv, or a journal or conference found through
  * OpenAlex, Crossref or OpenReview (docs/specs/s1-sources-beyond-arxiv.md).
- * Keys and labels for the Source filter, the publication date, and the
- * links a non-arXiv paper may open. Loaded as the global `Sources`, and by
+ * Keys and labels for the Source filter, the type and area of a watched
+ * venue (assets/venues.json), whether a paper is free to read, the
+ * publication date, and the links a non-arXiv paper may open. Loaded as the global `Sources`, and by
  * node for tests. Record shapes: js/types.js.
  */
 (function (root, factory) {
@@ -83,5 +84,48 @@
     return [...main, [...preprint, 'button-outline']];
   }
 
-  return { ARXIV, arxivId, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks };
+  const KINDS = ['conference', 'journal'];
+
+  /**
+   * The watched venues (assets/venues.json, `[{name, kind, area}]`) as a Map
+   * from name to { kind, area }. Malformed entries are skipped; anything but
+   * a list (a missing file) gives an empty Map, so no paper is grouped.
+   */
+  function venueIndex(list) {
+    const index = new Map();
+    (Array.isArray(list) ? list : []).forEach(venue => {
+      const name = venue && typeof venue.name === 'string' ? venue.name.trim() : '';
+      if (!name || !KINDS.includes(venue.kind)) return;
+      const area = typeof venue.area === 'string' && venue.area.trim() ? venue.area.trim() : null;
+      index.set(name, { kind: venue.kind, area });
+    });
+    return index;
+  }
+
+  function watched(paper, index) {
+    return PaperData.isArxiv(paper) || !index ? null : index.get(sourceLabel(paper)) || null;
+  }
+
+  /** 'arxiv', the watched venue's kind ('conference' or 'journal'), or null for a venue not on the list. */
+  function sourceType(paper, index) {
+    if (PaperData.isArxiv(paper)) return ARXIV;
+    const venue = watched(paper, index);
+    return venue ? venue.kind : null;
+  }
+
+  /** The watched venue's area, e.g. "Graphics and VR"; null for arXiv papers and unwatched venues. */
+  function sourceArea(paper, index) {
+    const venue = watched(paper, index);
+    return venue ? venue.area : null;
+  }
+
+  /** Whether the paper can be read without a subscription: every arXiv paper, and a venue paper with an open-access copy. */
+  function isFreeToRead(paper) {
+    return PaperData.isArxiv(paper) || Boolean(safeUrl(paper.oa_url));
+  }
+
+  return {
+    ARXIV, arxivId, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks,
+    venueIndex, sourceType, sourceArea, isFreeToRead,
+  };
 });

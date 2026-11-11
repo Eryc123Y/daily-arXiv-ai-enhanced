@@ -4,7 +4,8 @@
  * to provide the same two methods.
  *
  *   listDays()      -> { days: ['2026-10-30', ...] newest first, languages: Map(day -> ['English', ...]),
- *                        categories: crawled categories from assets/site.json, or null }
+ *                        categories: crawled categories from assets/site.json, or null,
+ *                        venues: the watched venues [{name, kind, area}] from assets/venues.json, or null }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
  *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
  *   loadStatus()    -> { log: [run log entries] } (crawl, summary and report runs)
@@ -13,7 +14,8 @@
  * Both reject with a LoadError when a file that should be there cannot be
  * read, so a failed download is never shown as a day without papers. Files
  * that may legitimately not exist yet (a day's summaries, the day list on a
- * new fork, assets/site.json) read as empty on 404.
+ * new fork, assets/site.json) read as empty on 404; assets/venues.json is
+ * optional in every way (any failure means no venue grouping).
  */
 (function (root) {
   const PREFERRED_LANGUAGES = ['English', 'Chinese'];
@@ -64,6 +66,16 @@
       }
     }
 
+    /** assets/venues.json, the watched venues; null when it is missing, unreadable or not a list. */
+    async function fetchVenues() {
+      try {
+        const parsed = JSON.parse((await fetchText('assets/venues.json', { optional: true })) || 'null');
+        return Array.isArray(parsed) ? parsed : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
     function summaryLanguage(day) {
       const available = languages.get(day) || [];
       return PREFERRED_LANGUAGES.find(l => available.includes(l)) || available[0] || PREFERRED_LANGUAGES[0];
@@ -71,9 +83,10 @@
 
     return {
       async listDays() {
-        const [listText, siteText] = await Promise.all([
+        const [listText, siteText, venues] = await Promise.all([
           fetchText('assets/file-list.txt', { optional: true }),
           fetchText('assets/site.json', { optional: true }),
+          fetchVenues(),
         ]);
         const list = PaperData.parseFileList(listText);
         languages = list.languages;
@@ -83,7 +96,7 @@
         } catch (error) {
           console.error('Ignoring an unreadable assets/site.json:', error);
         }
-        return { days: list.dates, languages, categories };
+        return { days: list.dates, languages, categories, venues };
       },
       async loadDay(day) {
         const [raw, ai, hf] = await Promise.all([

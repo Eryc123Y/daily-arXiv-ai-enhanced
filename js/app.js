@@ -18,7 +18,11 @@ const state = {
   topic: null,
   category: 'all',
   codeOnly: false,
+  freeOnly: false,
+  type: 'all',
+  area: 'all',
   source: 'all',
+  venues: new Map(),
   query: '',
   selectedId: null,
   mainCategories: [],
@@ -87,7 +91,17 @@ function describeAll() {
 // --- Filtering ----------------------------------------------------------------
 
 function activeFilters() {
-  return { topic: state.topic, category: state.category, codeOnly: state.codeOnly, source: state.source, query: state.query };
+  const { topic, category, codeOnly, freeOnly, type, area, source, query } = state;
+  return { topic, category, codeOnly, freeOnly, type, area, source, query };
+}
+
+/** Set the type, area, venue and "Free to read" choices from a filters object. */
+function setSourceChoices({ type, area, source, freeOnly }) {
+  Object.assign(state, { type, area, source, freeOnly });
+}
+
+function currentCounts() {
+  return Filters.counts(entries(), activeFilters(), state.mainCategories, state.topics.map(t => t.name), state.venues);
 }
 
 function entries() {
@@ -95,7 +109,7 @@ function entries() {
 }
 
 function computeVisible() {
-  state.visible = Filters.apply(entries(), activeFilters(), state.mainCategories)
+  state.visible = Filters.apply(entries(), activeFilters(), state.mainCategories, state.venues)
     .sort((a, b) => b.info.score - a.info.score || a.index - b.index);
 }
 
@@ -107,6 +121,12 @@ function topicLabel(topic) {
 }
 
 // --- Rendering ----------------------------------------------------------------
+
+/** One chip of a chip list; disabled when it would show nothing, unless it is the active one. */
+function chip(kind, key, label, count, active) {
+  const disabled = count === 0 && active !== key ? ' disabled' : '';
+  return `<li><button type="button" data-${kind}="${esc(key)}" aria-pressed="${active === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
+}
 
 function filterItem(kind, key, label, count, active, colourIndex) {
   const dot = colourIndex === undefined ? '' : `<span class="dot topic-${colourIndex}"></span>`;
@@ -136,7 +156,7 @@ function renderNav(days) {
   }
   renderStatus(days);
 
-  const counts = Filters.counts(entries(), activeFilters(), state.mainCategories, state.topics.map(t => t.name));
+  const counts = currentCounts();
   const count = topic => counts.topics.get(topic);
   const topics = [filterItem('topic', 'matches', 'Interest matches', count('matches'), state.topic)];
   state.topics.forEach((t, i) => topics.push(filterItem('topic', t.name, t.name, count(t.name), state.topic, i)));
@@ -147,22 +167,41 @@ function renderNav(days) {
   renderSources(counts);
 }
 
-/** arXiv and each venue of the day; hidden when every paper is from arXiv. */
+/** Type, area and venue rows; the section is hidden when every paper is from arXiv. */
 function renderSources(counts) {
-  const options = Filters.sourceOptions(state.records, counts);
-  $('sourceFilter').hidden = !options.length;
-  $('sourceList').innerHTML = options
-    .map(({ key, label, count }) => {
-      const disabled = count === 0 && state.source !== key ? ' disabled' : '';
-      return `<li><button type="button" data-source="${esc(key)}" aria-pressed="${state.source === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
-    })
-    .join('');
+  const groups = Filters.sourceGroups(state.records, counts, activeFilters(), state.venues);
+  $('sourceFilter').hidden = !groups;
+  if (!groups) return;
+  const row = (list, options, kind, active) => {
+    $(list).innerHTML = options.map(({ key, label, count }) => chip(kind, key, label, count, active)).join('');
+  };
+  row('typeList', groups.types, 'type', state.type);
+  row('areaList', groups.areas, 'area', state.area);
+  row('sourceList', groups.venues, 'source', state.source);
+  $('areaRow').hidden = !groups.areas.length;
+  $('venueRow').hidden = !groups.venues.length;
+  ['typeList', 'areaList', 'sourceList'].forEach(id => revealPressed($(id)));
+}
+
+/**
+ * On a phone a chip row scrolls sideways and starts at its left end after
+ * every render; scroll it so the chosen chip is in view. An "All" chip is
+ * the default and needs no scrolling.
+ */
+function revealPressed(list) {
+  const pressed = [...list.querySelectorAll('button[aria-pressed="true"]')].find(b => !Object.values(b.dataset).includes('all'));
+  if (!pressed || list.scrollWidth <= list.clientWidth) return;
+  const box = list.getBoundingClientRect();
+  const chipBox = pressed.getBoundingClientRect();
+  if (chipBox.left < box.left || chipBox.right > box.right) list.scrollLeft += chipBox.left - box.left - 8;
 }
 
 function sourceName(key) {
   const record = state.records.find(r => Sources.sourceKey(r) === key);
-  return record ? Sources.sourceLabel(record) : key;
+  return record ? Sources.sourceLabel(record) : key.replace(/^venue:/, '');
 }
+
+const FREE_TITLE = 'arXiv papers, and journal or conference papers with an open-access copy.';
 
 /** "Has code" and the arXiv categories: refinements applied on top of the topic. */
 function renderRefine(counts) {
@@ -171,26 +210,27 @@ function renderRefine(counts) {
     const key = Filters.categoryOf(r, state.mainCategories);
     totals.set(key, (totals.get(key) || 0) + 1);
   });
-  const chip = (key, label) => {
-    const n = counts.categories.get(key) || 0;
-    const disabled = n === 0 && state.category !== key ? ' disabled' : '';
-    return `<li><button type="button" data-category="${esc(key)}" aria-pressed="${state.category === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${n}</span></button></li>`;
-  };
+  const category = (key, label) => chip('category', key, label, counts.categories.get(key) || 0, state.category);
+  const free = Filters.hasVenuePapers(state.records)
+    ? [`<li><button type="button" data-free aria-pressed="${state.freeOnly}" title="${FREE_TITLE}"><span class="label">Free to read</span><span class="count">${counts.free}</span></button></li>`]
+    : [];
   const main = state.mainCategories.filter(c => totals.has(c)).sort((a, b) => totals.get(b) - totals.get(a));
   const items = [
     `<li class="chip-code"><button type="button" data-code aria-pressed="${state.codeOnly}" title="Papers whose abstract or comments link a code repository. Links that appear only in the PDF are not seen.">${Render.CODE_ICON}<span class="label">Has code</span><span class="count">${counts.code}</span></button></li>`,
-    chip('all', 'All fields'),
-    ...main.map(c => chip(c, c)),
+    ...free,
+    '<li class="chip-break" aria-hidden="true"></li>',
+    category('all', 'All fields'),
+    ...main.map(c => category(c, c)),
   ];
-  if (totals.has(Filters.OTHER_FIELDS)) items.push(chip(Filters.OTHER_FIELDS, 'Other fields'));
+  if (totals.has(Filters.OTHER_FIELDS)) items.push(category(Filters.OTHER_FIELDS, 'Other fields'));
   $('refineList').innerHTML = items.join('');
+  revealPressed($('refineList'));
 }
 
 function renderList() {
   computeVisible();
   const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === Filters.OTHER_FIELDS ? 'other fields' : state.category}`;
-  const coded = state.codeOnly ? `${place}, with code` : place;
-  const scope = state.source === 'all' ? coded : `${coded}, from ${sourceName(state.source)}`;
+  const scope = [place, ...Filters.refinementPhrases(activeFilters(), sourceName)].join(', ');
   $('listHeading').innerHTML = `${esc(scope)} <span class="count">${state.visible.length}</span>`;
   $('listNote').textContent = state.topic === 'all' && state.visible.length ? 'Interest matches first' : '';
   $('clearFilters').hidden = !Filters.isRefined(activeFilters());
@@ -312,6 +352,10 @@ function writeHash() {
   if (days.length > 1) params.set('from', days[0]);
   if (state.topic && state.topic !== 'matches') params.set('topic', state.topic);
   if (state.codeOnly) params.set('code', '1');
+  if (state.freeOnly) params.set('free', '1');
+  if (state.type !== 'all') params.set('type', state.type);
+  if (state.area !== 'all') params.set('area', state.area);
+  if (state.source.startsWith('venue:')) params.set('venue', state.source.slice('venue:'.length));
   if (state.selectedId) params.set('paper', state.selectedId);
   history.replaceState(null, '', `#${params}`);
 }
@@ -328,6 +372,10 @@ function readHash() {
   }
   state.topic = params.get('topic');
   state.codeOnly = params.get('code') === '1';
+  state.freeOnly = params.get('free') === '1';
+  state.type = params.get('type') || 'all';
+  state.area = params.get('area') || 'all';
+  state.source = params.get('venue') ? `venue:${params.get('venue')}` : 'all';
   state.selectedId = params.get('paper');
 }
 
@@ -377,7 +425,7 @@ async function showSelection({ keepTopic = false } = {}) {
   const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
   if (!keepTopic || !known.includes(state.topic)) state.topic = anyMatch ? 'matches' : 'all';
   state.category = 'all';
-  state.source = 'all';
+  setSourceChoices(Filters.keepValid(activeFilters(), state.records, state.venues));
   renderAll(days);
   writeHash();
 }
@@ -516,23 +564,28 @@ function bindEvents() {
     const button = event.target.closest('button');
     if (!button) return;
     if (button.hasAttribute('data-code')) state.codeOnly = !state.codeOnly;
+    else if (button.hasAttribute('data-free')) state.freeOnly = !state.freeOnly;
     else if (button.dataset.category) state.category = button.dataset.category;
     else return;
     renderNav(selectedDays());
     renderList();
     writeHash();
   });
-  $('sourceList').addEventListener('click', event => {
-    const button = event.target.closest('button[data-source]');
-    if (!button) return;
-    state.source = button.dataset.source;
-    renderNav(selectedDays());
-    renderList();
+  [['typeList', 'type'], ['areaList', 'area'], ['sourceList', 'source']].forEach(([list, kind]) => {
+    $(list).addEventListener('click', event => {
+      const button = event.target.closest(`button[data-${kind}]`);
+      if (!button) return;
+      state[kind] = button.dataset[kind];
+      if (kind !== 'source') state.source = 'all'; // the venue row now lists other venues
+      renderNav(selectedDays());
+      renderList();
+      writeHash();
+    });
   });
   $('clearFilters').addEventListener('click', () => {
     state.category = 'all';
     state.codeOnly = false;
-    state.source = 'all';
+    setSourceChoices({ type: 'all', area: 'all', source: 'all', freeOnly: false });
     renderNav(selectedDays());
     renderList();
     writeHash();
@@ -575,6 +628,7 @@ async function init() {
   const { days, categories } = listing;
   state.days = days;
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
+  state.venues = Sources.venueIndex(listing.venues);
   if (!days.length) {
     $('dayTitle').textContent = 'No papers yet';
     $('paperList').innerHTML = `<li class="empty">Nothing has been published to the data branch of ${esc(DATA_CONFIG.repoOwner)}/${esc(DATA_CONFIG.repoName)} yet, or it could not be reached. On a new fork, run the arXiv-daily-ai-enhanced workflow from the Actions tab; the first day appears a few minutes after it finishes.</li>`;

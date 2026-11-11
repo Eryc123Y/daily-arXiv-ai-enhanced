@@ -1,0 +1,8 @@
+[
+  {"name": "CVPR", "kind": "conference", "area": "ML and vision"},
+  {"name": "ICLR", "kind": "conference", "area": "ML and vision"},
+  {"name": "IEEE TIP", "kind": "journal", "area": "ML and vision"},
+  {"name": "IEEE TCSVT", "kind": "journal", "area": "ML and vision"},
+  {"name": "IEEE TVCG", "kind": "journal", "area": "Graphics and VR"},
+  {"name": "Journal of Vision", "kind": "journal", "area": "Vision science"}
+]

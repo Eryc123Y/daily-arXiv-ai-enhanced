@@ -644,9 +644,21 @@ textarea {
   cursor: default;
 }
 
-/* "Has code" sits on its own line above the categories */
-.chip-list .chip-code {
+/* "Has code" and "Free to read" sit on their own line above the categories */
+.chip-list .chip-break {
   flex-basis: 100%;
+  height: 0;
+}
+
+.source-row + .source-row {
+  margin-top: 10px;
+}
+
+.source-row h3 {
+  margin: 0 0 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
 .chip-code svg {
@@ -1423,8 +1435,28 @@ textarea {
     flex: none;
   }
 
-  .chip-list .chip-code {
-    flex-basis: auto;
+  .chip-list .chip-break {
+    display: none;
+  }
+
+  .source-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .source-row + .source-row {
+    margin-top: 6px;
+  }
+
+  .source-row h3 {
+    flex: none;
+    width: 44px;
+    margin: 0;
+  }
+
+  .source-row .chip-list {
+    min-width: 0;
   }
 
   .list {
