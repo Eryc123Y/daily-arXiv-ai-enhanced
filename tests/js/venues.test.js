@@ -39,9 +39,18 @@ test('the venue index keeps well-formed entries by name', () => {
     { kind: 'journal' },
     'TIP',
   ]);
-  assert.deepEqual([...index], [['ACM TOG', { kind: 'journal', area: 'Graphics and VR' }], ['CVPR', { kind: 'conference', area: null }]]);
+  assert.deepEqual([...index], [['ACM TOG', { kind: 'journal', area: 'Graphics and VR', top: true }], ['CVPR', { kind: 'conference', area: null, top: true }]]);
   assert.equal(Sources.venueIndex(null).size, 0);
   assert.equal(Sources.venueIndex({ name: 'ACM TOG' }).size, 0);
+});
+
+test('a venue is top unless the list says top: false (lists written before the flag had only top venues)', () => {
+  const index = Sources.venueIndex([
+    { name: 'ACL', kind: 'conference', area: 'NLP', top: true },
+    { name: 'EACL', kind: 'conference', area: 'NLP', top: false },
+    { name: 'CVPR', kind: 'conference', area: 'ML' },
+  ]);
+  assert.deepEqual([...index].map(([name, v]) => [name, v.top]), [['ACL', true], ['EACL', false], ['CVPR', true]]);
 });
 
 test('each paper has a type and an area from the venue list', () => {
@@ -103,7 +112,7 @@ test('without a venue list every venue paper is ungrouped but still reachable by
 test('type, area, venue and free counts apply every other active filter but their own', () => {
   const c = counts({ ...base, topic: 'matches', type: 'journal', area: 'ML and vision', freeOnly: true });
   // Topic "matches" holds 2611.04001, the open-access TCSVT paper and TVCG.
-  assert.deepEqual([...c.types], [['all', 1], ['arxiv', 0], ['conference', 0], ['journal', 1]]);
+  assert.deepEqual([...c.types], [['all', 1], ['arxiv', 0], ['conference', 0], ['journal', 1], ['other', 0]]);
   assert.deepEqual([...c.areas], [['all', 1], ['ML and vision', 1]]);
   assert.equal(c.free, 1);
   assert.equal(c.sources.get('all'), 1);
@@ -114,14 +123,14 @@ test('type, area, venue and free counts apply every other active filter but thei
 
 test('plain counts are the day totals', () => {
   const c = counts(base);
-  assert.deepEqual([...c.types], [['all', 9], ['arxiv', 3], ['conference', 1], ['journal', 4]]);
+  assert.deepEqual([...c.types], [['all', 9], ['arxiv', 3], ['conference', 1], ['journal', 4], ['other', 0]]);
   assert.deepEqual([...c.areas], [['all', 9], ['ML and vision', 4], ['Graphics and VR', 1]]);
   assert.equal(c.free, 5);
 });
 
 test('a free-to-read choice changes the other counts', () => {
   const c = counts({ ...base, freeOnly: true });
-  assert.deepEqual([...c.types], [['all', 5], ['arxiv', 3], ['conference', 1], ['journal', 1]]);
+  assert.deepEqual([...c.types], [['all', 5], ['arxiv', 3], ['conference', 1], ['journal', 1], ['other', 0]]);
   assert.equal(c.categories.get('all'), 5);
   assert.equal(c.code, 1);
 });
@@ -202,8 +211,46 @@ test('a new day keeps the choices it can show and resets the rest', () => {
 
 test('type and area counts ignore the chosen venue, which sits under them', () => {
   const c = counts({ ...base, source: 'venue:IEEE TVCG' });
-  assert.deepEqual([...c.types], [['all', 9], ['arxiv', 3], ['conference', 1], ['journal', 4]]);
+  assert.deepEqual([...c.types], [['all', 9], ['arxiv', 3], ['conference', 1], ['journal', 4], ['other', 0]]);
   assert.deepEqual([...c.areas], [['all', 9], ['ML and vision', 4], ['Graphics and VR', 1]]);
   assert.equal(c.sources.get('venue:IEEE TCSVT'), 2);
   assert.equal(c.free, 0);
+});
+
+// --- Top venues and the rest ------------------------------------------------------
+
+// The fixture's list with IEEE TIP and IEEE TVCG not marked top.
+const TIERED = Sources.venueIndex(JSON.parse(read('assets/venues.json'))
+  .map(v => (['IEEE TIP', 'IEEE TVCG'].includes(v.name) ? { ...v, top: false } : v)));
+
+test('the type key: a top venue by its kind, any other watched venue as other, unwatched none', () => {
+  assert.equal(Sources.typeKey(byId(ARXIV[0]), TIERED), 'arxiv');
+  assert.equal(Sources.typeKey(byId(TCSVT[0]), TIERED), 'journal');
+  assert.equal(Sources.typeKey(byId(ICLR), TIERED), 'conference');
+  assert.equal(Sources.typeKey(byId(TIP), TIERED), 'other');
+  assert.equal(Sources.typeKey(byId(TPAMI), TIERED), null);
+  assert.equal(Sources.sourceType(byId(TIP), TIERED), 'journal');
+});
+
+test('top journals leave out the venues not marked top; other venues hold them', () => {
+  assert.deepEqual(ids({ ...base, type: 'journal' }, TIERED), TCSVT);
+  assert.deepEqual(ids({ ...base, type: 'other' }, TIERED), [TVCG, TIP]);
+  assert.deepEqual(ids({ ...base, type: 'other', area: 'Graphics and VR' }, TIERED), [TVCG]);
+});
+
+test('the type row adds other venues when the list has venues not marked top', () => {
+  const groups = rows(base, TIERED);
+  assert.deepEqual(triples(groups.types), [
+    ['all', 'All', 9], ['arxiv', 'arXiv preprints', 3], ['conference', 'Top conferences', 1], ['journal', 'Top journals', 2], ['other', 'Other venues', 2],
+  ]);
+  assert.deepEqual(rows({ ...base, type: 'other' }, TIERED).venues.map(o => o.key), ['all', 'venue:IEEE TIP', 'venue:IEEE TVCG']);
+  assert.deepEqual(rows(base).types.map(o => o.key), ['all', 'arxiv', 'conference', 'journal']);
+});
+
+test('other venues read as a refinement and survive a day switch only while the list has them', () => {
+  const name = key => key.replace(/^venue:/, '');
+  assert.deepEqual(Filters.refinementPhrases({ ...base, type: 'other' }, name), ['other venues']);
+  assert.equal(Filters.isRefined({ ...base, type: 'other' }), true);
+  assert.equal(Filters.keepValid({ ...base, type: 'other' }, RECORDS, TIERED).type, 'other');
+  assert.equal(Filters.keepValid({ ...base, type: 'other' }, RECORDS, VENUES).type, 'all');
 });

@@ -1,8 +1,9 @@
 /**
  * Where a paper comes from: arXiv, or a journal or conference found through
- * OpenAlex, Crossref or OpenReview (docs/specs/s1-sources-beyond-arxiv.md).
- * Keys and labels for the Source filter, the type and area of a watched
- * venue (assets/venues.json), whether a paper is free to read, the
+ * OpenAlex, Crossref, OpenReview, the ACL Anthology, PMLR, JMLR or DataCite
+ * (docs/specs/s1-sources-beyond-arxiv.md). Keys and labels for the Source
+ * filter, the type, area and tier of a watched venue (assets/venues.json),
+ * whether a paper is free to read, the
  * publication date, and the links a non-arXiv paper may open. Loaded as the global `Sources`, and by
  * node for tests. Record shapes: js/types.js.
  */
@@ -18,7 +19,7 @@
   const ISO_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
   const ARXIV_ID = /^(?:\d{4}\.\d{4,5}|[a-z-]+(?:\.[A-Z]{2})?\/\d{7})(?:v\d+)?$/;
   /** @type {Partial<Record<string, string>>} */
-  const SOURCE_NAMES = { openreview: 'OpenReview' };
+  const SOURCE_NAMES = { openreview: 'OpenReview', 'acl-anthology': 'ACL Anthology', pmlr: 'PMLR', jmlr: 'JMLR', datacite: 'DataCite' };
   const NO_VENUE = 'Journal or conference';
 
   /**
@@ -111,11 +112,14 @@
 
   /** @type {unknown[]} */
   const KINDS = ['conference', 'journal'];
+  const OTHER_VENUES = 'other';
 
   /**
-   * The watched venues (assets/venues.json, `[{name, kind, area}]`) as a Map
-   * from name to { kind, area }. Malformed entries are skipped; anything but
-   * a list (a missing file) gives an empty Map, so no paper is grouped.
+   * The watched venues (assets/venues.json, `[{name, kind, area, top}]`) as a
+   * Map from name to { kind, area, top }. Malformed entries are skipped;
+   * anything but a list (a missing file) gives an empty Map, so no paper is
+   * grouped. A venue is top unless it says `top: false`: lists written before
+   * the flag held only top venues.
    * @param {unknown} list
    * @returns {VenueIndex}
    */
@@ -126,7 +130,7 @@
       const name = venue && typeof venue.name === 'string' ? venue.name.trim() : '';
       if (!name || !KINDS.includes(venue.kind)) return;
       const area = typeof venue.area === 'string' && venue.area.trim() ? venue.area.trim() : null;
-      index.set(name, { kind: venue.kind, area });
+      index.set(name, { kind: venue.kind, area, top: venue.top !== false });
     });
     return index;
   }
@@ -152,6 +156,21 @@
   }
 
   /**
+   * The paper's key in the Type selector: 'arxiv'; 'conference' or 'journal'
+   * for a top venue of that kind; 'other' for a watched venue not marked top;
+   * null for a venue not on the list.
+   * @param {AnyRecord} paper
+   * @param {VenueIndex | null | undefined} index
+   * @returns {string | null}
+   */
+  function typeKey(paper, index) {
+    if (PaperData.isArxiv(paper)) return ARXIV;
+    const venue = watched(paper, index);
+    if (!venue) return null;
+    return venue.top ? venue.kind : OTHER_VENUES;
+  }
+
+  /**
    * The watched venue's area, e.g. "Graphics and VR"; null for arXiv papers and unwatched venues.
    * @param {AnyRecord} paper
    * @param {VenueIndex | null | undefined} index
@@ -170,7 +189,7 @@
   }
 
   return {
-    ARXIV, arxivId, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks,
-    venueIndex, sourceType, sourceArea, isFreeToRead,
+    ARXIV, OTHER_VENUES, arxivId, sourceKey, sourceLabel, publishedLabel, safeUrl, publisherUrl, venueLinks,
+    venueIndex, sourceType, typeKey, sourceArea, isFreeToRead,
   };
 });

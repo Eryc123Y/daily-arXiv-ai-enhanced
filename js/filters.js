@@ -2,7 +2,8 @@
  * Which papers the list shows: a topic, then the refinements (arXiv category,
  * "Has code", "Free to read", and the source's type, area and venue), then
  * the search text. Type and area come from the watched venues
- * (Sources.venueIndex of assets/venues.json, passed as `venues`). Counts are
+ * (Sources.venueIndex of assets/venues.json, passed as `venues`); the type of
+ * a venue paper is its kind when the venue is top, else "Other venues". Counts are
  * faceted: each one applies every other active filter but its own, so a
  * number always says how many papers that choice would show. Type and area
  * also leave out the venue, since choosing either resets it. Loaded as the global `Filters`, and by node
@@ -15,7 +16,7 @@
  * @property {string} category          'all', an arXiv category, or 'other'
  * @property {boolean} codeOnly
  * @property {boolean} freeOnly
- * @property {string} type              'all', 'arxiv', 'conference' or 'journal'
+ * @property {string} type              'all', 'arxiv', 'conference' (top), 'journal' (top) or 'other'
  * @property {string} area              'all' or an area
  * @property {string} source            'all' or a Sources.sourceKey
  * @property {string} [query]
@@ -44,9 +45,9 @@
 function (Render, Sources, PaperData) {
   const OTHER_FIELDS = 'other';
   /** @type {Array<[string, string]>} */
-  const TYPES = [['all', 'All'], ['arxiv', 'arXiv preprints'], ['conference', 'Top conferences'], ['journal', 'Top journals']];
+  const TYPES = [['all', 'All'], ['arxiv', 'arXiv preprints'], ['conference', 'Top conferences'], ['journal', 'Top journals'], ['other', 'Other venues']];
   /** @type {Partial<Record<string, string>>} */
-  const TYPE_PHRASES = { arxiv: 'arXiv preprints', conference: 'top conferences', journal: 'top journals' };
+  const TYPE_PHRASES = { arxiv: 'arXiv preprints', conference: 'top conferences', journal: 'top journals', other: 'other venues' };
   const FIXED_TOPICS = ['matches', 'all', 'authors'];
 
   /**
@@ -107,7 +108,7 @@ function (Render, Sources, PaperData) {
       && (off('category') || filters.category === 'all' || categoryOf(record, mainCategories) === filters.category)
       && (off('code') || !filters.codeOnly || Render.codeKind(record) === 'code')
       && (off('free') || !filters.freeOnly || Sources.isFreeToRead(record))
-      && (off('type') || isAll(filters.type) || Sources.sourceType(record, venues) === filters.type)
+      && (off('type') || isAll(filters.type) || Sources.typeKey(record, venues) === filters.type)
       && (off('area') || isAll(filters.area) || Sources.sourceArea(record, venues) === filters.area)
       && (off('source') || isAll(filters.source) || Sources.sourceKey(record) === filters.source)
       && matchesQuery(record, filters.query || '');
@@ -147,7 +148,7 @@ function (Render, Sources, PaperData) {
       const key = categoryOf(e.record, mainCategories);
       if (key) categories.set(key, (categories.get(key) || 0) + 1);
     });
-    const typeTotals = tally(byType.map(e => Sources.sourceType(e.record, venues)));
+    const typeTotals = tally(byType.map(e => Sources.typeKey(e.record, venues)));
     /** @type {Map<string | null, number>} */
     const types = new Map([['all', byType.length], ...TYPES.slice(1).map(([key]) => /** @type {[string, number]} */ ([key, typeTotals.get(key) || 0]))]);
     /** @type {Map<string | null, number>} */
@@ -182,9 +183,13 @@ function (Render, Sources, PaperData) {
     return records.some(r => !PaperData.isArxiv(r));
   }
 
-  /** @param {VenueIndex | null | undefined} venues */
-  function venueKinds(venues) {
-    return new Set([...(venues || new Map()).values()].map(v => v.kind));
+  /**
+   * The Type keys the venue list offers: a kind for its top venues, 'other' for the rest.
+   * @param {VenueIndex | null | undefined} venues
+   * @returns {Set<string>}
+   */
+  function venueTypes(venues) {
+    return new Set([...(venues || new Map()).values()].map(v => (v.top ? v.kind : Sources.OTHER_VENUES)));
   }
 
   /**
@@ -199,8 +204,9 @@ function (Render, Sources, PaperData) {
 
   /**
    * The Source section's three rows, each [{ key, label, count }] with the
-   * faceted counts: Type (All, arXiv preprints when there are any, and each
-   * kind the venue list has), Area (empty when the list names no areas), and Venue (each venue
+   * faceted counts: Type (All, arXiv preprints when there are any, top
+   * conferences and top journals when the venue list has them, and other
+   * venues when it has venues not marked top), Area (empty when the list names no areas), and Venue (each venue
    * of the chosen type and area by how many papers it has that day, ties by
    * name; empty when there is none). null when every paper is from arXiv, so
    * an arXiv-only day shows no section.
@@ -212,7 +218,7 @@ function (Render, Sources, PaperData) {
    */
   function sourceGroups(records, counts, filters, venues) {
     if (!hasVenuePapers(records)) return null;
-    const kinds = venueKinds(venues);
+    const offered = venueTypes(venues);
     const hasArxiv = records.some(r => PaperData.isArxiv(r));
     /**
      * @param {Map<string | null, number>} map
@@ -221,12 +227,12 @@ function (Render, Sources, PaperData) {
      * @returns {FilterOption}
      */
     const option = (map, key, label) => ({ key, label, count: map.get(key) || 0 });
-    const types = TYPES.filter(([key]) => key === 'all' || (key === Sources.ARXIV ? hasArxiv : kinds.has(key)))
+    const types = TYPES.filter(([key]) => key === 'all' || (key === Sources.ARXIV ? hasArxiv : offered.has(key)))
       .map(([key, label]) => option(counts.types, key, label));
     const names = venueAreas(venues);
     const areas = names.length ? [option(counts.areas, 'all', 'All'), ...names.map(a => option(counts.areas, a, a))] : [];
     const shown = records.filter(r => !PaperData.isArxiv(r)
-      && (isAll(filters.type) || Sources.sourceType(r, venues) === filters.type)
+      && (isAll(filters.type) || Sources.typeKey(r, venues) === filters.type)
       && (isAll(filters.area) || Sources.sourceArea(r, venues) === filters.area));
     const labels = new Map(shown.map(r => [Sources.sourceKey(r), Sources.sourceLabel(r)]));
     const totals = tally(shown.map(r => Sources.sourceKey(r)));
@@ -251,7 +257,7 @@ function (Render, Sources, PaperData) {
   function keepValid(filters, records, venues) {
     if (!hasVenuePapers(records)) return { ...filters, type: 'all', area: 'all', source: 'all', freeOnly: false };
     /** @type {string[]} */
-    const types = ['all', Sources.ARXIV, ...venueKinds(venues)];
+    const types = ['all', Sources.ARXIV, ...venueTypes(venues)];
     const areas = ['all', ...venueAreas(venues)];
     const sources = new Set(['all', ...records.map(r => Sources.sourceKey(r))]);
     return {

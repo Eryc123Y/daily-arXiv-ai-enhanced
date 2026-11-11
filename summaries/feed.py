@@ -2,9 +2,10 @@
 
 The feed's source adapters live in LitScout (spec S1, Q1); this pipeline only
 runs its command. FEED_COMMAND is a JSON argv list; the pipeline appends
-`--since YYYY-MM-DD --venues <watch list>` and reads JSON Lines from stdout,
-one paper per line (shape `FeedLine` in shapes.py). `--since` asks for papers
-the sources listed on or after that day.
+`--since YYYY-MM-DD --venues <watch list> --kinds journal,conference` and
+reads JSON Lines from stdout, one paper per line (shape `FeedLine` in
+shapes.py). `--since` asks for papers the sources listed on or after that day;
+journals and conferences share the one cursor, so every run asks for both.
 
 Feed papers are published under the day they were fetched, in the same raw
 file as that day's arXiv papers, so a two-week-old journal paper reaches
@@ -12,6 +13,14 @@ today's page instead of an old day nobody opens. The cursor
 (`assets/feed-cursor.json`) moves in the same commit as the papers (R1):
 a run after missed days publishes them once, and the next run nothing.
 Abstracts stay in the local work folder (abstracts.py).
+
+A venue with `match: "topics"` in the watch list (a large conference or
+journal) contributes only papers whose title or abstract matches one of the
+interest keywords, with the matching the daily report and the page use
+(interests.py). The filter runs before dedupe and the burst cap, so dropped
+papers cost no summary and never reach the page; the report counts them per
+venue (`off_topic`). Watch-list fields this module does not know pass through
+untouched: LitScout reads the same file.
 """
 
 import json
@@ -30,16 +39,21 @@ from summaries.datafiles import (
     venue_settings,
     with_venue_days,
 )
+from summaries.interests import load_topics, topics_for
 from summaries.records import dedupe_by_id, dump_jsonl
 
-SOURCES = ("openalex", "crossref", "openreview")  # R6: official APIs only; nothing else is accepted
+# R6: official APIs and the publishers' own indexes (ACL Anthology, PMLR, JMLR, DataCite for LIPIcs);
+# nothing else is accepted. The names are LitScout's `source` values (contract of 2026-11-12).
+SOURCES = ("openalex", "crossref", "openreview", "acl-anthology", "pmlr", "datacite", "jmlr")
 FEED_CURSOR = "assets/feed-cursor.json"
 FIRST_LOOKBACK_DAYS = 7  # how far back the very first run asks
 HISTORY_DAYS = 60  # dedupe looks this far back on the data branch
 MAX_PER_RUN = 150  # FEED_MAX_PER_RUN default: proceedings arrive in one batch (ECCV about 2,800, Phase 0)
 FEED_TIMEOUT = 30 * 60
 KINDS = ("conference", "journal")
-VENUE_FIELDS = {"name", "kind", "group", "area", "issn", "openalex_source", "openreview_venues", "sources"}
+ASKED_KINDS = "journal,conference"  # LitScout's watch reads only journals unless --kinds says otherwise
+MATCHES = ("all", "topics")  # `match`: every paper of the venue, or only those on an interest topic
+TEXT_FIELDS = ("area", "openalex_source", "acl_anthology", "pmlr", "doi_prefix")
 LIST_FIELDS = ("issn", "openreview_venues")
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WEB = re.compile(r"^https?://\S+$")
@@ -59,6 +73,7 @@ class FeedPaper:
 
 
 def _check_venue(venue):
+    """FeedError when a field this pipeline knows has the wrong kind; fields it does not know are LitScout's."""
     if not isinstance(venue, dict):
         raise FeedError(f"watch list: {venue!r} is not an object")
     name = venue.get("name")
@@ -68,21 +83,30 @@ def _check_venue(venue):
         raise FeedError(f"watch list: {name} has kind {venue.get('kind')!r}; use {' or '.join(KINDS)}")
     if not isinstance(venue.get("group"), str):
         raise FeedError(f"watch list: {name} has no group")
-    if "area" in venue and not _text(venue["area"]):
-        raise FeedError(f"watch list: {name} area must be a string")
-    unknown = set(venue) - VENUE_FIELDS
-    if unknown:
-        raise FeedError(f"watch list: {name} has unknown fields {sorted(unknown)}")
+    for key in TEXT_FIELDS:
+        if key in venue and not _text(venue[key]):
+            raise FeedError(f"watch list: {name} {key} must be a string")
     for key in LIST_FIELDS:
         value = venue.get(key, [])
         if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
             raise FeedError(f"watch list: {name} {key} must be a list of strings")
-    if "openalex_source" in venue and not _text(venue["openalex_source"]):
-        raise FeedError(f"watch list: {name} openalex_source must be a string")
+    if "match" in venue and not (isinstance(venue["match"], str) and venue["match"] in MATCHES):
+        raise FeedError(f"watch list: {name} match must be {' or '.join(MATCHES)}")
+    for key in ("top", "jmlr"):
+        if key in venue and not isinstance(venue[key], bool):
+            raise FeedError(f"watch list: {name} {key} must be true or false")
+    if "openreview" in venue and not _venue_ids(venue["openreview"]):
+        raise FeedError(f"watch list: {name} openreview must be a venue id or a list of them")
     sources = venue.get("sources", list(SOURCES))
     outside = [s for s in sources if s not in SOURCES] if isinstance(sources, list) else [sources]
     if outside:
         raise FeedError(f"watch list: {name} names sources {outside}; only {', '.join(SOURCES)} are allowed")
+
+
+def _venue_ids(value):
+    """Whether `value` is an OpenReview venue id ("{year}" allowed) or a non-empty list of them."""
+    values = value if isinstance(value, list) else [value]
+    return bool(values) and all(_text(v) for v in values)
 
 
 def load_watchlist(path=WATCHLIST):
@@ -111,12 +135,14 @@ def _optional(value):
     return (value is None or isinstance(value, str)), _text(value)
 
 
-def _paper_id(arxiv_id, doi, openreview_id):
+def _paper_id(arxiv_id, doi, openreview_id, url):
+    """The arXiv ID, else doi:<doi>, else openreview:<forum id>, else url:<url> (PMLR, JMLR and some
+    ACL Anthology papers have neither a DOI nor an arXiv ID; their page address is stable)."""
     if arxiv_id:
         return arxiv_id
     if doi:
         return f"doi:{doi}"
-    return f"openreview:{openreview_id}" if openreview_id else None
+    return f"openreview:{openreview_id}" if openreview_id else f"url:{url}"
 
 
 def _valid_day(value):
@@ -150,9 +176,7 @@ def parse_line(text):
     if oa_url and not WEB.match(oa_url):
         return None
     doi = dedupe.normalise_doi(optional["doi"][1])
-    paper_id = _paper_id(dedupe.normalise_arxiv_id(optional["arxiv_id"][1]), doi, optional["openreview_id"][1])
-    if not paper_id:
-        return None
+    paper_id = _paper_id(dedupe.normalise_arxiv_id(optional["arxiv_id"][1]), doi, optional["openreview_id"][1], url)
     record = {
         "id": paper_id,
         "source": line["source"],
@@ -183,6 +207,41 @@ def parse_output(text):
     return papers, invalid
 
 
+# --- Topic-only venues ------------------------------------------------------------
+
+
+def interest_topics():
+    """The interest topics the filter matches against; FeedError when they cannot be read."""
+    try:
+        topics = load_topics()
+    except (OSError, IndexError) as error:
+        raise FeedError(f"the interest topics cannot be read: {error}") from error
+    if not any(t["keywords"] for t in topics):
+        raise FeedError("the interest topics hold no keywords")
+    return topics
+
+
+def on_topic(papers, venues, topics=None):
+    """(papers kept, {venue: papers dropped}): a `match: topics` venue keeps only papers on an interest topic.
+
+    A paper is on topic when its title or abstract matches a keyword of `topics` (default: the shipped
+    ones), as in the daily report and on the page; without an abstract the title decides. Papers of
+    other venues, and of venues not on the list, are all kept.
+    """
+    topic_only = {v["name"] for v in venues if v.get("match") == "topics"}
+    if not topic_only:
+        return list(papers), {}
+    topics = interest_topics() if topics is None else topics
+    kept, dropped = [], {}
+    for paper in papers:
+        venue = paper.record["venue"]
+        if venue in topic_only and not topics_for({"title": paper.record["title"], "summary": paper.abstract}, topics):
+            dropped[venue] = dropped.get(venue, 0) + 1
+        else:
+            kept.append(paper)
+    return kept, dict(sorted(dropped.items()))
+
+
 # --- The command ---------------------------------------------------------------
 
 
@@ -202,7 +261,7 @@ def feed_command(env):
 
 def run_command(argv, since, venues, cwd):
     """The command's stdout; FeedError with its one-line reason when it fails."""
-    full = [*argv, "--since", since, "--venues", str(venues)]
+    full = [*argv, "--since", since, "--venues", str(venues), "--kinds", ASKED_KINDS]
     try:
         result = subprocess.run(full, cwd=str(cwd), capture_output=True, text=True, timeout=FEED_TIMEOUT, stdin=subprocess.DEVNULL, check=False)
     except (subprocess.TimeoutExpired, OSError) as error:
@@ -288,7 +347,8 @@ def run(branch, day, repo_dir, work_dir, env):
         argv = feed_command(env)
         if argv is None:
             return "skipped"
-        load_watchlist(WATCHLIST)
+        venues = load_watchlist(WATCHLIST)
+        topics = interest_topics()
     except FeedError as error:
         return {"status": "error", "reason": str(error)}
     branch.fetch()
@@ -298,6 +358,7 @@ def run(branch, day, repo_dir, work_dir, env):
     except FeedError as error:
         return {"status": "error", "since": since, "reason": str(error)}
     papers, invalid = parse_output(output)
-    published = publish(branch, day, papers, work_dir, max_per_run(env))
+    kept, off_topic = on_topic(papers, venues, topics)
+    published = publish(branch, day, kept, work_dir, max_per_run(env))
     status = "published" if published["added"] else "nothing new"
-    return {"status": status, "since": since, "received": len(papers), "invalid": invalid, **published}
+    return {"status": status, "since": since, "received": len(papers), "invalid": invalid, "off_topic": off_topic, **published}

@@ -45,10 +45,11 @@ def site_settings(language):
 
 
 def venue_summary(path=WATCHLIST):
-    """The watch list as the page needs it: [{name, kind, area}] in list order (VenueSummary in shapes.py).
+    """The watch list as the page needs it: [{name, kind, area, top}] in list order (VenueSummary in shapes.py).
 
-    Entries without a name or a known kind are left out; a venue without an area gets area null.
-    The feed checks the full list (feed.load_watchlist); this only reads it.
+    Entries without a name or a known kind are left out; a venue without an area gets area null, and
+    `top` (a flagship venue, for the page's "Top conferences" and "Top journals") is true only when the
+    list says true. The feed checks the full list (feed.load_watchlist); this only reads it.
     """
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     venues = data.get("venues") if isinstance(data, dict) else None
@@ -58,7 +59,12 @@ def venue_summary(path=WATCHLIST):
             continue
         name, kind, area = venue.get("name"), venue.get("kind"), venue.get("area")
         if isinstance(name, str) and name.strip() and kind in VENUE_KINDS:
-            summary.append({"name": name.strip(), "kind": kind, "area": area.strip() if isinstance(area, str) and area.strip() else None})
+            summary.append({
+                "name": name.strip(),
+                "kind": kind,
+                "area": area.strip() if isinstance(area, str) and area.strip() else None,
+                "top": venue.get("top") is True,
+            })
     return summary
 
 

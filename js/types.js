@@ -35,14 +35,14 @@
  */
 
 /**
- * A paper from a journal or conference, found through OpenAlex, Crossref or
- * OpenReview. The publisher's abstract is not published (Q3), so there is no
- * `summary`, `abs` or `pdf`.
+ * A paper from a journal or conference, found through OpenAlex, Crossref,
+ * OpenReview, the ACL Anthology, PMLR, JMLR or DataCite. The publisher's
+ * abstract is not published (Q3), so there is no `summary`, `abs` or `pdf`.
  * @typedef {object} VenueRecord
- * @property {string} id               "doi:<doi>", "openreview:<forum id>", or a bare arXiv ID
+ * @property {string} id               "doi:<doi>", "openreview:<forum id>", "url:<url>", or a bare arXiv ID
  *                                     when the paper has an arXiv version (then `source` still
  *                                     decides how it looks; the arXiv link is added as a secondary link)
- * @property {'openalex' | 'crossref' | 'openreview'} source
+ * @property {'openalex' | 'crossref' | 'openreview' | 'acl-anthology' | 'pmlr' | 'datacite' | 'jmlr'} source
  * @property {string} title
  * @property {string[]} authors
  * @property {string} venue            stable watch-list name, e.g. "IEEE TCSVT" or "ICLR" (no year)
@@ -83,6 +83,8 @@
  * @property {string} name             the record's `venue` exactly, e.g. "ACM TOG"
  * @property {'conference' | 'journal'} kind
  * @property {string | null} area      e.g. "Graphics and VR"
+ * @property {boolean} top             a flagship venue; false lists it under "Other venues".
+ *                                     Files written before the flag have none (Sources.venueIndex reads that as true)
  */
 
 /**
@@ -100,6 +102,7 @@
  * @typedef {object} VenueInfo
  * @property {'conference' | 'journal'} kind
  * @property {string | null} area
+ * @property {boolean} top
  */
 
 /** @typedef {Map<string, VenueInfo>} VenueIndex */

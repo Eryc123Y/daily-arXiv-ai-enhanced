@@ -113,6 +113,16 @@ def test_a_run_after_five_missed_days_publishes_them_once_and_a_second_run_nothi
     assert git(feed.remote, "rev-parse", "data") == head
 
 
+def test_the_feed_is_asked_for_journals_and_conferences(feed, capsys):
+    """LitScout's watch reads only journals unless told otherwise; the watch list has both kinds."""
+    seed(feed, {"2026-11-06": [paper("A")]}, cursor="2026-11-08")
+
+    feed.run(capsys=capsys)
+
+    [call] = feed.calls()
+    assert call["kinds"] == "journal,conference"
+
+
 def test_the_first_run_looks_back_a_week(feed, capsys):
     seed(feed, {"2026-11-06": [paper("A")]})
     feed.new = [paper("A")]  # arXiv has not announced today yet
@@ -358,3 +368,61 @@ def test_a_feed_commit_carries_the_venue_list(feed, capsys):
     commit = git(feed.remote, "log", "--format=%H", "data", "--", f"data/{TODAY}.jsonl").splitlines()[0]
     assert "assets/venues.json" in git(feed.remote, "show", "--name-only", "--format=", commit)
     assert json.loads(branch_file(feed.remote, "assets/venues.json")) == venue_summary()
+
+
+# --- Topic-only venues ------------------------------------------------------------
+
+
+def acl_line(n, title, abstract=None):
+    """A paper of ACL, a `match: topics` venue of the shipped watch list."""
+    return feed_line(n, "2026-11-08", abstract=abstract, title=title, venue="ACL", source="acl-anthology",
+                     doi=f"10.18653/v1/2026.acl-long.{n}", url=f"https://aclanthology.org/2026.acl-long.{n}/")
+
+
+def test_a_topic_only_venue_publishes_only_papers_on_eric_s_topics(feed, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]})
+    feed.set_lines([
+        acl_line(1, "A sentiment dataset for tweets", "We annotate tweets."),
+        acl_line(2, "Can transformers learn regular languages?"),
+        acl_line(3, "Better prompts", "We study emergent communication between agents."),
+        feed_line(4, "2026-11-08", title="A journal paper on nothing in particular"),
+    ])
+
+    _, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["received"], report["added"], report["off_topic"]) == (4, 3, {"ACL": 1})
+    published = ids_on(feed.remote, TODAY)
+    assert "doi:10.18653/v1/2026.acl-long.1" not in published
+    assert {"doi:10.18653/v1/2026.acl-long.2", "doi:10.18653/v1/2026.acl-long.3", "doi:10.1109/tip.2026.4"} <= set(published)
+
+
+def test_off_topic_papers_are_dropped_before_the_cap_and_never_deferred(feed, monkeypatch, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]})
+    monkeypatch.setenv("FEED_MAX_PER_RUN", "1")
+    feed.set_lines([acl_line(n, f"Tweets {n}", "We annotate tweets.") for n in range(1, 4)] + [feed_line(9, "2026-11-08")])
+
+    _, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["added"], report["deferred"], report["off_topic"]) == (1, 0, {"ACL": 3})
+    assert json.loads(branch_file(feed.remote, CURSOR))["since"] == TODAY
+
+
+def test_an_off_topic_abstract_is_not_kept_for_the_summaries(feed, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]})
+    feed.set_lines([acl_line(1, "Tweets", "We annotate tweets."), acl_line(2, "Regular languages", "On regular languages.")])
+
+    feed.run(capsys=capsys)
+
+    saved = (feed.work / "abstracts.jsonl").read_text(encoding="utf-8")
+    assert "On regular languages." in saved and "We annotate tweets." not in saved
+
+
+def test_the_report_has_an_empty_off_topic_count_when_nothing_was_dropped(feed, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]})
+    feed.set_lines([feed_line(1, "2026-11-08")])
+
+    _, out = feed.run(capsys=capsys)
+
+    assert report_of(out)["feed"]["off_topic"] == {}

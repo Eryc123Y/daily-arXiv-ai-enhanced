@@ -8,7 +8,7 @@ summary file holds the same records with an `AI` object added.
 
 from typing import Literal, NotRequired, TypedDict
 
-FeedSource = Literal["openalex", "crossref", "openreview"]
+FeedSource = Literal["openalex", "crossref", "openreview", "acl-anthology", "pmlr", "datacite", "jmlr"]
 
 
 class AISummary(TypedDict):
@@ -43,7 +43,7 @@ class FeedRecord(TypedDict):
     """One paper from the feed, as published. Its abstract is never published (the data branch is public);
     it stays in the local work folder for the summary step, keyed by `id`."""
 
-    id: str  # the arXiv ID if the paper has one, else "doi:<doi>", else "openreview:<forum id>"
+    id: str  # the arXiv ID if the paper has one, else "doi:<doi>", else "openreview:<forum id>", else "url:<url>"
     source: FeedSource
     title: str
     authors: list[str]
@@ -87,9 +87,17 @@ class Venue(TypedDict):
     kind: Literal["conference", "journal"]
     group: str
     area: NotRequired[str]  # the page's Area selector, e.g. "Graphics and VR"
+    match: NotRequired[Literal["all", "topics"]]  # "topics": only papers matching an interest keyword (default "all")
+    top: NotRequired[bool]  # a flagship venue: "Top conferences" or "Top journals" on the page (default false)
     issn: NotRequired[list[str]]
     openalex_source: NotRequired[str]  # e.g. "S4210173141"
     openreview_venues: NotRequired[list[str]]  # e.g. ["ICLR.cc/2026/Conference"]
+    # Read by LitScout's watch command (contract of 2026-11-12); other fields LitScout adds pass through.
+    jmlr: NotRequired[bool]  # true: jmlr.org's own feed
+    acl_anthology: NotRequired[str]  # ACL Anthology venue id, e.g. "acl", "tacl"
+    pmlr: NotRequired[str]  # PMLR series as in "Proceedings of COLT 2026", e.g. "COLT"
+    doi_prefix: NotRequired[str]  # e.g. "10.4230/LIPIcs.ITP"
+    openreview: NotRequired[str | list[str]]  # OpenReview venue id(s); "{year}" is expanded, e.g. "colmweb.org/COLM/{year}/Conference"
     sources: NotRequired[list[FeedSource]]
 
 
@@ -99,3 +107,4 @@ class VenueSummary(TypedDict):
     name: str
     kind: Literal["conference", "journal"]
     area: str | None
+    top: bool  # a flagship venue; the page lists the others under "Other venues"

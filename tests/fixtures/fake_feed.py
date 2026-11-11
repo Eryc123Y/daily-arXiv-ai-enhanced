@@ -2,7 +2,8 @@
 
 Prints the lines of $FAKE_FEED_PAPERS (JSON Lines) whose `published` is on or
 after --since; lines that are not JSON objects are printed as they are, so
-tests can feed invalid lines through. $FAKE_FEED_LOG, when set, gets one JSON
+tests can feed invalid lines through. --kinds is required here, since LitScout
+reads only journals without it. $FAKE_FEED_LOG, when set, gets one JSON
 line per call with the arguments; $FAKE_FEED_FAIL makes the call fail with
 that text on stderr.
 """
@@ -18,10 +19,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--since", required=True)
     parser.add_argument("--venues", required=True)
+    parser.add_argument("--kinds", required=True)
     args = parser.parse_args()
     if os.environ.get("FAKE_FEED_LOG"):
         with open(os.environ["FAKE_FEED_LOG"], "a", encoding="utf-8") as log:
-            log.write(json.dumps({"since": args.since, "venues": args.venues}) + "\n")
+            log.write(json.dumps({"since": args.since, "venues": args.venues, "kinds": args.kinds}) + "\n")
     if os.environ.get("FAKE_FEED_FAIL"):
         print(os.environ["FAKE_FEED_FAIL"], file=sys.stderr)
         return 2

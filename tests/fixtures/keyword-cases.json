@@ -123,5 +123,90 @@
   "keyword": "stereo",
   "text": "Stereo.",
   "matches": true
+ },
+ {
+  "keyword": "Lean",
+  "text": "Autoformalization in Lean 4",
+  "matches": true
+ },
+ {
+  "keyword": "Lean",
+  "text": "A lean architecture for parsing",
+  "matches": false
+ },
+ {
+  "keyword": "Lean",
+  "text": "Lean-STaR: interleaved thinking and proving",
+  "matches": true
+ },
+ {
+  "keyword": "Lean",
+  "text": "LeanDojo: theorem proving with retrieval",
+  "matches": false
+ },
+ {
+  "keyword": "Lean",
+  "text": "keeping models LEAN",
+  "matches": false
+ },
+ {
+  "keyword": "BabyLM",
+  "text": "Our BabyLM submission",
+  "matches": true
+ },
+ {
+  "keyword": "BabyLM",
+  "text": "a babylm-sized corpus",
+  "matches": false
+ },
+ {
+  "keyword": "lean",
+  "text": "Proofs in Lean",
+  "matches": true
+ },
+ {
+  "keyword": "RLVR",
+  "text": "rlvr with binary rewards",
+  "matches": true
+ },
+ {
+  "keyword": "Markov decision process",
+  "text": "a markov decision process",
+  "matches": true
+ },
+ {
+  "keyword": "Chomsky hierarchy",
+  "text": "Neural Networks and the CHOMSKY HIERARCHY",
+  "matches": true
+ },
+ {
+  "keyword": "Bayes-optimal",
+  "text": "bayes optimal predictors",
+  "matches": true
+ },
+ {
+  "keyword": "PAC learning",
+  "text": "Pac learning of halfspaces",
+  "matches": true
+ },
+ {
+  "keyword": "bandit",
+  "text": "contextual bandits",
+  "matches": true
+ },
+ {
+  "keyword": "automata",
+  "text": "weighted automata learning",
+  "matches": true
+ },
+ {
+  "keyword": "type theory",
+  "text": "homotopy type theory",
+  "matches": true
+ },
+ {
+  "keyword": "reward model",
+  "text": "rewarded models",
+  "matches": false
  }
 ]
