@@ -130,7 +130,7 @@ def journal_line(days):
 def render_week(today, days, topics, site, log=(), misses=None):
     start, end = days[0]["day"], days[-1]["day"]
     total = sum(d["total"] for d in days)
-    lines = [f"# arXiv 本周回顾 · {start} 至 {end}", ""]
+    lines = [f"# LitScout 本周回顾 · {start} 至 {end}", ""]
     lines += [f"本周 {len(days)} 天，共 {total} 篇 · [打开本周]({digest.day_link(site, end, start=start)})", ""]
     radar = [(d["day"], item, d["titles"]) for d in days for item in d["radar"]]
     lines.append(f"**本周雷达**（{len(radar)} 条）" if radar else "**本周雷达**：无")
@@ -168,7 +168,7 @@ def cmd_digest_week(args):
     text, total, radar = render_week(today, days, digest.load_topics(), site, read_log(args), misses)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(text, encoding="utf-8")
-    push = f"arXiv 本周：{total} 篇，雷达 {radar} 条。{digest.day_link(site, days[-1]['day'], start=days[0]['day'])}"
+    push = f"LitScout 本周：{total} 篇，雷达 {radar} 条。{digest.day_link(site, days[-1]['day'], start=days[0]['day'])}"
     digest.emit(status="written", path=str(report_path), push=push, report=text)
     return 0
 

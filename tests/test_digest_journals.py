@@ -3,9 +3,18 @@
 import json
 
 import pytest
-from conftest import git, seed_data_branch
-from test_digest import BRIEF, DAY, SITE, TOPICS, data_repo, make_vault, paper, run_digest  # noqa: F401 (data_repo: autouse fixture)
+from test_digest import (  # noqa: F401 (data_repo: autouse fixture)
+    BRIEF,
+    DAY,
+    SITE,
+    TOPICS,
+    data_repo,
+    make_vault,
+    paper,
+    run_digest,
+)
 
+from conftest import git, seed_data_branch
 from summaries import abstracts, digest
 from summaries.cli import main
 from summaries.records import dump_jsonl
@@ -169,6 +178,41 @@ def test_the_journal_section_lists_candidates_by_venue_and_journal_picks():
 def test_a_journal_paper_shown_above_is_not_repeated_in_the_journal_section():
     text, _ = mixed_report()
     assert text.count("[Depth for displays]") == 1
+
+
+def test_the_journal_section_comes_after_every_other_list():
+    lines = mixed_report()[0].splitlines()
+    head = next(n for n, line in enumerate(lines) if line.startswith("**来自期刊**"))
+    assert lines.index("**其他**") < head
+    assert all(not line.startswith("- ") for line in lines[head + 1 :])
+
+
+def test_the_journal_line_counts_journal_papers_already_in_the_report():
+    # TCSVT under a topic, TPAMI on the radar (both keyword matches), TOG under other (not a match)
+    text, _ = mixed_report()
+    assert "**来自期刊**：匹配 2 篇（IEEE TCSVT 1 · IEEE TPAMI 1），上面已列 3 篇期刊论文" in text
+    assert "**来自期刊**：今日无精选" not in text
+
+
+def test_the_journal_line_says_which_matches_are_already_above():
+    found = mixed_candidates()
+    picks = {"topics": {"2D-to-3D and stereo": [(TCSVT_ID, "单目视频转立体")]}, "radar": [], "other": [], "journal": [], "note": ""}
+    text = digest.render_report(DAY, DAY, found, picks, TOPICS, SITE)
+    assert "**来自期刊**：匹配 2 篇（IEEE TCSVT 1 · IEEE TPAMI 1），其中 1 篇已列在上面" in text
+
+
+def test_extra_journal_picks_keep_the_list_and_say_how_many_are_above():
+    found = mixed_candidates()
+    picks = {"topics": {"2D-to-3D and stereo": [(TCSVT_ID, "单目视频转立体")]}, "radar": [], "other": [], "journal": [(TPAMI_ARXIV_ID, "复用数据")], "note": ""}
+    lines = digest.render_report(DAY, DAY, found, picks, TOPICS, SITE).splitlines()
+    head = lines.index("**来自期刊**（匹配 2 篇：IEEE TCSVT 1 · IEEE TPAMI 1；其中 1 篇已列在上面）")
+    assert lines[head + 1].startswith("- [Policy updates](") and lines[head + 1].endswith("（IEEE TPAMI）— 复用数据")
+
+
+def test_no_picks_only_when_no_journal_paper_is_in_the_report():
+    found = mixed_candidates()
+    picks = {"topics": {"2D-to-3D and stereo": [("2611.1", "立体视频方法")]}, "radar": [], "other": [], "journal": [], "note": ""}
+    text = digest.render_report(DAY, DAY, found, picks, TOPICS, SITE)
     assert "**来自期刊**：今日无精选（匹配 2 篇：IEEE TCSVT 1 · IEEE TPAMI 1）" in text
 
 

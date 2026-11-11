@@ -60,6 +60,7 @@ DEFAULT_COMMAND = ["claude", "-p", "--model", "{model}", "--tools", "", "--stric
 # Tried when the default client fails, for example when the claude sign-in has expired.
 FALLBACK_COMMAND = ["codex", "exec", "-s", "read-only", "--skip-git-repo-check", "-c", 'model_reasoning_effort="medium"', "-"]
 USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
+REPORT_TITLE = "LitScout 日报"  # the site's name (PR 38); "arXiv" stays only where it names the source
 JOURNAL_SECTION = "来自期刊"
 NO_STEREO = "今日无 2D→3D / 立体视觉相关论文"
 UNREAD_ACTION = "仅摘要；需要时读全文"
@@ -508,16 +509,34 @@ def _venue_counts(papers):
     return " · ".join(f"{venue} {n}" for venue, n in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
 
 
+def _already_above(found, shown):
+    """'其中 N 篇已列在上面' when the journal papers already in the report are all keyword matches, else '上面已列 N 篇期刊论文'."""
+    above = {pid for pid in shown if venue_of(found.records[pid])}
+    if not above:
+        return ""
+    if above <= {p["id"] for p in found.journal}:
+        return f"其中 {len(above)} 篇已列在上面"
+    return f"上面已列 {len(above)} 篇期刊论文"
+
+
 def _journal_section(site, day, found, picks, shown):
-    """The short section for journal papers, on a day with journal candidates or journal picks only."""
+    """The short section for journal papers, after every other list, on a day with journal candidates or picks only.
+
+    It counts the journal papers already in the report, and says 今日无精选 only when there are none anywhere.
+    """
     chosen = [(pid, gist) for pid, gist in picks.get("journal", []) if pid not in shown]
     if not (found.journal or chosen):
         return []
-    shown.update(pid for pid, _ in chosen)
-    matched = f"匹配 {len(found.journal)} 篇：{_venue_counts(found.journal)}" if found.journal else ""
+    above = _already_above(found, shown)
+    counts = _venue_counts(found.journal)
+    title = f"**{JOURNAL_SECTION}**"
     if not chosen:
-        return ["", f"**{JOURNAL_SECTION}**：今日无精选（{matched}）"]
-    lines = ["", f"**{JOURNAL_SECTION}**（{matched}）" if matched else f"**{JOURNAL_SECTION}**"]
+        if above:
+            return ["", f"{title}：匹配 {len(found.journal)} 篇（{counts}），{above}"]
+        return ["", f"{title}：今日无精选（匹配 {len(found.journal)} 篇：{counts}）"]
+    matched = f"匹配 {len(found.journal)} 篇：{counts}" if found.journal else ""
+    inner = "；".join(filter(None, [matched, above]))
+    lines = ["", f"{title}（{inner}）" if inner else title]
     return lines + [f"- {_paper_link(site, day, found, pid)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in chosen]
 
 
@@ -532,7 +551,7 @@ def _code_link(found, paper_id):
 def render_report(day, today, found, picks, topics, site, hot=()):
     """`hot`: (day, id, title, upvotes) of the previous batch's most upvoted papers on Hugging Face."""
     shown = {item["id"] for item in picks["radar"]}
-    lines = [f"# arXiv 日报 · {today}（周{weekday(today)}）", ""]
+    lines = [f"# {REPORT_TITLE} · {today}（周{weekday(today)}）", ""]
     batch = "" if day == today else f"（arXiv {day} 批次）"
     journals = f" · 期刊 {sum(found.venues.values())} 篇" if found.venues else ""
     lines += [f"**{found.arxiv_total} 篇新论文{journals}**{batch}（摘要 {found.done}/{found.total}）· [打开当天]({day_link(site, day)})", ""]
@@ -562,11 +581,12 @@ def render_report(day, today, found, picks, topics, site, hot=()):
             continue
         lines.append(f"**{name}**（{more}）")
         lines += [f"- {_paper_link(site, day, found, pid, name)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in chosen]
-    lines += _journal_section(site, day, found, picks, shown)
     other = [(pid, gist) for pid, gist in picks["other"] if pid not in shown]
+    shown.update(pid for pid, _ in other)
     if other:
         lines += ["", "**其他**"]
         lines += [f"- {_paper_link(site, day, found, pid)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in other]
+    lines += _journal_section(site, day, found, picks, shown)
     if picks["note"]:
         lines += ["", f"> {picks['note']}"]
     return "\n".join(lines) + "\n"
@@ -658,7 +678,7 @@ def newest_day(branch, today, days):
 
 def no_batch_note(today, day, site):
     latest = f"最近一批是 {day}，[在网站上看]({day_link(site, day)})。" if day else ""
-    return f"# arXiv 日报 · {today}（周{weekday(today)}）\n\narXiv 今天没有新批次（节假日或批次推迟）。{latest}\n"
+    return f"# {REPORT_TITLE} · {today}（周{weekday(today)}）\n\narXiv 今天没有新批次（节假日或批次推迟）。{latest}\n"
 
 
 def emit(**values):
