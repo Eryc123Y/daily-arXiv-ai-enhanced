@@ -49,6 +49,21 @@
     return earliest ? days.filter(d => d >= earliest) : days;
   }
 
+  /** Venue papers per day (a Map, or null) without the days before `earliest`. */
+  function limitCounts(counts, earliest) {
+    return new Map([...(counts || [])].filter(([day]) => !earliest || day >= earliest));
+  }
+
+  /** The asked day when the page offers it, else the latest day (days newest first); null for none. */
+  function chooseDay(asked, days) {
+    return days.includes(asked) ? asked : days[0] || null;
+  }
+
+  /** Whether the week of an asked day has any day the page offers. */
+  function weekOnPage(asked, days) {
+    return Streams.isDay(asked) && Streams.daysInWeek(Streams.weekOf(asked), days).length > 0;
+  }
+
   /** Oldest and newest of the days, in any order; nulls for none. */
   function bounds(days) {
     if (!days.length) return { min: null, max: null };
@@ -214,7 +229,7 @@
 
   return {
     viewFor, neighbours,
-    addDays, addMonths, monthOf, stepMonth, monthGrid, limitDays, bounds, weekBounds, cellState,
+    addDays, addMonths, monthOf, stepMonth, monthGrid, limitDays, limitCounts, chooseDay, weekOnPage, bounds, weekBounds, cellState,
     monthsWithDays, monthsWithWeeks, monthChoices, yearSpan, rangePick, move, focusDay,
     monthTitle, dayLabel, weekdayNames, triggerText,
   };

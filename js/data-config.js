@@ -9,6 +9,13 @@
 (function (root) {
   const FALLBACK_REPO = { owner: 'Eryc123Y', repo: 'daily-arXiv-ai-enhanced' };
 
+  /**
+   * The oldest day the page offers (calendar, ‹ ›, ranges, links). Days
+   * before it were crawled by the upstream project before this fork began;
+   * they stay on the data branch but are hidden here. null offers every day.
+   */
+  const EARLIEST_DAY = '2025-12-29';
+
   function repoFromLocation(location, fallback) {
     const host = ((location && location.hostname) || '').toLowerCase();
     if (!host.endsWith('.github.io')) return fallback;
@@ -18,7 +25,7 @@
   }
 
   if (typeof module === 'object' && module.exports) {
-    module.exports = { repoFromLocation };
+    module.exports = { repoFromLocation, EARLIEST_DAY };
     return;
   }
 
@@ -37,12 +44,8 @@
      */
     mainCategories: ['cs.CV', 'cs.AI', 'cs.LG', 'cs.CL', 'stat.ML', 'cs.GR'],
 
-    /**
-     * The oldest day the page offers, or null for every day on the data
-     * branch. Days before 2025-12-29 were crawled by the upstream project
-     * before this fork started; set '2025-12-29' to hide them.
-     */
-    earliestDay: null,
+    /** The oldest day the page offers; see EARLIEST_DAY above. */
+    earliestDay: EARLIEST_DAY,
 
     /** Main "Open on ..." button in the reading pane: 'alphaxiv' or 'arxiv' */
     primaryLink: 'alphaxiv',

@@ -399,7 +399,7 @@ function readHash() {
   const params = new URLSearchParams(location.hash.slice(1));
   const day = params.get('day');
   const from = params.get('from');
-  if (day && state.days.includes(day)) state.day = day;
+  state.day = Calendar.chooseDay(day, state.days);
   if (from && state.days.includes(from)) {
     state.from = from;
     state.range = true;
@@ -759,7 +759,7 @@ async function init() {
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
   state.venues = Sources.venueIndex(listing.venues);
   state.indexed = Boolean(listing.venueDays);
-  if (state.indexed) state.venueDays = new Map(listing.venueDays);
+  if (state.indexed) state.venueDays = Calendar.limitCounts(listing.venueDays, DATA_CONFIG.earliestDay);
   if (!days.length) {
     $('dayTitle').textContent = 'No papers yet';
     $('paperList').innerHTML = `<li class="empty">Nothing has been published to the data branch of ${esc(DATA_CONFIG.repoOwner)}/${esc(DATA_CONFIG.repoName)} yet, or it could not be reached. On a new fork, run the arXiv-daily-ai-enhanced workflow from the Actions tab; the first day appears a few minutes after it finishes.</li>`;
@@ -782,7 +782,7 @@ async function init() {
   });
   const params = new URLSearchParams(location.hash.slice(1));
   const keepTopic = Boolean(state.topic);
-  const linkedWeek = params.get('stream') === Streams.VENUES && Streams.isDay(params.get('week'));
+  const linkedWeek = params.get('stream') === Streams.VENUES && Calendar.weekOnPage(params.get('week'), state.days);
   if (params.get('stream') === Streams.VENUES && !linkedWeek) {
     await discoverWeeks();
     Object.assign(state, Streams.readStream(params, state.weeks));

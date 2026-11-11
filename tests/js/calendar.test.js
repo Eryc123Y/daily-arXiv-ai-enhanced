@@ -201,3 +201,31 @@ test('the ‹ › buttons step to the next older or newer choice', () => {
   assert.deepEqual(Calendar.neighbours(DAYS, '2025-03-18'), { older: null, newer: '2026-10-30' });
   assert.deepEqual(Calendar.neighbours(DAYS, '2024-01-01'), { older: null, newer: null });
 });
+
+// --- The days the page offers ------------------------------------------------------------
+
+test('the page hides the days inherited from upstream: nothing before the fork began on 2025-12-29', () => {
+  const { EARLIEST_DAY } = require('../../js/data-config.js');
+  assert.equal(EARLIEST_DAY, '2025-12-29');
+  const listed = ['2026-01-02', '2025-12-29', '2025-12-28', '2025-03-18'];
+  const days = Calendar.limitDays(listed, EARLIEST_DAY);
+  assert.deepEqual(days, ['2026-01-02', '2025-12-29']);
+  // The calendar, the ‹ › buttons and Several days all work from this list.
+  assert.deepEqual(Calendar.bounds(days), { min: '2025-12-29', max: '2026-01-02' });
+  assert.deepEqual(Calendar.neighbours(days, '2025-12-29'), { older: null, newer: '2026-01-02' });
+  // Venue counts before the cutoff do not make weeks.
+  const counts = Calendar.limitCounts(new Map([['2025-12-28', 4], ['2025-12-29', 2]]), EARLIEST_DAY);
+  assert.deepEqual([...counts], [['2025-12-29', 2]]);
+  assert.deepEqual([...Calendar.limitCounts(null, EARLIEST_DAY)], []);
+});
+
+test('a hand-typed day or week the page does not offer falls back to the latest', () => {
+  const days = ['2026-01-02', '2025-12-29'];
+  assert.equal(Calendar.chooseDay('2025-03-18', days), '2026-01-02');
+  assert.equal(Calendar.chooseDay('2025-12-29', days), '2025-12-29');
+  assert.equal(Calendar.chooseDay(null, days), '2026-01-02');
+  assert.equal(Calendar.chooseDay('2025-12-29', []), null);
+  assert.equal(Calendar.weekOnPage('2025-03-18', days), false);
+  assert.equal(Calendar.weekOnPage('2025-12-31', days), true);
+  assert.equal(Calendar.weekOnPage('not a day', days), false);
+});
