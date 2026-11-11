@@ -12,7 +12,7 @@ FIELD_GUIDE = {
 def instructions(language):
     fields = "\n".join(f"- {name}: {guide}" for name, guide in FIELD_GUIDE.items())
     return (
-        "You are a professional paper analyst. Summarise an arXiv paper from its title "
+        "You are a professional paper analyst. Summarise a research paper from its title "
         f"and abstract in {language}, filling five fields:\n{fields}\n\n"
         "Be concise, specific and precise, with correct terminology. Use only what the "
         "abstract states; do not invent numbers or claims. Keep names of models, "

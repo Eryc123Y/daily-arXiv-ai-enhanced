@@ -15,7 +15,7 @@ from argparse import Namespace
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from summaries import datafiles, localtask
+from summaries import abstracts, datafiles, localtask
 
 CHUNK_TIMEOUT = 900
 run_command = subprocess.run
@@ -86,8 +86,9 @@ def cmd_run_local(args):
     try:
         branch = datafiles.make_branch(args)
         branch.fetch()
+        local = abstracts.load(args.work_dir)
         for day in datafiles.recent_days(branch, args.days):
-            stats = datafiles.counts(datafiles.read_records(branch, datafiles.raw_path(day)), datafiles.read_records(branch, datafiles.ai_path(day, args.language)))
+            stats = datafiles.counts(datafiles.read_records(branch, datafiles.raw_path(day)), datafiles.read_records(branch, datafiles.ai_path(day, args.language)), local)
             if stats["pending"] == 0:
                 continue
             if budget is not None and budget <= 0:
@@ -99,7 +100,7 @@ def cmd_run_local(args):
             if budget is not None:
                 budget -= ran
             reason = f"{ran} chunks, {len(failures)} failed"
-            entry = datafiles.record_run(branch, day, args.language, f"local-{args.client}", reason)
+            entry = datafiles.record_run(branch, day, args.language, f"local-{args.client}", reason, abstracts.load(args.work_dir))
             report["dates"].append({k: entry[k] for k in ("date", "total", "done", "pending")})
             if budget is not None and budget <= 0 and entry["pending"] > 0:
                 report["stopped"] = "chunk budget reached"

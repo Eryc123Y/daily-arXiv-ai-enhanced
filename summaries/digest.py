@@ -25,10 +25,10 @@ from urllib.parse import quote
 
 import requests
 
-from summaries import datafiles, github
+from summaries import abstracts, datafiles, github
 from summaries.databranch import PublishError
 from summaries.interests import load_topics, topics_for
-from summaries.records import dedupe_by_id, has_summary
+from summaries.records import dedupe_by_id, has_summary, is_arxiv
 from summaries.signals import read_signals
 
 WEEKDAYS = "一二三四五六日"
@@ -38,7 +38,8 @@ MAX_PER_TOPIC, MAX_RADAR, MAX_OTHER, MAX_DEEP = 3, 3, 2, 2
 SNIPPET_CHARS, TITLE_CHARS = 160, 90
 HOT_UPVOTES, HOT_PAPERS = 10, 2  # the previous batch's Hugging Face favourites named in the report
 SUMMARISED_ENOUGH = 0.95  # --wait-summaries: a few papers left pending by failed chunks do not hold the report
-ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b")
+# A paper id in the radar table or the brief: an arXiv ID, or a feed paper's doi:/openreview: id.
+ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b|\b(?:doi|openreview):[^\s|]+")
 RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
 SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.I)
 INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.I)
@@ -145,7 +146,9 @@ def _code_tag(paper):
 
 
 def _block(paper):
-    return f"=== {paper['id']}{_code_tag(paper)}\ntitle: {_one_line(paper.get('title'))}\nabstract: {_one_line(paper.get('summary'))}\n"
+    # A feed paper's abstract is not published; its summary's TL;DR stands in for it.
+    abstract = paper.get("summary") or (paper.get("AI") or {}).get("tldr")
+    return f"=== {paper['id']}{_code_tag(paper)}\ntitle: {_one_line(paper.get('title'))}\nabstract: {_one_line(abstract)}\n"
 
 
 def writer_prompt(day, found, topics, feedback, brief):
@@ -368,7 +371,9 @@ def deepen(picks, found, brief, argv, cwd, work, problems):
     Without a PDF or an answer the abstract grades stay, marked 仅摘要.
     """
     papers = []
-    for item in [i for i in picks["radar"] if i["check"]][:MAX_DEEP]:
+    # Full text is read from arXiv only; a feed paper keeps its abstract grade.
+    checked = [i for i in picks["radar"] if i["check"] and is_arxiv(found.records.get(i["id"], {}))]
+    for item in checked[:MAX_DEEP]:
         text = fetch_fulltext(item["id"], work)
         if text:
             papers.append((found.records[item["id"]], text))
@@ -545,7 +550,9 @@ def newest_day(branch, today, days):
     start = (date.fromisoformat(today) - timedelta(days=days)).isoformat()
     found = (m.group(1) for p in branch.list_files("data/") if (m := datafiles.RAW_FILE.match(p)))
     candidates = sorted((d for d in found if start <= d <= today), reverse=True)
-    return candidates[0] if candidates else None
+    # The report follows arXiv's batches: a day holding only feed papers (arXiv late, or a weekend) is not one,
+    # or it would be marked reported before its arXiv papers land.
+    return next((d for d in candidates if any(is_arxiv(r) for r in datafiles.read_records(branch, datafiles.raw_path(d)))), None)
 
 
 def no_batch_note(today, day, site):
@@ -607,7 +614,10 @@ def cmd_digest(args):
     brief, feedback = _read(vault / "project-brief.md"), _read(vault / "feedback.md")
     topics = load_topics()
     found = build_candidates(raw, ai_records, topics, radar_patterns(brief), known_ids(vault, today))
-    if args.wait_summaries and found.done < SUMMARISED_ENOUGH * found.total and not args.final:
+    local = abstracts.load(args.work_dir)
+    # Feed papers without a local abstract never get a summary, so they do not hold the report.
+    can_summarise = found.total - datafiles.counts(raw, ai_records, local).get("no_abstract", 0)
+    if args.wait_summaries and found.done < SUMMARISED_ENOUGH * can_summarise and not args.final:
         emit(status="summaries-pending", date=day, done=found.done, total=found.total)
         return 0
     work = Path(args.cache) / day
@@ -625,7 +635,7 @@ def cmd_digest(args):
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)
     try:
-        datafiles.record_run(branch, day, args.language, "report")
+        datafiles.record_run(branch, day, args.language, "report", abstracts=local)
     except (PublishError, subprocess.SubprocessError) as error:
         problems.append(f"run log not updated: {error}")
     emit(

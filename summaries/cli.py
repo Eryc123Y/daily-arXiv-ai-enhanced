@@ -17,7 +17,7 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from summaries import digest, github, local_runner, localcrawl, missed, setup, signals, weekly
+from summaries import abstracts, digest, feed, github, local_runner, localcrawl, missed, setup, signals, weekly
 from summaries.datafiles import (
     RAW_FILE,
     RUN_LOG,
@@ -35,7 +35,7 @@ from summaries.datafiles import (
 from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
 from summaries.providers import resolve_provider
-from summaries.records import dedupe_by_id, dump_jsonl, parse_jsonl, pending_papers
+from summaries.records import dedupe_by_id, dump_jsonl, is_arxiv, parse_jsonl, pending_papers, with_abstracts
 
 INGEST_HISTORY_DAYS = 7
 HANDOVER_BATCH = 50
@@ -100,8 +100,12 @@ def cmd_mode(args):
     return 0
 
 
-def api_summaries(branch, days, language, batch_size, max_workers, config):
-    """Summarise the days' pending papers through the API; returns (requested, summarised, failures)."""
+def api_summaries(branch, days, language, batch_size, max_workers, config, local=None):
+    """Summarise the days' pending papers through the API; returns (requested, summarised, failures).
+
+    `local` is {id: abstract} of feed papers from this machine's work folder (empty in Actions).
+    """
+    local = local or {}
     from summaries import providers
     from summaries.llm import summarize_all
 
@@ -110,7 +114,7 @@ def api_summaries(branch, days, language, batch_size, max_workers, config):
     failures = []
     for day in days:
         raw = read_records(branch, raw_path(day))
-        todo = pending_papers(raw, read_records(branch, ai_path(day, language)))
+        todo = with_abstracts(pending_papers(raw, read_records(branch, ai_path(day, language)), local), local)
         if not todo:
             continue
         call = call or providers.make_summarizer(config, os.environ)
@@ -118,7 +122,7 @@ def api_summaries(branch, days, language, batch_size, max_workers, config):
             batch = todo[start : start + batch_size]
             outcomes = summarize_all(call, batch, language, max_workers=max_workers)
             new = {o.paper_id: o.ai for o in outcomes if o.ai}
-            publish_summaries(branch, day, language, new, "api")
+            publish_summaries(branch, day, language, new, "api", local)
             requested += len(batch)
             summarised += len(new)
             failures += [(day, o) for o in outcomes if o.ai is None]
@@ -134,7 +138,8 @@ def cmd_api(args):
     branch = make_branch(args)
     branch.fetch()
     days = [args.date] if args.date else recent_days(branch, args.days)
-    requested, summarised, failures = api_summaries(branch, days, args.language, args.batch_size, args.max_workers, config)
+    local = abstracts.load(args.work_dir)
+    requested, summarised, failures = api_summaries(branch, days, args.language, args.batch_size, args.max_workers, config, local)
     for day, failure in failures[:20]:
         print(f"::warning::{failure.paper_id} left pending: {failure.error}")
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
@@ -151,7 +156,7 @@ def cmd_api(args):
 
 def cmd_record(args):
     branch = make_branch(args)
-    emit(**record_run(branch, args.date, args.language, args.path, args.reason))
+    emit(**record_run(branch, args.date, args.language, args.path, args.reason, abstracts.load(args.work_dir)))
     return 0
 
 
@@ -171,18 +176,31 @@ def cmd_handover(args):
         if problem is None:
             branch = make_branch(args)
             branch.fetch()
-            api_summaries(branch, [args.date], args.language, HANDOVER_BATCH, HANDOVER_WORKERS, config)
+            api_summaries(branch, [args.date], args.language, HANDOVER_BATCH, HANDOVER_WORKERS, config, abstracts.load(args.work_dir))
             path = "api-fallback"
         else:
             path = "paused-no-key"
     reason = "; ".join(filter(None, [args.reason, problem])) or None
-    entry = record_run(make_branch(args), args.date, args.language, path, reason)
+    entry = record_run(make_branch(args), args.date, args.language, path, reason, abstracts.load(args.work_dir))
     emit(**entry, problems=merged["problems"])
     return 0
 
 
 def published_days(branch):
     return sorted(m.group(1) for path in branch.list_files("data/") if (m := RAW_FILE.match(path)))
+
+
+def arxiv_records(branch, day):
+    """The day's arXiv papers; a day holding only feed papers has none."""
+    return [r for r in read_records(branch, raw_path(day)) if is_arxiv(r)]
+
+
+def last_arxiv_day(branch, before):
+    """The newest day before `before` with arXiv papers, reading files newest first (usually one)."""
+    for day in reversed([d for d in published_days(branch) if d < before]):
+        if arxiv_records(branch, day):
+            return day
+    return None
 
 
 def weekdays_between(start, end):
@@ -220,37 +238,43 @@ def backfill(args, branch, slug, missing):
     return {"backfilled": backfilled, "gap": gap}
 
 
+def ensure_arxiv(args, branch, day, today):
+    """(exit code, report) of the arXiv part of ensure-day. Feed papers on a day do not count as its arXiv crawl."""
+    slug = github.repo_slug(args.repo)
+    weekday = date.fromisoformat(day).weekday() < 5
+    earlier = last_arxiv_day(branch, day)
+    missing = weekdays_between(earlier, day) if earlier else []
+    if weekday and day != today and not arxiv_records(branch, day):
+        missing.append(day)
+    report = backfill(args, branch, slug, missing) if missing else {}
+    if not weekday:
+        return 0, {"date": day, "status": "weekend", **report}
+    branch.fetch()
+    if arxiv_records(branch, day) or day != today:
+        total = len(dedupe_by_id(read_records(branch, raw_path(day))))
+        return 0, {"date": day, "status": "present" if total else "missing", "total": total, **report}
+    try:
+        crawled = localcrawl.crawl(args.repo, slug)
+    except localcrawl.CrawlError as error:
+        return 1, {"date": day, "status": "error", "reason": str(error), **report}
+    result = publish_crawl(branch, day, crawled, INGEST_HISTORY_DAYS, args.language)
+    branch.fetch()
+    total = len(dedupe_by_id(read_records(branch, raw_path(day))))
+    return 0, {"date": day, "status": "present" if total else "missing", "added": result["added"], "total": total, **report}
+
+
 def cmd_ensure_day(args):
-    """Make sure a weekday's papers are published: crawl today's on this machine, backfill missed days."""
+    """Make sure a weekday's papers are published: crawl today's on this machine, backfill missed days,
+    then publish the feed's papers under today (any day of the week; skipped without FEED_COMMAND)."""
     today = utc_today()
     day = args.date or today
     branch = make_branch(args)
     branch.fetch()
-    slug = github.repo_slug(args.repo)
-    weekday = date.fromisoformat(day).weekday() < 5
-    earlier = [d for d in published_days(branch) if d < day]
-    missing = weekdays_between(earlier[-1], day) if earlier else []
-    if weekday and day != today and not read_records(branch, raw_path(day)):
-        missing.append(day)
-    report = backfill(args, branch, slug, missing) if missing else {}
-    if not weekday:
-        emit(date=day, status="weekend", **report)
-        return 0
-    branch.fetch()
-    raw = read_records(branch, raw_path(day))
-    if raw or day != today:
-        emit(date=day, status="present" if raw else "missing", total=len(dedupe_by_id(raw)), **report)
-        return 0
-    try:
-        crawled = localcrawl.crawl(args.repo, slug)
-    except localcrawl.CrawlError as error:
-        emit(date=day, status="error", reason=str(error), **report)
-        return 1
-    result = publish_crawl(branch, day, crawled, INGEST_HISTORY_DAYS, args.language)
-    branch.fetch()
-    total = len(dedupe_by_id(read_records(branch, raw_path(day))))
-    emit(date=day, status="present" if total else "missing", added=result["added"], total=total, **report)
-    return 0
+    code, report = ensure_arxiv(args, branch, day, today)
+    if day == today:
+        report["feed"] = feed.run(branch, day, args.repo, args.work_dir, os.environ)
+    emit(**report)
+    return code
 
 
 # --- Claude Code local task ---------------------------------------------------
@@ -260,8 +284,9 @@ def cmd_status(args):
     branch = make_branch(args)
     branch.fetch()
     report = []
+    local = abstracts.load(args.work_dir)
     for day in recent_days(branch, args.days):
-        stats = counts(read_records(branch, raw_path(day)), read_records(branch, ai_path(day, args.language)))
+        stats = counts(read_records(branch, raw_path(day)), read_records(branch, ai_path(day, args.language)), local)
         report.append({"date": day, **stats})
     print(json.dumps({"dates": report}, ensure_ascii=False, indent=2))
     return 0
