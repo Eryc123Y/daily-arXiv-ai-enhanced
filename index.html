@@ -12,12 +12,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;1,400&display=swap">
-  <script src="js/theme.js?v=29"></script>
-  <link rel="stylesheet" href="css/site.css?v=29">
-  <script src="js/data-config.js?v=29"></script>
-  <script src="js/paper-data.js?v=29"></script>
-  <script src="js/interest-presets.js?v=29"></script>
-  <script src="js/data-source.js?v=29"></script>
+  <script src="js/theme.js?v=30"></script>
+  <link rel="stylesheet" href="css/site.css?v=30">
+  <script src="js/data-config.js?v=30"></script>
+  <script src="js/paper-data.js?v=30"></script>
+  <script src="js/interest-presets.js?v=30"></script>
+  <script src="js/data-source.js?v=30"></script>
 </head>
 <body>
   <a class="skip-link" href="#paperList">Skip to the paper list</a>
@@ -28,15 +28,11 @@
       <button type="button" class="icon-button" id="prevDay" aria-label="Previous day">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
       </button>
-      <span class="range-start" id="rangeStart" hidden>
-        <label class="visually-hidden" for="daySelectStart">First day</label>
-        <select id="daySelectStart"></select>
-        <span>to</span>
-      </span>
-      <label class="visually-hidden" for="daySelect">Day</label>
-      <select id="daySelect"></select>
-      <label class="visually-hidden" for="weekSelect">Week</label>
-      <select id="weekSelect" hidden></select>
+      <button type="button" class="date-trigger" id="dateTrigger" popovertarget="datePicker" aria-haspopup="dialog">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2"></rect><path d="M3.5 10h17M8 3v4M16 3v4"></path></svg>
+        <span id="dateTriggerText">Loading</span>
+      </button>
+      <div class="date-picker" id="datePicker" popover role="dialog" aria-label="Choose a day"></div>
       <button type="button" class="icon-button" id="nextDay" aria-label="Next day">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
       </button>
@@ -165,12 +161,14 @@
     </form>
   </dialog>
 
-  <script src="js/sources.js?v=29"></script>
-  <script src="js/streams.js?v=29"></script>
-  <script src="js/render.js?v=29"></script>
-  <script src="js/filters.js?v=29"></script>
-  <script src="js/status.js?v=29"></script>
-  <script src="js/json-mode.js?v=29"></script>
-  <script src="js/app.js?v=29"></script>
+  <script src="js/sources.js?v=30"></script>
+  <script src="js/streams.js?v=30"></script>
+  <script src="js/calendar.js?v=30"></script>
+  <script src="js/calendar-picker.js?v=30"></script>
+  <script src="js/render.js?v=30"></script>
+  <script src="js/filters.js?v=30"></script>
+  <script src="js/status.js?v=30"></script>
+  <script src="js/json-mode.js?v=30"></script>
+  <script src="js/app.js?v=30"></script>
 </body>
 </html>
