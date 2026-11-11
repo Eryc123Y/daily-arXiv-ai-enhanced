@@ -345,3 +345,16 @@ def test_a_feed_radar_paper_is_written_once_and_then_known(tmp_path):
 
     assert radar.read_text().count("doi:10.1109/tip.2026.7") == 1
     assert digest.known_ids(tmp_path, "2026-11-10") == {"doi:10.1109/tip.2026.7"}
+
+
+def test_a_feed_commit_carries_the_venue_list(feed, capsys):
+    from summaries.datafiles import venue_summary
+
+    seed(feed, {"2026-11-06": [paper("A")], TODAY: [paper("B")]}, cursor="2026-11-08")
+    feed.set_lines([feed_line(5, "2026-11-08")])
+
+    feed.run(capsys=capsys)
+
+    commit = git(feed.remote, "log", "--format=%H", "data", "--", f"data/{TODAY}.jsonl").splitlines()[0]
+    assert "assets/venues.json" in git(feed.remote, "show", "--name-only", "--format=", commit)
+    assert json.loads(branch_file(feed.remote, "assets/venues.json")) == venue_summary()

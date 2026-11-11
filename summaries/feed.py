@@ -22,18 +22,17 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from summaries import abstracts, dedupe
-from summaries.datafiles import RAW_FILE, raw_path, read_records
+from summaries.datafiles import RAW_FILE, WATCHLIST, raw_path, read_records, venue_settings
 from summaries.records import dedupe_by_id, dump_jsonl
 
 SOURCES = ("openalex", "crossref", "openreview")  # R6: official APIs only; nothing else is accepted
-WATCHLIST = Path(__file__).with_name("watchlist.json")
 FEED_CURSOR = "assets/feed-cursor.json"
 FIRST_LOOKBACK_DAYS = 7  # how far back the very first run asks
 HISTORY_DAYS = 60  # dedupe looks this far back on the data branch
 MAX_PER_RUN = 150  # FEED_MAX_PER_RUN default: proceedings arrive in one batch (ECCV about 2,800, Phase 0)
 FEED_TIMEOUT = 30 * 60
 KINDS = ("conference", "journal")
-VENUE_FIELDS = {"name", "kind", "group", "issn", "openalex_source", "openreview_venues", "sources"}
+VENUE_FIELDS = {"name", "kind", "group", "area", "issn", "openalex_source", "openreview_venues", "sources"}
 LIST_FIELDS = ("issn", "openreview_venues")
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WEB = re.compile(r"^https?://\S+$")
@@ -62,6 +61,8 @@ def _check_venue(venue):
         raise FeedError(f"watch list: {name} has kind {venue.get('kind')!r}; use {' or '.join(KINDS)}")
     if not isinstance(venue.get("group"), str):
         raise FeedError(f"watch list: {name} has no group")
+    if "area" in venue and not _text(venue["area"]):
+        raise FeedError(f"watch list: {name} area must be a string")
     unknown = set(venue) - VENUE_FIELDS
     if unknown:
         raise FeedError(f"watch list: {name} has unknown fields {sorted(unknown)}")
@@ -257,7 +258,8 @@ def publish(branch, day, papers, work_dir, limit=MAX_PER_RUN):
         result.update(kept=kept, duplicates=dropped, deferred=len(fresh) - len(kept), added=len(combined) - len(existing))
         moves = not result["deferred"] and not (cursor_since(current, day) == day and current.read(FEED_CURSOR))
         cursor = {FEED_CURSOR: json.dumps({"since": day, "at": at}, indent=2) + "\n"} if moves else {}
-        return {raw_path(day): dump_jsonl(combined), **cursor} if result["added"] else cursor
+        papers_file = {raw_path(day): dump_jsonl(combined)} if result["added"] else {}
+        return {**papers_file, **cursor, **venue_settings()} if papers_file or cursor else {}
 
     # Abstracts are saved before the push: one saved for a paper a racing run published instead is harmless,
     # while a paper published without its local abstract would get no summary.

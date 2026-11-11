@@ -81,7 +81,16 @@ class Venue(TypedDict):
     name: str
     kind: Literal["conference", "journal"]
     group: str
+    area: NotRequired[str]  # the page's Area selector, e.g. "Graphics and VR"
     issn: NotRequired[list[str]]
     openalex_source: NotRequired[str]  # e.g. "S4210173141"
     openreview_venues: NotRequired[list[str]]  # e.g. ["ICLR.cc/2026/Conference"]
     sources: NotRequired[list[FeedSource]]
+
+
+class VenueSummary(TypedDict):
+    """One entry of `assets/venues.json`, the public part of the watch list the page groups venues by."""
+
+    name: str
+    kind: Literal["conference", "journal"]
+    area: str | None
