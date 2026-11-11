@@ -1,0 +1,97 @@
+[
+  {
+    "name": "CVPR",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ICCV",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ECCV",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "NeurIPS",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ICML",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ICLR",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "AAAI",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "IJCAI",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ACM MM",
+    "kind": "conference",
+    "area": "ML and vision"
+  },
+  {
+    "name": "ACM TOG",
+    "kind": "journal",
+    "area": "Graphics and VR"
+  },
+  {
+    "name": "IEEE TVCG",
+    "kind": "journal",
+    "area": "Graphics and VR"
+  },
+  {
+    "name": "Computer Graphics Forum",
+    "kind": "journal",
+    "area": "Graphics and VR"
+  },
+  {
+    "name": "IEEE TPAMI",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "IJCV",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "IEEE TIP",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "IEEE TCSVT",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "JMLR",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "TMLR",
+    "kind": "journal",
+    "area": "ML and vision"
+  },
+  {
+    "name": "Journal of Vision",
+    "kind": "journal",
+    "area": "Vision science"
+  }
+]
