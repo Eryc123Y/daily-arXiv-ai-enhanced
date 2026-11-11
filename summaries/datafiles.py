@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from summaries.databranch import DataBranch
 from summaries.records import (
@@ -17,6 +18,9 @@ from summaries.records import (
 )
 
 SITE_SETTINGS = "assets/site.json"
+VENUES = "assets/venues.json"
+WATCHLIST = Path(__file__).with_name("watchlist.json")
+VENUE_KINDS = ("conference", "journal")
 RUN_LOG = "logs/summary-runs.jsonl"
 RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
 
@@ -30,11 +34,37 @@ def ai_path(day, language):
 
 
 def site_settings(language):
-    """Published to the data branch so the page knows the crawled categories."""
+    """Published to the data branch so the page knows the crawled categories and the watched venues."""
     categories = [c.strip() for c in os.environ.get("CATEGORIES", "").split(",") if c.strip()]
-    if not categories:
+    site = {SITE_SETTINGS: json.dumps({"categories": categories, "language": language}, indent=2) + "\n"} if categories else {}
+    return {**site, **venue_settings()}
+
+
+def venue_summary(path=WATCHLIST):
+    """The watch list as the page needs it: [{name, kind, area}] in list order (VenueSummary in shapes.py).
+
+    Entries without a name or a known kind are left out; a venue without an area gets area null.
+    The feed checks the full list (feed.load_watchlist); this only reads it.
+    """
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    venues = data.get("venues") if isinstance(data, dict) else None
+    summary = []
+    for venue in venues if isinstance(venues, list) else []:
+        if not isinstance(venue, dict):
+            continue
+        name, kind, area = venue.get("name"), venue.get("kind"), venue.get("area")
+        if isinstance(name, str) and name.strip() and kind in VENUE_KINDS:
+            summary.append({"name": name.strip(), "kind": kind, "area": area.strip() if isinstance(area, str) and area.strip() else None})
+    return summary
+
+
+def venue_settings(path=WATCHLIST):
+    """{assets/venues.json: text}, or {} when the watch list cannot be read (the page then shows no grouping)."""
+    try:
+        summary = venue_summary(path)
+    except (OSError, ValueError):
         return {}
-    return {SITE_SETTINGS: json.dumps({"categories": categories, "language": language}, indent=2) + "\n"}
+    return {VENUES: json.dumps(summary, ensure_ascii=False, indent=2) + "\n"}
 
 
 def emit(**values):

@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from summaries import abstracts, digest, feed, github, local_runner, localcrawl, missed, setup, signals, weekly
+from summaries.databranch import PublishError
 from summaries.datafiles import (
     RAW_FILE,
     RUN_LOG,
@@ -31,6 +32,7 @@ from summaries.datafiles import (
     recent_days,
     record_run,
     site_settings,
+    venue_settings,
 )
 from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
@@ -265,7 +267,8 @@ def ensure_arxiv(args, branch, day, today):
 
 def cmd_ensure_day(args):
     """Make sure a weekday's papers are published: crawl today's on this machine, backfill missed days,
-    then publish the feed's papers under today (any day of the week; skipped without FEED_COMMAND)."""
+    then publish the feed's papers under today (any day of the week; skipped without FEED_COMMAND),
+    and keep the public venue list current."""
     today = utc_today()
     day = args.date or today
     branch = make_branch(args)
@@ -273,8 +276,21 @@ def cmd_ensure_day(args):
     code, report = ensure_arxiv(args, branch, day, today)
     if day == today:
         report["feed"] = feed.run(branch, day, args.repo, args.work_dir, os.environ)
+    report.update(publish_venues(branch))
     emit(**report)
     return code
+
+
+def publish_venues(branch):
+    """Bring assets/venues.json up to date when no crawl or feed commit did; {} when it already was."""
+    files = venue_settings()
+    if not files:
+        return {}
+    try:
+        commit = branch.publish(files, "update: venue list")
+    except PublishError as error:
+        return {"venues": {"status": "error", "reason": str(error)}}
+    return {"venues": "published"} if commit else {}
 
 
 # --- Claude Code local task ---------------------------------------------------

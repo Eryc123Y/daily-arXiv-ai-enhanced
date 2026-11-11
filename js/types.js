@@ -74,3 +74,13 @@
  *   hf?: number,
  * }} PageRecord
  */
+
+/**
+ * One entry of assets/venues.json, the public part of the watch list
+ * (summaries/watchlist.json). The page groups venue papers by it: a venue
+ * that is not listed counts as neither a top conference nor a top journal.
+ * @typedef {object} VenueSummary
+ * @property {string} name             the record's `venue` exactly, e.g. "ACM TOG"
+ * @property {'conference' | 'journal'} kind
+ * @property {string | null} area      e.g. "Graphics and VR"
+ */

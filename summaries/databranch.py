@@ -16,11 +16,12 @@ from dataclasses import dataclass
 FILE_LIST = "assets/file-list.txt"
 # The data branch is public, so only the files the page reads are published:
 # a day's papers, its summaries and its upvotes, the run log, and the
-# asset files (the file list, site settings and the feed's cursor, a date). Anything else (the vault's radar, brief, ratings, a report or
+# asset files (the file list, site settings, the watched venues' names, kinds and areas, and the
+# feed's cursor, a date). Anything else (the vault's radar, brief, ratings, a report or
 # the digest cache) is refused, whatever folder it is given under.
 PUBLIC_PATH = re.compile(
     r"^(?:data/\d{4}-\d{2}-\d{2}(?:\.jsonl|_AI_enhanced_[A-Za-z]+\.jsonl|_hf\.json)"
-    r"|logs/summary-runs\.jsonl|assets/(?:file-list\.txt|site\.json|feed-cursor\.json))$"
+    r"|logs/summary-runs\.jsonl|assets/(?:file-list\.txt|site\.json|venues\.json|feed-cursor\.json))$"
 )
 
 

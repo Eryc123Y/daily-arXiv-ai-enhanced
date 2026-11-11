@@ -60,3 +60,18 @@ test('the pipeline status reads the run log and tolerates it missing', async () 
   const empty = await source({}).loadStatus();
   assert.deepEqual(empty, { log: [] });
 });
+
+const VENUES = '[{"name": "ACM TOG", "kind": "journal", "area": "Graphics and VR"}]';
+
+test('the day list carries the watched venues from assets/venues.json', async () => {
+  const listing = await source({ 'assets/file-list.txt': [200, '2026-10-30.jsonl\n'], 'assets/venues.json': [200, VENUES] }).listDays();
+  assert.deepEqual(listing.venues, [{ name: 'ACM TOG', kind: 'journal', area: 'Graphics and VR' }]);
+});
+
+test('the venue list is optional: missing, broken, unreachable or not a list means none', async () => {
+  for (const answer of [404, 503, [200, '{not json'], [200, '{"name": "ACM TOG"}'], new TypeError('offline')]) {
+    const listing = await source({ 'assets/file-list.txt': [200, '2026-10-30.jsonl\n'], 'assets/venues.json': answer }).listDays();
+    assert.deepEqual(listing.days, ['2026-10-30']);
+    assert.equal(listing.venues, null);
+  }
+});

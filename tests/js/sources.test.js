@@ -118,11 +118,10 @@ test('source counts apply every other active filter but their own', () => {
   assert.equal(counts.categories.get('all'), 1);
 });
 
-test('the source list is arXiv first, then venues by count, and only on a mixed day', () => {
+test('the venue row lists venues by count, and only on a mixed day', () => {
   const counts = Filters.counts(ENTRIES, base, MAIN, ['Stereo']);
-  assert.deepEqual(Filters.sourceOptions(RECORDS, counts).map(o => [o.key, o.label, o.count]), [
-    ['all', 'All sources', 9],
-    ['arxiv', 'arXiv', 3],
+  assert.deepEqual(Filters.sourceGroups(RECORDS, counts, base).venues.map(o => [o.key, o.label, o.count]), [
+    ['all', 'All', 9],
     ['venue:IEEE TCSVT', 'IEEE TCSVT', 2],
     ['venue:ICLR', 'ICLR', 1],
     ['venue:IEEE TIP', 'IEEE TIP', 1],
@@ -130,7 +129,7 @@ test('the source list is arXiv first, then venues by count, and only on a mixed 
     ['venue:IEEE TVCG', 'IEEE TVCG', 1],
   ]);
   const arxivOnly = ENTRIES.filter(e => PaperData.isArxiv(e.record));
-  assert.deepEqual(Filters.sourceOptions(arxivOnly.map(e => e.record), Filters.counts(arxivOnly, base, MAIN, [])), []);
+  assert.equal(Filters.sourceGroups(arxivOnly.map(e => e.record), Filters.counts(arxivOnly, base, MAIN, []), base), null);
 });
 
 test('a source choice counts as a refinement', () => {
