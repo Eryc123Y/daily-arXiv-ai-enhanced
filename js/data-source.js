@@ -30,7 +30,11 @@
   const PREFERRED_LANGUAGES = ['English', 'Chinese'];
 
   class LoadError extends Error {
-    /** status: the HTTP status, or null when the request never got an answer. */
+    /**
+     * status: the HTTP status, or null when the request never got an answer.
+     * @param {string} path
+     * @param {number | null} status
+     */
     constructor(path, status) {
       super(status ? `${path} returned HTTP ${status}` : `${path} could not be reached`);
       this.name = 'LoadError';
@@ -39,6 +43,10 @@
     }
   }
 
+  /**
+   * @param {string | null | undefined} text
+   * @returns {any[]}
+   */
   function parseLines(text) {
     return (text || '').split('\n').flatMap(line => {
       try {
@@ -49,24 +57,46 @@
     });
   }
 
-  /** url(path): a data-branch file. */
+  /**
+   * url(path): a data-branch file.
+   * @param {{
+   *   fetch: (url: string, init: RequestInit) => Promise<{ ok: boolean, status: number, text(): Promise<string> }>,
+   *   url: (path: string) => string,
+   * }} options
+   */
   function createStaticSource({ fetch: fetchImpl, url }) {
+    /** @type {Map<string, string[]>} */
     let languages = new Map();
+    /** @type {Map<string, Promise<PageRecord[]>>} */
     const loadedDays = new Map();
+    /** @type {Map<string, Promise<string[]>>} */
     const venueLists = new Map();
 
-    /** cache.get(key), else make() kept under key unless it rejects. */
+    /**
+     * cache.get(key), else make() kept under key unless it rejects.
+     * @template T
+     * @param {Map<string, Promise<T>>} cache
+     * @param {string} key
+     * @param {() => Promise<T>} make
+     * @returns {Promise<T>}
+     */
     function remember(cache, key, make) {
       if (!cache.has(key)) {
         const promise = make();
         cache.set(key, promise);
         promise.catch(() => cache.delete(key));
       }
-      return cache.get(key);
+      return /** @type {Promise<T>} */ (cache.get(key));
     }
 
-    const venueNames = records => records.filter(r => !PaperData.isArxiv(r)).map(r => (typeof r.venue === 'string' && r.venue.trim()) || '');
+    /** @param {AnyRecord[]} records */
+    const venueNames = records => records.flatMap(r => (PaperData.isArxiv(r) ? [] : [(typeof r.venue === 'string' && r.venue.trim()) || '']));
 
+    /**
+     * @param {string} path
+     * @param {{ optional?: boolean }} [options]
+     * @returns {Promise<string>}
+     */
     async function fetchText(path, { optional = false } = {}) {
       let response;
       try {
@@ -79,7 +109,11 @@
       throw new LoadError(path, response.status);
     }
 
-    /** Optional extras such as upvotes: any failure just means none. */
+    /**
+     * Optional extras such as upvotes: any failure just means none.
+     * @param {string} path
+     * @returns {Promise<Record<string, number>>}
+     */
     async function fetchSignals(path) {
       try {
         const parsed = JSON.parse((await fetchText(path, { optional: true })) || '{}');
@@ -89,7 +123,10 @@
       }
     }
 
-    /** assets/venues.json, the watched venues; null when it is missing, unreadable or not a list. */
+    /**
+     * assets/venues.json, the watched venues; null when it is missing, unreadable or not a list.
+     * @returns {Promise<unknown[] | null>}
+     */
     async function fetchVenues() {
       try {
         const parsed = JSON.parse((await fetchText('assets/venues.json', { optional: true })) || 'null');
@@ -99,18 +136,22 @@
       }
     }
 
-    /** assets/venue-days.json as a Map; null unless it is a {day: positive whole number} object. */
+    /**
+     * assets/venue-days.json as a Map; null unless it is a {day: positive whole number} object.
+     * @returns {Promise<Map<string, number> | null>}
+     */
     async function fetchVenueDays() {
       try {
         const parsed = JSON.parse((await fetchText('assets/venue-days.json', { optional: true })) || 'null');
         const entries = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.entries(parsed) : null;
         const valid = entries && entries.every(([day, n]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isInteger(n) && n > 0);
-        return valid ? new Map(entries) : null;
+        return valid ? new Map(/** @type {[string, number][]} */ (entries)) : null;
       } catch (error) {
         return null;
       }
     }
 
+    /** @param {string} day */
     function summaryLanguage(day) {
       const available = languages.get(day) || [];
       return PREFERRED_LANGUAGES.find(l => available.includes(l)) || available[0] || PREFERRED_LANGUAGES[0];
@@ -126,6 +167,7 @@
         ]);
         const list = PaperData.parseFileList(listText);
         languages = list.languages;
+        /** @type {string[] | null} */
         let categories = null;
         try {
           categories = siteText ? JSON.parse(siteText).categories || null : null;
@@ -134,6 +176,10 @@
         }
         return { days: list.dates, languages, categories, venues, venueDays };
       },
+      /**
+       * @param {string} day
+       * @returns {Promise<PageRecord[]>}
+       */
       loadDay(day) {
         return remember(loadedDays, day, async () => {
           const [raw, ai, hf] = await Promise.all([
@@ -144,8 +190,13 @@
           return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
         });
       },
+      /**
+       * @param {string} day
+       * @returns {Promise<string[]>}
+       */
       venuePapers(day) {
-        if (loadedDays.has(day)) return loadedDays.get(day).then(venueNames);
+        const loaded = loadedDays.get(day);
+        if (loaded) return loaded.then(venueNames);
         return remember(venueLists, day, async () => venueNames(PaperData.parseJsonl(await fetchText(`data/${day}.jsonl`))));
       },
       async loadStatus() {
@@ -162,7 +213,7 @@
 
   root.LoadError = LoadError;
   root.DataSource = createStaticSource({
-    fetch: (...args) => root.fetch(...args),
-    url: path => root.DATA_CONFIG.getDataUrl(path),
+    fetch: /** @type {typeof fetch} */ ((...args) => root.fetch(...args)),
+    url: /** @param {string} path */ path => root.DATA_CONFIG.getDataUrl(path),
   });
 })(typeof self !== 'undefined' ? self : this);

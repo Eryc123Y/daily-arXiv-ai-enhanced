@@ -5,7 +5,13 @@
  * the page is open. The palettes live in css/site.css under
  * :root[data-theme="..."].
  */
+/**
+ * A reader's choices: the mode ('system', 'light' or 'dark') and the theme id for each.
+ * @typedef {{ mode: string, light: string, dark: string }} ThemePrefs
+ * @typedef {keyof ThemePrefs} ThemeSlot
+ */
 (function (root) {
+  /** @type {ThemePrefs} */
   const KEYS = { mode: 'daily-arxiv-appearance', light: 'daily-arxiv-light-theme', dark: 'daily-arxiv-dark-theme' };
   const MODES = [
     { id: 'system', name: 'Follow the system' },
@@ -21,16 +27,30 @@
     { id: 'lamplight', name: 'Lamplight', note: 'Warm dark with amber links' },
     { id: 'anaglyph', name: 'Anaglyph', note: 'Blue-black with the red and cyan of stereo glasses' },
   ];
+  /** @type {ThemePrefs} */
   const DEFAULTS = { mode: 'system', light: 'preprint', dark: 'lilac' };
+  /** @type {Record<ThemeSlot, Array<{ id: string }>>} */
   const CHOICES = { mode: MODES, light: LIGHT, dark: DARK };
+  const SLOTS = /** @type {ThemeSlot[]} */ (Object.keys(DEFAULTS));
 
+  /**
+   * @param {Array<{ id: string }>} list
+   * @param {string | null | undefined} id
+   * @param {string} fallback
+   * @returns {string}
+   */
   function pick(list, id, fallback) {
-    return list.some(item => item.id === id) ? id : fallback;
+    return typeof id === 'string' && list.some(item => item.id === id) ? id : fallback;
   }
 
+  /**
+   * @param {Pick<Storage, 'getItem'>} storage
+   * @returns {ThemePrefs}
+   */
   function read(storage) {
-    const prefs = {};
-    for (const slot of Object.keys(DEFAULTS)) {
+    const prefs = { ...DEFAULTS };
+    for (const slot of SLOTS) {
+      /** @type {string | null} */
       let saved = null;
       try {
         saved = storage.getItem(KEYS[slot]);
@@ -42,9 +62,13 @@
     return prefs;
   }
 
+  /**
+   * @param {Pick<Storage, 'setItem' | 'removeItem'>} storage
+   * @param {Partial<ThemePrefs>} prefs
+   */
   function save(storage, prefs) {
     try {
-      for (const slot of Object.keys(DEFAULTS)) {
+      for (const slot of SLOTS) {
         const value = pick(CHOICES[slot], prefs[slot], DEFAULTS[slot]);
         if (value === DEFAULTS[slot]) storage.removeItem(KEYS[slot]);
         else storage.setItem(KEYS[slot], value);
@@ -54,12 +78,20 @@
     }
   }
 
-  /** The theme the page shows for these choices, given whether the system is dark. */
+  /**
+   * The theme the page shows for these choices, given whether the system is dark.
+   * @param {ThemePrefs} prefs
+   * @param {boolean} systemDark
+   */
   function resolve(prefs, systemDark) {
     const dark = prefs.mode === 'dark' || (prefs.mode === 'system' && systemDark);
     return dark ? prefs.dark : prefs.light;
   }
 
+  /**
+   * @param {Document} doc
+   * @param {string} id
+   */
   function apply(doc, id) {
     doc.documentElement.dataset.theme = id;
   }
@@ -69,8 +101,7 @@
     module.exports = api;
     return;
   }
-  root.Theme = api;
-
+  /** @type {Storage | null} */
   let storage = null;
   try {
     storage = root.localStorage;
@@ -79,8 +110,12 @@
   }
   const media = root.matchMedia ? root.matchMedia('(prefers-color-scheme: dark)') : null;
   const systemDark = () => Boolean(media && media.matches);
-  /** Show `prefs` (the saved ones by default); Settings uses it to preview. */
-  api.show = prefs => apply(root.document, resolve(prefs || (storage ? read(storage) : DEFAULTS), systemDark()));
-  api.show();
-  if (media && media.addEventListener) media.addEventListener('change', () => api.show());
+  /**
+   * Show `prefs` (the saved ones by default); Settings uses it to preview.
+   * @param {ThemePrefs} [prefs]
+   */
+  const show = prefs => apply(root.document, resolve(prefs || (storage ? read(storage) : DEFAULTS), systemDark()));
+  root.Theme = Object.assign(api, { show });
+  show();
+  if (media && media.addEventListener) media.addEventListener('change', () => show());
 })(typeof self !== 'undefined' ? self : this);

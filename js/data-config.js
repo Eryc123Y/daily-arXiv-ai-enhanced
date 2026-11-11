@@ -16,6 +16,12 @@
    */
   const EARLIEST_DAY = '2025-12-29';
 
+  /**
+   * The repository whose data branch the page reads.
+   * @param {{ hostname?: string, pathname?: string } | null | undefined} location
+   * @param {{ owner: string, repo: string }} fallback
+   * @returns {{ owner: string, repo: string }}
+   */
   function repoFromLocation(location, fallback) {
     const host = ((location && location.hostname) || '').toLowerCase();
     if (!host.endsWith('.github.io')) return fallback;
@@ -64,7 +70,7 @@
   };
 
   root.document.addEventListener('DOMContentLoaded', () => {
-    root.document.querySelectorAll('a[data-repo-link]').forEach(link => {
+    /** @type {NodeListOf<HTMLAnchorElement>} */ (root.document.querySelectorAll('a[data-repo-link]')).forEach(link => {
       link.href = root.DATA_CONFIG.repoUrl();
     });
   });

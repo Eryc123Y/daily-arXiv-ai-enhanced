@@ -13,24 +13,39 @@
  */
 (function (root) {
   const C = root.Calendar;
+  /** @param {unknown} text */
   const esc = text => String(text).replace(/[&<>"']/g, ch => `&#${ch.charCodeAt(0)};`);
   const supportsPopover = Object.prototype.hasOwnProperty.call(HTMLElement.prototype, 'popover');
   const supportsAnchoring = root.CSS && CSS.supports('position-area: block-end');
+  /** @type {Record<CalendarView['mode'], string>} */
   const MODE_NAMES = { day: 'Choose a day', range: 'Choose several days', week: 'Choose a week' };
+  /** @param {string} d */
   const STEP_ICON = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"></path></svg>`;
   const PREV = STEP_ICON('M15 18l-6-6 6-6');
   const NEXT = STEP_ICON('M9 18l6-6-6-6');
 
+  /**
+   * @param {Parameters<typeof CalendarPicker.create>[0]} options
+   * @returns {CalendarPickerHandle}
+   */
   function create({ trigger, panel, label, onPick }) {
-    let view = null;
-    let shown = null; // the month on screen
+    // The page calls update() before the button can open the picker, so the
+    // drawing code always has a view and a month.
+    /** @type {CalendarView} */
+    let view = /** @type {any} */ (null);
+    /** @type {string} */
+    let shown = /** @type {any} */ (null); // the month on screen
+    /** @type {string | null} */
     let focused = null; // the day holding the grid's tab stop
+    /** @type {string | null} */
     let pending = null; // a range's first day, before the second click
+    /** @type {string | null} */
     let preview = null; // the day under the pointer or focus while a range is pending
     let pane = 'days'; // or 'months'
-    let year = null; // the month view's year
+    let year = 0; // the month view's year
 
     const isOpen = () => (supportsPopover ? panel.matches(':popover-open') : !panel.hidden);
+    /** @returns {CalendarView & { month: string }} */
     const current = () => ({ ...view, month: shown, pending, preview });
 
     function open() {
@@ -46,6 +61,13 @@
 
     // --- Drawing ---------------------------------------------------------------
 
+    /**
+     * @param {string} title
+     * @param {string} stepLabel
+     * @param {boolean} canBack
+     * @param {boolean} canForward
+     * @param {string} titleAttrs
+     */
     function head(title, stepLabel, canBack, canForward, titleAttrs) {
       return `<div class="picker-head">
 <button type="button" class="icon-button" data-step="-1" aria-label="Previous ${stepLabel}"${canBack ? '' : ' disabled'}>${PREV}</button>
@@ -61,8 +83,9 @@
     }
 
     function daysPane() {
-      const first = C.monthOf(view.bounds.min || shown);
-      const last = C.monthOf(view.bounds.max || shown);
+      const bounds = view.bounds || { min: null, max: null };
+      const first = C.monthOf(bounds.min || shown);
+      const last = C.monthOf(bounds.max || shown);
       const weekMode = view.mode === 'week';
       const titleAttrs = `aria-label="${esc(C.monthTitle(shown))}, choose another month" aria-expanded="false"`;
       const heads = C.weekdayNames().map(d => `<th scope="col" abbr="${d.long}">${d.short}</th>`).join('');
@@ -78,9 +101,10 @@
     }
 
     function monthsPane() {
-      const span = C.yearSpan(view.months);
+      const monthsWithData = view.months || new Set();
+      const span = C.yearSpan(monthsWithData);
       const titleAttrs = `aria-label="${year}, back to the days" aria-expanded="true"`;
-      const months = C.monthChoices(year, view.months).map(m => {
+      const months = C.monthChoices(year, monthsWithData).map(m => {
         const current = m.month === shown ? ' aria-current="true"' : '';
         return `<button type="button" data-month="${m.month}" aria-label="${esc(m.name)}"${current}${m.enabled ? '' : ' disabled'}>${esc(m.label)}</button>`;
       });
@@ -96,8 +120,8 @@
     /** Selection, range shading, the disabled days and the tab stop, on the drawn grid. */
     function paint() {
       const v = current();
-      panel.querySelectorAll('td[data-day]').forEach(cell => {
-        const s = C.cellState(cell.dataset.day, v);
+      /** @type {NodeListOf<HTMLTableCellElement>} */ (panel.querySelectorAll('td[data-day]')).forEach(cell => {
+        const s = C.cellState(cell.dataset.day || '', v);
         cell.classList.toggle('is-outside', !s.inMonth);
         cell.classList.toggle('is-in-range', s.inRange);
         cell.classList.toggle('is-range-start', s.rangeStart);
@@ -108,8 +132,8 @@
         const papers = v.mode === 'week' && s.enabled ? `, week with ${s.weekCount.toLocaleString('en-GB')} journal and conference papers` : '';
         cell.setAttribute('aria-label', `${C.dayLabel(s.day)}${papers}${s.enabled ? '' : ', no papers'}`);
       });
-      panel.querySelectorAll('tr[data-week]').forEach(row => {
-        const s = C.cellState(row.dataset.week, v);
+      /** @type {NodeListOf<HTMLTableRowElement>} */ (panel.querySelectorAll('tr[data-week]')).forEach(row => {
+        const s = C.cellState(row.dataset.week || '', v);
         row.classList.toggle('is-week-selected', v.mode === 'week' && s.selected);
         row.classList.toggle('is-week-enabled', v.mode === 'week' && s.enabled);
         const count = row.querySelector('.week-count');
@@ -117,6 +141,10 @@
       });
     }
 
+    /**
+     * @param {string | null} day
+     * @returns {HTMLTableCellElement | null}
+     */
     const cellFor = day => panel.querySelector(`td[data-day="${day}"]`);
 
     function focusCell() {
@@ -124,7 +152,10 @@
       if (cell) cell.focus();
     }
 
-    /** Show the month a day is in (redrawing when it changes) and give that day the tab stop. */
+    /**
+     * Show the month a day is in (redrawing when it changes) and give that day the tab stop.
+     * @param {string} day
+     */
     function moveTo(day) {
       focused = day;
       if (pending) preview = day;
@@ -137,6 +168,7 @@
       focusCell();
     }
 
+    /** @param {string} month */
     function showMonth(month) {
       shown = month;
       pane = 'days';
@@ -146,18 +178,20 @@
 
     // --- Picking ----------------------------------------------------------------
 
+    /** @param {string} day */
     function pick(day) {
       if (!C.cellState(day, current()).enabled) return;
       if (view.mode === 'week') return finish({ week: root.Streams.weekOf(day) });
       if (view.mode === 'day') return finish({ day });
       const result = C.rangePick(pending, day);
-      if (!result.pending) return finish({ start: result.start, end: result.end });
+      if (!result.pending) return finish({ start: /** @type {string} */ (result.start), end: /** @type {string} */ (result.end) });
       pending = result.pending;
       preview = day;
       render();
       focusCell();
     }
 
+    /** @param {CalendarPick} choice */
     function finish(choice) {
       close();
       onPick(choice);
@@ -183,7 +217,7 @@
         panel.hidden = false;
         trigger.setAttribute('aria-expanded', 'true');
       }
-      showMonth(C.monthOf(chosen || view.bounds.max));
+      showMonth(C.monthOf(chosen || (view.bounds && view.bounds.max) || ''));
       place();
       focusCell();
     }
@@ -199,37 +233,42 @@
 
     // --- Events -------------------------------------------------------------------
 
+    /** @param {MouseEvent} event */
     function onClick(event) {
-      const step = event.target.closest('button[data-step]');
-      const month = event.target.closest('button[data-month]');
-      const cell = event.target.closest('td[data-day]');
+      const clicked = /** @type {Element} */ (event.target);
+      const step = /** @type {HTMLButtonElement | null} */ (clicked.closest('button[data-step]'));
+      const month = /** @type {HTMLButtonElement | null} */ (clicked.closest('button[data-month]'));
+      const cell = /** @type {HTMLTableCellElement | null} */ (clicked.closest('td[data-day]'));
       if (step && pane === 'months') {
         year += Number(step.dataset.step);
         render();
-        panel.querySelector(`button[data-step="${step.dataset.step}"]`).focus();
+        /** @type {HTMLButtonElement} */ (panel.querySelector(`button[data-step="${step.dataset.step}"]`)).focus();
       } else if (step) {
         showMonth(C.stepMonth(shown, Number(step.dataset.step)));
-        const again = panel.querySelector(`button[data-step="${step.dataset.step}"]`);
-        (again.disabled ? cellFor(focused) : again).focus();
+        const again = /** @type {HTMLButtonElement} */ (panel.querySelector(`button[data-step="${step.dataset.step}"]`));
+        /** @type {HTMLElement} */ (again.disabled ? cellFor(focused) : again).focus();
       } else if (month) {
-        showMonth(month.dataset.month);
+        showMonth(/** @type {string} */ (month.dataset.month));
         focusCell();
-      } else if (event.target.closest('#pickerTitle')) {
+      } else if (clicked.closest('#pickerTitle')) {
         pane = pane === 'days' ? 'months' : 'days';
         year = Number(shown.slice(0, 4));
         render();
+        /** @type {HTMLElement | null} */
         const target = pane === 'months' ? panel.querySelector('button[data-month][aria-current]') || panel.querySelector('#pickerTitle') : cellFor(focused);
         if (target) target.focus();
       } else if (cell) {
-        focused = cell.dataset.day;
-        pick(cell.dataset.day);
-      } else if (view.mode === 'week' && event.target.closest('tr[data-week] .week-count')) {
-        pick(event.target.closest('tr[data-week]').dataset.week);
+        focused = /** @type {string} */ (cell.dataset.day);
+        pick(focused);
+      } else if (view.mode === 'week' && clicked.closest('tr[data-week] .week-count')) {
+        pick(/** @type {string} */ (/** @type {HTMLTableRowElement} */ (clicked.closest('tr[data-week]')).dataset.week));
       }
     }
 
+    /** @param {KeyboardEvent} event */
     function onKeydown(event) {
-      const cell = event.target.closest && event.target.closest('td[data-day]');
+      const pressed = /** @type {Element} */ (event.target);
+      const cell = /** @type {HTMLTableCellElement | null} */ (pressed.closest && pressed.closest('td[data-day]'));
       if (!supportsPopover && event.key === 'Escape') {
         close();
         return;
@@ -237,19 +276,20 @@
       if (!cell || event.altKey || event.ctrlKey || event.metaKey) return;
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        pick(cell.dataset.day);
+        pick(/** @type {string} */ (cell.dataset.day));
         return;
       }
-      const next = C.move(cell.dataset.day, event.key, event.shiftKey, view.bounds);
+      const next = C.move(/** @type {string} */ (cell.dataset.day), event.key, event.shiftKey, view.bounds);
       if (!next || next === cell.dataset.day) return;
       event.preventDefault();
       moveTo(next);
     }
 
+    /** @param {PointerEvent} event */
     function onPointerOver(event) {
-      const cell = pending && event.target.closest('td[data-day]');
+      const cell = pending && /** @type {HTMLTableCellElement | null} */ (/** @type {Element} */ (event.target).closest('td[data-day]'));
       if (!cell || cell.dataset.day === preview) return;
-      preview = cell.dataset.day;
+      preview = cell.dataset.day || null;
       paint();
     }
 
@@ -257,24 +297,26 @@
     panel.addEventListener('keydown', onKeydown);
     panel.addEventListener('pointerover', onPointerOver);
     if (supportsPopover) {
-      panel.addEventListener('toggle', event => (event.newState === 'open' ? opened() : closed()));
+      panel.addEventListener('toggle', event => (/** @type {ToggleEvent} */ (event).newState === 'open' ? opened() : closed()));
     } else {
       // Browsers without the Popover API: open from the button, close on Esc or a click elsewhere.
       trigger.removeAttribute('popovertarget');
       panel.hidden = true;
       trigger.addEventListener('click', () => (isOpen() ? close() : opened()));
       root.document.addEventListener('click', event => {
-        if (isOpen() && !panel.contains(event.target) && !trigger.contains(event.target)) close({ restoreFocus: false });
+        const target = /** @type {Node} */ (event.target);
+        if (isOpen() && !panel.contains(target) && !trigger.contains(target)) close({ restoreFocus: false });
       });
     }
 
     return {
       /** New data or a new choice: redraw the button, and the grid if it is open. */
+      /** @param {CalendarView} next */
       update(next) {
         view = next;
         label.textContent = C.triggerText(view);
         trigger.setAttribute('aria-label', `${MODE_NAMES[view.mode]}, ${label.textContent}`);
-        trigger.disabled = !view.bounds.max;
+        trigger.disabled = !(view.bounds && view.bounds.max);
         if (isOpen() && pane === 'days') {
           render();
           focusCell();

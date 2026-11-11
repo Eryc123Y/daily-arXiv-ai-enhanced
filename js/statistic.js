@@ -1,9 +1,36 @@
+/**
+ * A paper as this page keeps it (parseJsonlData).
+ * @typedef {object} StatPaper
+ * @property {string} title
+ * @property {string} url
+ * @property {string} authors
+ * @property {string[]} category
+ * @property {string} summary
+ * @property {string} details
+ * @property {string} date
+ * @property {string} id
+ * @property {string} motivation
+ * @property {string} method
+ * @property {string} result
+ * @property {string} conclusion
+ *
+ * @typedef {{ date: Date, count: number }} TrendPoint
+ * @typedef {{ keyword: string, values: TrendPoint[] }} TrendSeries
+ */
+
 let currentDate = '';
+/** @type {string[]} */
 let availableDates = [];
+/** @type {Record<string, StatPaper[]>} */
 let paperData = {};
+/** @type {any} a flatpickr instance */
 let flatpickrInstance = null;
 let isRangeMode = false;
+/** @type {StatPaper[]} */
 let allPapersData = [];
+
+/** An element statistic.html always has. */
+const byId = (/** @type {string} */ id) => /** @type {HTMLElement} */ (document.getElementById(id));
 
 document.addEventListener('DOMContentLoaded', () => {
   // Check screen size
@@ -44,17 +71,17 @@ async function fetchGitHubStats() {
     const starCount = data.stargazers_count;
     const forkCount = data.forks_count;
     
-    document.getElementById('starCount').textContent = starCount;
-    document.getElementById('forkCount').textContent = forkCount;
+    byId('starCount').textContent = starCount;
+    byId('forkCount').textContent = forkCount;
   } catch (error) {
     console.error('获取GitHub统计数据失败:', error);
-    document.getElementById('starCount').textContent = '?';
-    document.getElementById('forkCount').textContent = '?';
+    byId('starCount').textContent = '?';
+    byId('forkCount').textContent = '?';
   }
 }
 
 function toggleDatePicker() {
-  const datePicker = document.getElementById('datePickerModal');
+  const datePicker = byId('datePickerModal');
   datePicker.classList.toggle('active');
   
   if (datePicker.classList.contains('active')) {
@@ -71,14 +98,14 @@ function toggleDatePicker() {
 
 function initEventListeners() {
   // 只允许通过日历按钮打开日期选择器
-  const calendarButton = document.getElementById('calendarButton');
+  const calendarButton = byId('calendarButton');
   calendarButton.addEventListener('click', (e) => {
     e.stopPropagation();
     toggleDatePicker();
   });
   
   // 点击模态框背景时关闭
-  const datePickerModal = document.querySelector('.date-picker-modal');
+  const datePickerModal = /** @type {HTMLElement} */ (document.querySelector('.date-picker-modal'));
   datePickerModal.addEventListener('click', (event) => {
     if (event.target === datePickerModal) {
       toggleDatePicker();
@@ -86,12 +113,12 @@ function initEventListeners() {
   });
   
   // 阻止日期选择器内容区域的点击事件冒泡
-  const datePickerContent = document.querySelector('.date-picker-content');
+  const datePickerContent = /** @type {HTMLElement} */ (document.querySelector('.date-picker-content'));
   datePickerContent.addEventListener('click', (e) => {
     e.stopPropagation();
   });
   
-  document.getElementById('dateRangeMode').addEventListener('change', toggleRangeMode);
+  byId('dateRangeMode').addEventListener('change', toggleRangeMode);
   
   // 添加侧边栏关闭按钮事件
   const closeButton = document.querySelector('.close-sidebar');
@@ -101,10 +128,11 @@ function initEventListeners() {
   
   // 点击侧边栏外部时关闭侧边栏
   document.addEventListener('click', (event) => {
-    const sidebar = document.getElementById('paperSidebar');
-    const isClickInside = sidebar.contains(event.target);
-    const isClickOnKeyword = event.target.closest('.keyword-item') || 
-                            event.target.closest('.keyword-cloud text');
+    const sidebar = byId('paperSidebar');
+    const target = /** @type {Element} */ (event.target);
+    const isClickInside = sidebar.contains(target);
+    const isClickOnKeyword = target.closest('.keyword-item') || 
+                            target.closest('.keyword-cloud text');
     
     if (!isClickInside && !isClickOnKeyword && sidebar.classList.contains('active')) {
       closeSidebar();
@@ -119,6 +147,7 @@ function getPreferredLanguage() {
 }
 
 // Function to select the best available language for a date
+/** @param {string} date @param {string | null} [preferredLanguage] */
 function selectLanguageForDate(date, preferredLanguage = null) {
   const availableLanguages = window.dateLanguageMap?.get(date) || [];
   
@@ -152,6 +181,7 @@ async function fetchAvailableDates() {
 
     const dateRegex = /(\d{4}-\d{2}-\d{2})_AI_enhanced_(English|Chinese)\.jsonl/;
     const dateLanguageMap = new Map(); // Store date -> available languages
+    /** @type {string[]} */
     const dates = [];
     
     files.forEach(file => {
@@ -171,7 +201,7 @@ async function fetchAvailableDates() {
     // Store the language mapping globally for later use
     window.dateLanguageMap = dateLanguageMap;
     availableDates = [...new Set(dates)];
-    availableDates.sort((a, b) => new Date(b) - new Date(a));
+    availableDates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
     initDatePicker(); // Assuming this function uses availableDates
 
@@ -182,13 +212,14 @@ async function fetchAvailableDates() {
 }
 
 function initDatePicker() {
-  const datepickerInput = document.getElementById('datepicker');
+  const datepickerInput = byId('datepicker');
   
   if (flatpickrInstance) {
     flatpickrInstance.destroy();
   }
   
   // 创建可用日期的映射，用于禁用无效日期
+  /** @type {Record<string, boolean>} */
   const enabledDatesMap = {};
   availableDates.forEach(date => {
     enabledDatesMap[date] = true;
@@ -200,7 +231,7 @@ function initDatePicker() {
     dateFormat: "Y-m-d",
     defaultDate: availableDates[0],
     enable: [
-      function(date) {
+      function(/** @type {Date} */ date) {
         // 只启用有效日期
         const dateStr = date.getFullYear() + "-" + 
                         String(date.getMonth() + 1).padStart(2, '0') + "-" + 
@@ -208,7 +239,7 @@ function initDatePicker() {
         return !!enabledDatesMap[dateStr];
       }
     ],
-    onChange: function(selectedDates, dateStr) {
+    onChange: function(/** @type {Date[]} */ selectedDates, /** @type {string} */ dateStr) {
       if (isRangeMode && selectedDates.length === 2) {
         // 处理日期范围选择
         const startDate = formatDateForAPI(selectedDates[0]);
@@ -227,26 +258,27 @@ function initDatePicker() {
   });
   
   // 隐藏日期输入框
-  const inputElement = document.querySelector('.flatpickr-input');
+  const inputElement = /** @type {HTMLElement | null} */ (document.querySelector('.flatpickr-input'));
   if (inputElement) {
     inputElement.style.display = 'none';
   }
 }
 
-function formatDateForAPI(date) {
+function formatDateForAPI(/** @type {Date} */ date) {
   return date.getFullYear() + "-" + 
          String(date.getMonth() + 1).padStart(2, '0') + "-" + 
          String(date.getDate()).padStart(2, '0');
 }
 
 function toggleRangeMode() {
-  isRangeMode = document.getElementById('dateRangeMode').checked;
+  isRangeMode = /** @type {HTMLInputElement} */ (byId('dateRangeMode')).checked;
   
   if (flatpickrInstance) {
     flatpickrInstance.set('mode', isRangeMode ? 'range' : 'single');
   }
 }
 
+/** @param {string} startDate @param {string} endDate */
 async function loadPapersByDateRange(startDate, endDate) {
   // 获取日期范围内的所有有效日期
   const validDatesInRange = availableDates.filter(date => {
@@ -260,13 +292,13 @@ async function loadPapersByDateRange(startDate, endDate) {
   
   if (startDate === endDate) {  
     currentDate = startDate;
-    document.getElementById('currentDate').textContent = formatDate(startDate);
+    byId('currentDate').textContent = formatDate(startDate);
   } else {
     currentDate = `${startDate} - ${endDate}`;
-    document.getElementById('currentDate').textContent = `${formatDate(startDate)} - ${formatDate(endDate)}`;
+    byId('currentDate').textContent = `${formatDate(startDate)} - ${formatDate(endDate)}`;
   }
   
-  const container = document.getElementById('papersList');
+  const container = byId('papersList');
   container.innerHTML = `
     <div class="loading-container">
       <div class="loading-spinner"></div>
@@ -276,6 +308,7 @@ async function loadPapersByDateRange(startDate, endDate) {
   
   try {
     // 加载所有日期的论文数据
+    /** @type {Record<string, StatPaper[]>} */
     const allPaperData = {};
     allPapersData = []; // 重置全局论文数据
     
@@ -301,6 +334,7 @@ async function loadPapersByDateRange(startDate, endDate) {
     paperData = allPaperData;
 
     // 提取所有论文标题
+    /** @type {string[]} */
     const allTitle = [];
     Object.keys(paperData).forEach(category => {
       paperData[category].forEach(paper => {
@@ -309,6 +343,7 @@ async function loadPapersByDateRange(startDate, endDate) {
     });
 
     // 提取关键词并进行总结
+    /** @param {string} text @returns {string[]} */
     const extractKeywords = (text) => {
       // 移除特殊字符和多余空格
       const cleanText = text.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -317,10 +352,11 @@ async function loadPapersByDateRange(startDate, endDate) {
       const doc = nlp(cleanText);
       
       // 提取名词短语和重要词汇
+      /** @type {Set<string>} */
       const terms = new Set();
       
       // 提取名词短语
-      doc.match('#Noun+').forEach(match => {
+      doc.match('#Noun+').forEach((/** @type {any} */ match) => {
         const phrase = match.text().toLowerCase();
         if (phrase.split(' ').length <= 3) { // 最多3个词的短语
           terms.add(phrase);
@@ -328,7 +364,7 @@ async function loadPapersByDateRange(startDate, endDate) {
       });
       
       // 提取形容词+名词组合
-      doc.match('(#Adjective+ #Noun+)').forEach(match => {
+      doc.match('(#Adjective+ #Noun+)').forEach((/** @type {any} */ match) => {
         const phrase = match.text().toLowerCase();
         if (phrase.split(' ').length <= 3) {
           terms.add(phrase);
@@ -356,6 +392,7 @@ async function loadPapersByDateRange(startDate, endDate) {
       });
       
       // 统计词频
+      /** @type {Record<string, number>} */
       const termFreq = {};
       filteredTerms.forEach(term => {
         termFreq[term] = (termFreq[term] || 0) + 1;
@@ -366,6 +403,7 @@ async function loadPapersByDateRange(startDate, endDate) {
       });
       
       // 计算 TF 值（词频）
+      /** @type {Record<string, number>} */
       const tfScores = {};
       const totalTerms = Object.values(termFreq).reduce((a, b) => a + b, 0);
       Object.entries(termFreq).forEach(([term, freq]) => {
@@ -380,7 +418,9 @@ async function loadPapersByDateRange(startDate, endDate) {
     };
 
     // 处理所有摘要
+    /** @type {Map<string, number>} */
     const allKeywords = new Map();
+    /** @type {Map<string, Map<string, number>>} */
     const keywordTrends = new Map(); // 添加关键词趋势数据结构
     
     // 初始化日期数据结构
@@ -398,7 +438,7 @@ async function loadPapersByDateRange(startDate, endDate) {
         allKeywords.set(keyword, (allKeywords.get(keyword) || 0) + 1);
         
         // 更新日期维度统计
-        const dateStats = keywordTrends.get(date);
+        const dateStats = /** @type {Map<string, number>} */ (keywordTrends.get(date));
         dateStats.set(keyword, (dateStats.get(keyword) || 0) + 1);
       });
     });
@@ -421,7 +461,7 @@ async function loadPapersByDateRange(startDate, endDate) {
         values: Array.from(keywordTrends.entries()).map(([date, stats]) => ({
           date: new Date(date + 'T00:00:00Z'),  // 确保日期被正确解析，添加时间部分
           count: stats.get(keyword) || 0
-        })).sort((a, b) => a.date - b.date)  // 确保数据按日期排序
+        })).sort((a, b) => a.date.getTime() - b.date.getTime())  // 确保数据按日期排序
       };
     });
 
@@ -464,7 +504,7 @@ async function loadPapersByDateRange(startDate, endDate) {
     if (startDate !== endDate) {
       // 创建折线图
       const margin = {top: 20, right: 180, bottom: 80, left: 60}; // 增加底部边距以适应更长的日期标签
-      const width = document.getElementById('trendChart').offsetWidth - margin.left - margin.right;
+      const width = byId('trendChart').offsetWidth - margin.left - margin.right;
       const height = 400 - margin.top - margin.bottom;
 
       const svg = d3.select('#trendChart')
@@ -476,11 +516,11 @@ async function loadPapersByDateRange(startDate, endDate) {
 
       // 设置比例尺
       const x = d3.scaleTime()
-        .domain(d3.extent(validDatesInRange, d => new Date(d)))
+        .domain(d3.extent(validDatesInRange, (/** @type {string} */ d) => new Date(d)))
         .range([0, width]);
 
       const y = d3.scaleLinear()
-        .domain([0, d3.max(trendData, d => d3.max(d.values, v => v.count))])
+        .domain([0, d3.max(trendData, (/** @type {TrendSeries} */ d) => d3.max(d.values, (/** @type {TrendPoint} */ v) => v.count))])
         .range([height, 0]);
 
       // 创建颜色比例尺，使用更柔和的颜色
@@ -509,6 +549,7 @@ async function loadPapersByDateRange(startDate, endDate) {
           .tickFormat(''));
 
       // 添加一个函数来确定合适的日期格式
+      /** @param {string[]} dates */
       function determineDateFormat(dates) {
         const startDate = new Date(dates[0]);
         const endDate = new Date(dates[dates.length - 1]);
@@ -594,15 +635,15 @@ async function loadPapersByDateRange(startDate, endDate) {
 
       // 定义面积生成器
       const area = d3.area()
-        .x(d => x(d.date))
+        .x((/** @type {TrendPoint} */ d) => x(d.date))
         .y0(height)
-        .y1(d => y(d.count))
+        .y1((/** @type {TrendPoint} */ d) => y(d.count))
         .curve(d3.curveBasis); // 使用更平滑的曲线
 
       // 定义线条生成器
       const line = d3.line()
-        .x(d => x(d.date))
-        .y(d => y(d.count))
+        .x((/** @type {TrendPoint} */ d) => x(d.date))
+        .y((/** @type {TrendPoint} */ d) => y(d.count))
         .curve(d3.curveBasis); // 使用相同的平滑曲线
 
       // 添加渐变定义
@@ -611,7 +652,7 @@ async function loadPapersByDateRange(startDate, endDate) {
         .data(trendData)
         .enter()
         .append("linearGradient")
-        .attr("id", (d, i) => `gradient-${i}`)
+        .attr("id", (/** @type {TrendSeries} */ d, /** @type {number} */ i) => `gradient-${i}`)
         .attr("x1", "0%")
         .attr("y1", "0%")
         .attr("x2", "0%")
@@ -619,12 +660,12 @@ async function loadPapersByDateRange(startDate, endDate) {
 
       gradient.append("stop")
         .attr("offset", "0%")
-        .attr("stop-color", d => color(d.keyword))
+        .attr("stop-color", (/** @type {TrendSeries} */ d) => color(d.keyword))
         .attr("stop-opacity", 0.3);
 
       gradient.append("stop")
         .attr("offset", "100%")
-        .attr("stop-color", d => color(d.keyword))
+        .attr("stop-color", (/** @type {TrendSeries} */ d) => color(d.keyword))
         .attr("stop-opacity", 0.05);
 
       // 绘制面积
@@ -633,8 +674,8 @@ async function loadPapersByDateRange(startDate, endDate) {
         .enter()
         .append('path')
           .attr('class', 'area')
-          .attr('d', d => area(d.values))
-          .style('fill', (d, i) => `url(#gradient-${i})`)
+          .attr('d', (/** @type {TrendSeries} */ d) => area(d.values))
+          .style('fill', (/** @type {TrendSeries} */ d, /** @type {number} */ i) => `url(#gradient-${i})`)
           .style('opacity', 0.7);
 
       // 绘制折线
@@ -643,8 +684,8 @@ async function loadPapersByDateRange(startDate, endDate) {
         .enter()
         .append('path')
           .attr('class', 'line')
-          .attr('d', d => line(d.values))
-          .style('stroke', d => color(d.keyword))
+          .attr('d', (/** @type {TrendSeries} */ d) => line(d.values))
+          .style('stroke', (/** @type {TrendSeries} */ d) => color(d.keyword))
           .style('fill', 'none')
           .style('stroke-width', 2)
           .style('opacity', 0.8);
@@ -655,25 +696,25 @@ async function loadPapersByDateRange(startDate, endDate) {
         .enter()
         .append('g')
           .attr('class', 'legend')
-          .attr('transform', (d, i) => `translate(${width + 20},${i * 25})`);
+          .attr('transform', (/** @type {TrendSeries} */ d, /** @type {number} */ i) => `translate(${width + 20},${i * 25})`);
 
       legend.append('rect')
         .attr('x', 0)
         .attr('width', 18)
         .attr('height', 18)
-        .style('fill', d => color(d.keyword))
+        .style('fill', (/** @type {TrendSeries} */ d) => color(d.keyword))
         .style('opacity', 0.7);
 
       legend.append('text')
         .attr('x', 28)
         .attr('y', 13)
-        .text(d => d.keyword)
+        .text((/** @type {TrendSeries} */ d) => d.keyword)
         .style('font-size', '12px')
         .style('alignment-baseline', 'middle');
 
       // 添加交互效果
       legend.style('cursor', 'pointer')
-        .on('mouseover', function(event, d) {
+        .on('mouseover', function(/** @type {MouseEvent} */ event, /** @type {TrendSeries} */ d) {
           const keyword = d.keyword;
           
           // 降低其他线条和区域的透明度
@@ -682,11 +723,11 @@ async function loadPapersByDateRange(startDate, endDate) {
           
           // 高亮当前选中的线条和区域
           svg.selectAll('.area')
-            .filter(p => p.keyword === keyword)
+            .filter((/** @type {TrendSeries} */ p) => p.keyword === keyword)
             .style('opacity', 0.9);
           
           svg.selectAll('.line')
-            .filter(p => p.keyword === keyword)
+            .filter((/** @type {TrendSeries} */ p) => p.keyword === keyword)
             .style('opacity', 1)
             .style('stroke-width', 3);
         })
@@ -703,13 +744,15 @@ async function loadPapersByDateRange(startDate, endDate) {
     container.innerHTML = `
       <div class="loading-container">
         <p>Loading data fails. Please retry.</p>
-        <p>Error messages: ${error.message}</p>
+        <p>Error messages: ${/** @type {Error} */ (error).message}</p>
       </div>
     `;
   }
 }
 
+/** @param {string} jsonlText @param {string} date @returns {Record<string, StatPaper[]>} */
 function parseJsonlData(jsonlText, date) {
+  /** @type {Record<string, StatPaper[]>} */
   const result = {};
   
   const lines = jsonlText.trim().split('\n');
@@ -754,7 +797,7 @@ function parseJsonlData(jsonlText, date) {
   return result;
 }
 
-function formatDate(dateString) {
+function formatDate(/** @type {string} */ dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
     year: 'numeric',
@@ -764,10 +807,10 @@ function formatDate(dateString) {
 }
 
 // 修改 showRelatedPapers 函数中生成论文卡片的部分
-function showRelatedPapers(keyword) {
-    const sidebar = document.getElementById('paperSidebar');
-    const selectedKeywordElement = document.getElementById('selectedKeyword');
-    const relatedPapersContainer = document.getElementById('relatedPapers');
+function showRelatedPapers(/** @type {string} */ keyword) {
+    const sidebar = byId('paperSidebar');
+    const selectedKeywordElement = byId('selectedKeyword');
+    const relatedPapersContainer = byId('relatedPapers');
     
     // 更新关键词显示
     selectedKeywordElement.textContent = 'Keyword: ' + keyword;
@@ -802,6 +845,6 @@ function showRelatedPapers(keyword) {
 
 // 添加新函数：关闭侧边栏
 function closeSidebar() {
-  const sidebar = document.getElementById('paperSidebar');
+  const sidebar = byId('paperSidebar');
   sidebar.classList.remove('active');
 }

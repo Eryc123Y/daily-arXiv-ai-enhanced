@@ -84,3 +84,51 @@
  * @property {'conference' | 'journal'} kind
  * @property {string | null} area      e.g. "Graphics and VR"
  */
+
+/**
+ * A line of a day's raw or summary file as parsed (PaperData.parseJsonl).
+ * @typedef {ArxivRecord | VenueRecord | SummaryRecord} RawRecord
+ */
+
+/**
+ * A raw or merged record, for helpers that take either.
+ * @typedef {RawRecord | PageRecord} AnyRecord
+ */
+
+/**
+ * What the page knows about a watched venue (Sources.venueIndex).
+ * @typedef {object} VenueInfo
+ * @property {'conference' | 'journal'} kind
+ * @property {string | null} area
+ */
+
+/** @typedef {Map<string, VenueInfo>} VenueIndex */
+
+/**
+ * A link button: [url, label, CSS class].
+ * @typedef {[string, string, string]} LinkButton
+ */
+
+/**
+ * A row of the paper list: the record, its place in the day's file, and
+ * what Render.describe found in it.
+ * @typedef {{ record: PageRecord, index: number, info: PaperInfo }} ListEntry
+ */
+
+/** @typedef {ReturnType<typeof import('./render.js').describe>} PaperInfo */
+
+/**
+ * A venue's papers in the weekly list (Streams.venueGroups).
+ * @typedef {object} VenueGroup
+ * @property {string} key
+ * @property {string} label
+ * @property {string | null} kind
+ * @property {string | null} area
+ * @property {ListEntry[]} entries
+ */
+
+/**
+ * An interest topic: a name and its keywords (js/interest-presets.js, or the
+ * reader's own keywords grouped by Render.topicsFor).
+ * @typedef {{ name: string, keywords: string[] }} Topic
+ */
