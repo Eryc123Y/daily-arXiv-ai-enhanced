@@ -14,6 +14,9 @@ const EMPTY_WEEKS_BEFORE_GIVING_UP = 2;
 
 const state = {
   days: [],
+  day: null,
+  from: null,
+  range: false,
   stream: 'arxiv',
   week: null,
   dayRecords: [],
@@ -44,6 +47,7 @@ const state = {
 
 const $ = id => document.getElementById(id);
 const esc = text => PaperData.escapeHtml(text);
+let picker = null;
 
 // --- Preferences --------------------------------------------------------------
 
@@ -371,10 +375,9 @@ function renderStatus(days) {
 // --- Days and the URL ---------------------------------------------------------
 
 function selectedDays() {
-  const end = $('daySelect').value;
-  if (!$('rangeToggle').checked) return [end];
-  const start = $('daySelectStart').value;
-  const [from, to] = start <= end ? [start, end] : [end, start];
+  if (!state.day) return [];
+  if (!state.range) return [state.day];
+  const [from, to] = state.from <= state.day ? [state.from, state.day] : [state.day, state.from];
   return state.days.filter(d => d >= from && d <= to).sort();
 }
 
@@ -396,11 +399,11 @@ function readHash() {
   const params = new URLSearchParams(location.hash.slice(1));
   const day = params.get('day');
   const from = params.get('from');
-  if (day && state.days.includes(day)) $('daySelect').value = day;
+  if (day && state.days.includes(day)) state.day = day;
   if (from && state.days.includes(from)) {
-    $('daySelectStart').value = from;
+    state.from = from;
+    state.range = true;
     $('rangeToggle').checked = true;
-    $('rangeStart').hidden = false;
   }
   state.topic = params.get('topic');
   state.codeOnly = params.get('code') === '1';
@@ -411,19 +414,30 @@ function readHash() {
   state.selectedId = params.get('paper');
 }
 
-/** The top bar's picker: days for arXiv, weeks with venue papers for the weekly stream. */
+/** The top bar: the date button and its calendar, and the ‹ › buttons. */
 function updateDayButtons() {
   const venues = inVenues();
-  $('daySelect').hidden = venues;
-  $('weekSelect').hidden = !venues;
   $('rangeToggle').parentElement.hidden = venues;
-  $('rangeStart').hidden = venues || !$('rangeToggle').checked;
   $('dayForm').setAttribute('aria-label', venues ? 'Choose a week' : 'Choose a day');
   $('prevDay').setAttribute('aria-label', venues ? 'Previous week' : 'Previous day');
   $('nextDay').setAttribute('aria-label', venues ? 'Next week' : 'Next day');
-  const select = venues ? $('weekSelect') : $('daySelect');
-  $('prevDay').disabled = select.selectedIndex < 0 || select.selectedIndex >= select.options.length - 1;
-  $('nextDay').disabled = select.selectedIndex <= 0;
+  const { older, newer } = steps();
+  $('prevDay').disabled = !older;
+  $('nextDay').disabled = !newer;
+  picker.update(Calendar.viewFor({ ...state, venues, selected: selectedDays() }));
+}
+
+/** The choices either side of the current one, for the ‹ › buttons. */
+function steps() {
+  return inVenues() ? Calendar.neighbours([...state.weeks.keys()], state.week) : Calendar.neighbours(state.days, state.day);
+}
+
+/** A choice from the date picker: { day }, { start, end } or { week }. */
+function pickDays({ day, start, end, week }) {
+  if (week) state.week = week;
+  else if (start) Object.assign(state, { from: start, day: end });
+  else state.day = day;
+  showSelection();
 }
 
 /** A failed download, shown as a failure with a way to try again, never as an empty day. */
@@ -513,10 +527,6 @@ function noteVenueDay(day, records) {
 
 function refreshWeeks() {
   state.weeks = Streams.venueWeeks(state.venueDays);
-  const chosen = $('weekSelect').value;
-  $('weekSelect').innerHTML = [...state.weeks.keys()].map(m => `<option value="${m}">${esc(Streams.weekLabel(m))}</option>`).join('');
-  if (state.weeks.has(chosen)) $('weekSelect').value = chosen;
-  else if (state.week && state.weeks.has(state.week)) $('weekSelect').value = state.week;
 }
 
 /** The week's venue papers, counted from its day files; a day that cannot be read counts as unknown. */
@@ -581,7 +591,6 @@ function renderStreams(days) {
 async function setStream(stream, week = null, { paper = null } = {}) {
   state.stream = stream;
   if (stream === Streams.VENUES) state.week = state.weeks.has(week) ? week : [...state.weeks.keys()][0] || null;
-  if (state.week) $('weekSelect').value = state.week;
   state.selectedId = paper;
   await showSelection({ keepTopic: true });
 }
@@ -644,24 +653,18 @@ function isTyping(target) {
 }
 
 function bindEvents() {
-  $('daySelect').addEventListener('change', () => showSelection());
-  $('daySelectStart').addEventListener('change', () => showSelection());
   $('rangeToggle').addEventListener('change', () => {
-    $('rangeStart').hidden = !$('rangeToggle').checked;
+    state.range = $('rangeToggle').checked;
     showSelection();
   });
-  const step = delta => {
-    const select = inVenues() ? $('weekSelect') : $('daySelect');
-    select.selectedIndex = Math.min(select.options.length - 1, Math.max(0, select.selectedIndex + delta));
-    if (inVenues()) state.week = select.value;
+  const step = which => {
+    const next = steps()[which];
+    if (!next) return;
+    state[inVenues() ? 'week' : 'day'] = next;
     showSelection();
   };
-  $('prevDay').addEventListener('click', () => step(1));
-  $('nextDay').addEventListener('click', () => step(-1));
-  $('weekSelect').addEventListener('change', () => {
-    state.week = $('weekSelect').value;
-    showSelection();
-  });
+  $('prevDay').addEventListener('click', () => step('older'));
+  $('nextDay').addEventListener('click', () => step('newer'));
   $('streamSwitch').addEventListener('click', event => {
     const button = event.target.closest('button[data-stream]');
     if (button && button.dataset.stream !== state.stream) setStream(button.dataset.stream, currentWeek(selectedDays()));
@@ -750,7 +753,8 @@ async function init() {
     showLoadError(error, init);
     return;
   }
-  const { days, categories } = listing;
+  const { categories } = listing;
+  const days = Calendar.limitDays(listing.days, DATA_CONFIG.earliestDay);
   state.days = days;
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
   state.venues = Sources.venueIndex(listing.venues);
@@ -766,12 +770,9 @@ async function init() {
     JsonMode.output(json, await DataSource.loadDay(days[0]));
     return;
   }
-  const options = days
-    .map(d => `<option value="${d}">${Render.formatDay(d, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</option>`)
-    .join('');
-  $('daySelect').innerHTML = options;
-  $('daySelectStart').innerHTML = options;
-  $('daySelectStart').value = days[Math.min(4, days.length - 1)];
+  state.day = days[0];
+  state.from = days[Math.min(4, days.length - 1)];
+  picker = CalendarPicker.create({ trigger: $('dateTrigger'), panel: $('datePicker'), label: $('dateTriggerText'), onPick: pickDays });
   readHash();
   const linkedPaper = state.selectedId;
   bindEvents();
@@ -785,7 +786,6 @@ async function init() {
   if (params.get('stream') === Streams.VENUES && !linkedWeek) {
     await discoverWeeks();
     Object.assign(state, Streams.readStream(params, state.weeks));
-    if (state.week) $('weekSelect').value = state.week;
     await showSelection({ keepTopic });
   } else {
     // Start loading the day or the linked week first, so counting weeks reuses the download.

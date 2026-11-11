@@ -37,6 +37,13 @@
      */
     mainCategories: ['cs.CV', 'cs.AI', 'cs.LG', 'cs.CL', 'stat.ML', 'cs.GR'],
 
+    /**
+     * The oldest day the page offers, or null for every day on the data
+     * branch. Days before 2025-12-29 were crawled by the upstream project
+     * before this fork started; set '2025-12-29' to hide them.
+     */
+    earliestDay: null,
+
     /** Main "Open on ..." button in the reading pane: 'alphaxiv' or 'arxiv' */
     primaryLink: 'alphaxiv',
 

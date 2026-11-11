@@ -442,24 +442,250 @@ textarea {
   gap: 6px;
 }
 
-.day-nav select {
+.date-trigger {
+  anchor-name: --date-trigger;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   height: 36px;
-  padding: 0 10px;
+  min-width: 150px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
   font-weight: 700;
   font-size: 14px;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
-.range-start {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.date-trigger svg {
+  flex: none;
   color: var(--muted);
 }
 
-/* The hidden attribute wins over any display rule (the range picker, the pipeline line, the stream switch). */
+.date-trigger:hover,
+.date-trigger[aria-expanded="true"],
+.date-trigger:has(+ .date-picker:popover-open) {
+  border-color: var(--muted);
+}
+
+/* The calendar (js/calendar-picker.js) ------------------------------------- */
+
+.date-picker {
+  width: 304px;
+  max-width: calc(100vw - 24px);
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 12px 32px rgba(15, 20, 30, 0.18), 0 2px 6px rgba(15, 20, 30, 0.08);
+}
+
+/* Under the date button, flipping when the window edge is near; without
+   anchor positioning, the script places it (see place() in the picker). */
+@supports (position-area: block-end) {
+  .date-picker {
+    position-anchor: --date-trigger;
+    inset: auto;
+    margin: 6px 0;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-inline, flip-block, flip-block flip-inline;
+  }
+}
+
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.picker-head .icon-button {
+  width: 32px;
+  height: 32px;
+  color: var(--ink);
+}
+
+.picker-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: 600 17px / 1 var(--serif);
+  cursor: pointer;
+}
+
+.picker-title::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  margin-top: -3px;
+  border-right: 1.6px solid var(--muted);
+  border-bottom: 1.6px solid var(--muted);
+  transform: rotate(45deg);
+}
+
+.picker-title[aria-expanded="true"]::after {
+  margin-top: 3px;
+  transform: rotate(-135deg);
+}
+
+.picker-title:hover {
+  background: var(--hover);
+}
+
+.picker-hint {
+  margin: 8px 2px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.picker-grid {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: separate;
+  border-spacing: 0 2px;
+  table-layout: fixed;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.picker-grid th {
+  height: 26px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.picker-grid td {
+  height: 36px;
+  padding: 0;
+  text-align: center;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.picker-grid td[aria-disabled="true"] {
+  color: var(--stamp);
+  cursor: default;
+}
+
+.picker-grid td.is-outside:not([aria-disabled="true"]) {
+  color: var(--muted);
+}
+
+.picker-grid:not(.is-weeks) td[aria-disabled="false"]:hover {
+  background: var(--hover);
+}
+
+.picker-grid td:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.picker-grid td.is-in-range {
+  border-radius: 0;
+  background: var(--select);
+}
+
+.picker-grid:not(.is-weeks) td[aria-selected="true"] {
+  background: var(--button);
+  color: var(--button-ink);
+  font-weight: 700;
+}
+
+.picker-grid td.is-range-start {
+  border-radius: 8px 0 0 8px;
+}
+
+.picker-grid td.is-range-end {
+  border-radius: 0 8px 8px 0;
+}
+
+.picker-grid td.is-range-start.is-range-end {
+  border-radius: 8px;
+}
+
+/* Week mode: whole rows; the last column holds the week's paper count. */
+.picker-grid.is-weeks td {
+  border-radius: 0;
+}
+
+.picker-grid.is-weeks tr > td:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.picker-grid.is-weeks tr > td:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
+.picker-grid.is-weeks tr.is-week-enabled:hover td {
+  background: var(--hover);
+}
+
+.picker-grid.is-weeks tr.is-week-selected td {
+  background: var(--button);
+  color: var(--button-ink);
+  font-weight: 700;
+}
+
+.picker-grid .week-count {
+  width: 40px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: inherit;
+}
+
+.picker-grid tr:not(.is-week-enabled) .week-count {
+  cursor: default;
+}
+
+.picker-grid tr.is-week-selected .week-count {
+  color: var(--button-ink);
+}
+
+.picker-months {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.picker-months button {
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.picker-months button:hover:not(:disabled) {
+  border-color: var(--muted);
+}
+
+.picker-months button[aria-current="true"] {
+  border-color: var(--button);
+  background: var(--button);
+  color: var(--button-ink);
+  font-weight: 700;
+}
+
+.picker-months button:disabled {
+  border-style: dashed;
+  color: var(--stamp);
+  cursor: default;
+}
+
+/* The hidden attribute wins over any display rule (the range toggle, the pipeline line, the stream switch). */
 [hidden] {
   display: none !important;
 }
@@ -1483,14 +1709,9 @@ textarea {
     flex-basis: 100%;
   }
 
-  .day-nav select {
+  .date-trigger {
     flex: 1;
     min-width: 0;
-  }
-
-  .range-toggle,
-  .range-start {
-    display: none;
   }
 
   .search {
