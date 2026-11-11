@@ -165,6 +165,37 @@ def test_a_feed_paper_already_published_as_an_arxiv_paper_is_not_added(feed, cap
     assert ids_on(feed.remote, TODAY) == ["B", "C", "doi:10.1109/tip.2026.2"]
 
 
+def test_a_burst_is_published_over_several_runs_and_converges(feed, capsys):
+    """Proceedings arrive as one batch: at most 150 a run, the cursor stays until the burst is through."""
+    seed(feed, {"2026-11-06": [paper("A")]}, cursor="2026-11-05")
+    feed.set_lines([feed_line(n, "2026-11-06") for n in range(1, 401)])
+    reports = []
+
+    for _ in range(3):
+        _, out = feed.run(capsys=capsys)
+        reports.append(report_of(out)["feed"])
+        reports[-1]["cursor"] = json.loads(branch_file(feed.remote, CURSOR))["since"]
+
+    assert [(r["added"], r["deferred"], r["cursor"]) for r in reports] == [
+        (150, 250, "2026-11-05"),
+        (150, 100, "2026-11-05"),
+        (100, 0, TODAY),
+    ]
+    published = [i for i in ids_on(feed.remote, TODAY) if i.startswith("doi:")]
+    assert len(published) == len(set(published)) == 400
+    assert published[:3] == ["doi:10.1109/tip.2026.1", "doi:10.1109/tip.2026.2", "doi:10.1109/tip.2026.3"]
+
+
+def test_the_cap_comes_from_the_environment(feed, monkeypatch, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]})
+    monkeypatch.setenv("FEED_MAX_PER_RUN", "2")
+    feed.set_lines([feed_line(n, "2026-11-08") for n in range(1, 6)])
+
+    _, out = feed.run(capsys=capsys)
+
+    assert (report_of(out)["feed"]["added"], report_of(out)["feed"]["deferred"]) == (2, 3)
+
+
 # --- Days without arXiv's papers ----------------------------------------------------
 
 
@@ -231,7 +262,8 @@ def test_a_mixed_day_end_to_end(feed, monkeypatch, capsys):
     raw = branch_file(feed.remote, f"data/{TODAY}.jsonl")
     assert "Private publisher abstract" not in raw
     published = parse_jsonl(raw)[1]
-    assert set(published) == {"id", "source", "title", "authors", "venue", "published", "doi", "oa_url", "url", "categories"}
+    assert set(published) == {"id", "source", "title", "authors", "venue", "published", "doi", "oa_url", "url", "categories", "has_abstract"}
+    assert [r.get("has_abstract") for r in parse_jsonl(raw)] == [None, True, False]
     assert status_of(feed.clone, TODAY, capsys) == {"date": TODAY, "total": 3, "done": 0, "pending": 2, "no_abstract": 1}
 
     _, out = run(feed.clone, "prepare", "--date", TODAY, capsys=capsys)
@@ -299,3 +331,17 @@ def test_the_report_waits_for_the_days_arxiv_batch_not_its_feed_papers(feed, cap
     branch.fetch()
 
     assert digest.newest_day(branch, TODAY, 3) == "2026-11-06"
+
+
+def test_a_feed_radar_paper_is_written_once_and_then_known(tmp_path):
+    """Radar rows and the known ids read doi: and openreview: ids too, not only arXiv-shaped ones."""
+    record = {"id": "doi:10.1109/tip.2026.7", "source": "crossref", "title": "T", "authors": [], "venue": "TIP", "categories": []}
+    found = digest.build_candidates([record], [], [], {}, known=set())
+    picks = {"radar": [{"id": record["id"], "level": "高", "reason": "r", "action": "", "check": False}]}
+    radar = tmp_path / "project-radar.md"
+
+    digest.append_radar_rows(radar, "2026-11-09", found, picks)
+    digest.append_radar_rows(radar, "2026-11-09", found, picks)
+
+    assert radar.read_text().count("doi:10.1109/tip.2026.7") == 1
+    assert digest.known_ids(tmp_path, "2026-11-10") == {"doi:10.1109/tip.2026.7"}

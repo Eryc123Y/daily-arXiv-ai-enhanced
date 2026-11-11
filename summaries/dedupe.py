@@ -87,7 +87,8 @@ class Index:
 def _fill(kept, other):
     """`kept` with the fields it lacks taken from `other`, a copy of the same paper from another source."""
     record = {**kept.record, **{k: other.record[k] for k in ("doi", "oa_url") if not kept.record.get(k) and other.record.get(k)}}
-    return replace(kept, record=record, abstract=kept.abstract or other.abstract)
+    abstract = kept.abstract or other.abstract
+    return replace(kept, record={**record, "has_abstract": bool(abstract)}, abstract=abstract)
 
 
 def fresh(existing, batch):

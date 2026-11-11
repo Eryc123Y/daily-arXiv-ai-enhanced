@@ -30,9 +30,11 @@ WATCHLIST = Path(__file__).with_name("watchlist.json")
 FEED_CURSOR = "assets/feed-cursor.json"
 FIRST_LOOKBACK_DAYS = 7  # how far back the very first run asks
 HISTORY_DAYS = 60  # dedupe looks this far back on the data branch
+MAX_PER_RUN = 150  # FEED_MAX_PER_RUN default: proceedings arrive in one batch (ECCV about 2,800, Phase 0)
 FEED_TIMEOUT = 30 * 60
 KINDS = ("conference", "journal")
-VENUE_FIELDS = {"name", "kind", "group", "issn", "openalex_source", "openreview_venue", "sources"}
+VENUE_FIELDS = {"name", "kind", "group", "issn", "openalex_source", "openreview_venues", "sources"}
+LIST_FIELDS = ("issn", "openreview_venues")
 DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WEB = re.compile(r"^https?://\S+$")
 
@@ -63,6 +65,12 @@ def _check_venue(venue):
     unknown = set(venue) - VENUE_FIELDS
     if unknown:
         raise FeedError(f"watch list: {name} has unknown fields {sorted(unknown)}")
+    for key in LIST_FIELDS:
+        value = venue.get(key, [])
+        if not isinstance(value, list) or not all(isinstance(v, str) and v.strip() for v in value):
+            raise FeedError(f"watch list: {name} {key} must be a list of strings")
+    if "openalex_source" in venue and not _text(venue["openalex_source"]):
+        raise FeedError(f"watch list: {name} openalex_source must be a string")
     sources = venue.get("sources", list(SOURCES))
     outside = [s for s in sources if s not in SOURCES] if isinstance(sources, list) else [sources]
     if outside:
@@ -148,6 +156,7 @@ def parse_line(text):
         "oa_url": oa_url,
         "url": url,
         "categories": [],
+        "has_abstract": bool(optional["abstract"][1]),
     }
     return FeedPaper(record=record, abstract=optional["abstract"][1])
 
@@ -222,19 +231,32 @@ def history(branch, day, days=HISTORY_DAYS):
     return records
 
 
-def publish(branch, day, papers, work_dir):
-    """Publish the papers not already on the branch under `day`, moving the cursor in the same commit."""
+def max_per_run(env):
+    """FEED_MAX_PER_RUN, a positive integer, else MAX_PER_RUN."""
+    try:
+        value = int(env.get("FEED_MAX_PER_RUN") or MAX_PER_RUN)
+    except ValueError:
+        return MAX_PER_RUN
+    return value if value > 0 else MAX_PER_RUN
+
+
+def publish(branch, day, papers, work_dir, limit=MAX_PER_RUN):
+    """Publish the papers not already on the branch under `day`, moving the cursor in the same commit.
+
+    At most `limit` new papers go in, first come first; when more arrived the cursor stays, so the next
+    run asks for the same window again and dedupe drops what this one published (`deferred` in the report).
+    """
     result = {}
     at = datetime.now(UTC).isoformat(timespec="seconds")
 
     def build(current):
-        kept, dropped = dedupe.fresh(history(current, day), papers)
+        fresh, dropped = dedupe.fresh(history(current, day), papers)
+        kept = fresh[:limit]
         existing = read_records(current, raw_path(day))
         combined = dedupe_by_id(existing + [p.record for p in kept])
-        result.update(kept=kept, duplicates=dropped, added=len(combined) - len(existing))
-        if not result["added"] and cursor_since(current, day) == day and current.read(FEED_CURSOR):
-            return {}  # nothing new and the cursor already at `day`: no commit
-        cursor = {FEED_CURSOR: json.dumps({"since": day, "at": at}, indent=2) + "\n"}
+        result.update(kept=kept, duplicates=dropped, deferred=len(fresh) - len(kept), added=len(combined) - len(existing))
+        moves = not result["deferred"] and not (cursor_since(current, day) == day and current.read(FEED_CURSOR))
+        cursor = {FEED_CURSOR: json.dumps({"since": day, "at": at}, indent=2) + "\n"} if moves else {}
         return {raw_path(day): dump_jsonl(combined), **cursor} if result["added"] else cursor
 
     # Abstracts are saved before the push: one saved for a paper a racing run published instead is harmless,
@@ -245,6 +267,7 @@ def publish(branch, day, papers, work_dir):
     return {
         "added": result["added"],
         "duplicates": result["duplicates"],
+        "deferred": result["deferred"],
         "no_abstract": sum(1 for p in result["kept"] if not p.abstract),
         "commit": commit or "",
     }
@@ -266,6 +289,6 @@ def run(branch, day, repo_dir, work_dir, env):
     except FeedError as error:
         return {"status": "error", "since": since, "reason": str(error)}
     papers, invalid = parse_output(output)
-    published = publish(branch, day, papers, work_dir)
+    published = publish(branch, day, papers, work_dir, max_per_run(env))
     status = "published" if published["added"] else "nothing new"
     return {"status": status, "since": since, "received": len(papers), "invalid": invalid, **published}

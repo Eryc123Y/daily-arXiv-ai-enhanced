@@ -49,6 +49,7 @@ class FeedRecord(TypedDict):
     oa_url: str | None  # a lawful open-access copy, when the source knows one
     url: str  # the publisher's or OpenReview's page
     categories: list[str]  # always empty; kept so readers that expect it need no special case
+    has_abstract: bool  # an abstract was received (it stays local): a summary can be written for this paper
 
 
 class FeedLine(TypedDict):
@@ -80,7 +81,7 @@ class Venue(TypedDict):
     name: str
     kind: Literal["conference", "journal"]
     group: str
-    issn: NotRequired[str]
-    openalex_source: NotRequired[str]
-    openreview_venue: NotRequired[str]
+    issn: NotRequired[list[str]]
+    openalex_source: NotRequired[str]  # e.g. "S4210173141"
+    openreview_venues: NotRequired[list[str]]  # e.g. ["ICLR.cc/2026/Conference"]
     sources: NotRequired[list[FeedSource]]

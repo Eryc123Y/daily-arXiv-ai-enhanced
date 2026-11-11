@@ -40,6 +40,18 @@ def test_watch_list_v1_holds_the_specs_nineteen_venues():
     assert {v["kind"] for v in venues} == {"conference", "journal"}
 
 
+def test_every_journal_names_its_openalex_source_and_issns():
+    """The feed command resolves venues from these (values from the Phase 0 measurement)."""
+    venues = {v["name"]: v for v in feed.load_watchlist()}
+
+    for venue in venues.values():
+        if venue["kind"] == "journal":
+            assert venue["openalex_source"].startswith("S") and venue["issn"], venue["name"]
+    assert venues["IEEE TIP"]["issn"] == ["1057-7149", "1941-0042"]
+    assert "openalex_source" not in venues["ECCV"]  # inside LNCS; found by container title
+    assert "ICLR.cc/2026/Conference" in venues["ICLR"]["openreview_venues"]
+
+
 def write_list(tmp_path, venues):
     path = tmp_path / "watchlist.json"
     path.write_text(json.dumps({"venues": venues}))
@@ -60,6 +72,10 @@ def test_watch_list_refuses_a_source_outside_the_lawful_three(tmp_path):
         {"name": "TIP", "kind": "magazine", "group": "Journals"},
         {"name": "", "kind": "journal", "group": "Journals"},
         {"name": "TIP", "kind": "journal", "group": "Journals", "scrape_url": "https://example.org"},
+        {"name": "TIP", "kind": "journal", "group": "Journals", "issn": "1057-7149"},
+        {"name": "TIP", "kind": "journal", "group": "Journals", "issn": [1057]},
+        {"name": "ICLR", "kind": "conference", "group": "x", "openreview_venues": "ICLR.cc/2026/Conference"},
+        {"name": "TIP", "kind": "journal", "group": "Journals", "openalex_source": ""},
     ],
 )
 def test_watch_list_refuses_bad_entries(tmp_path, venue):
@@ -68,7 +84,7 @@ def test_watch_list_refuses_bad_entries(tmp_path, venue):
 
 
 def test_watch_list_accepts_optional_source_ids(tmp_path):
-    venue = {"name": "TIP", "kind": "journal", "group": "Journals", "issn": "1057-7149", "sources": ["openalex", "crossref"]}
+    venue = {"name": "TIP", "kind": "journal", "group": "Journals", "issn": ["1057-7149", "1941-0042"], "openalex_source": "S4210173141", "sources": ["openalex", "crossref"]}
 
     assert feed.load_watchlist(write_list(tmp_path, [venue])) == [venue]
 
@@ -108,6 +124,7 @@ def test_published_record_has_the_shape_and_no_abstract():
         "oa_url": "https://example.edu/paper.pdf",
         "url": "https://doi.org/10.1109/TCSVT.2026.1234567",
         "categories": [],
+        "has_abstract": True,
     }
     assert set(paper.record) == set(shapes.FeedRecord.__annotations__)
     assert paper.abstract == "We convert monocular clips to stereo."
@@ -151,7 +168,7 @@ def test_invalid_lines_are_dropped_and_counted():
 def test_an_empty_abstract_counts_as_none():
     [paper], _ = feed.parse_output(line(abstract="   "))
 
-    assert paper.abstract is None
+    assert paper.abstract is None and paper.record["has_abstract"] is False
 
 
 # --- Dedupe -------------------------------------------------------------------
@@ -208,6 +225,7 @@ def test_the_batch_is_deduplicated_and_keeps_the_most_complete_copy():
     assert kept[0].record["id"] == "doi:10.1109/tcsvt.2026.1234567"
     assert kept[0].record["oa_url"] == "https://openreview.net/pdf?id=xyz"
     assert kept[0].abstract == "We convert monocular clips to stereo."
+    assert kept[0].record["has_abstract"] is True
 
 
 @pytest.mark.parametrize(

@@ -38,7 +38,8 @@ MAX_PER_TOPIC, MAX_RADAR, MAX_OTHER, MAX_DEEP = 3, 3, 2, 2
 SNIPPET_CHARS, TITLE_CHARS = 160, 90
 HOT_UPVOTES, HOT_PAPERS = 10, 2  # the previous batch's Hugging Face favourites named in the report
 SUMMARISED_ENOUGH = 0.95  # --wait-summaries: a few papers left pending by failed chunks do not hold the report
-ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b")
+# A paper id in the radar table or the brief: an arXiv ID, or a feed paper's doi:/openreview: id.
+ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b|\b(?:doi|openreview):[^\s|]+")
 RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
 SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.I)
 INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.I)
