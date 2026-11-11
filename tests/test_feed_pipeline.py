@@ -113,6 +113,16 @@ def test_a_run_after_five_missed_days_publishes_them_once_and_a_second_run_nothi
     assert git(feed.remote, "rev-parse", "data") == head
 
 
+def test_the_feed_is_asked_for_journals_and_conferences(feed, capsys):
+    """LitScout's watch reads only journals unless told otherwise; the watch list has both kinds."""
+    seed(feed, {"2026-11-06": [paper("A")]}, cursor="2026-11-08")
+
+    feed.run(capsys=capsys)
+
+    [call] = feed.calls()
+    assert call["kinds"] == "journal,conference"
+
+
 def test_the_first_run_looks_back_a_week(feed, capsys):
     seed(feed, {"2026-11-06": [paper("A")]})
     feed.new = [paper("A")]  # arXiv has not announced today yet

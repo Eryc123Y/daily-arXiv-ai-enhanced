@@ -2,9 +2,10 @@
 
 The feed's source adapters live in LitScout (spec S1, Q1); this pipeline only
 runs its command. FEED_COMMAND is a JSON argv list; the pipeline appends
-`--since YYYY-MM-DD --venues <watch list>` and reads JSON Lines from stdout,
-one paper per line (shape `FeedLine` in shapes.py). `--since` asks for papers
-the sources listed on or after that day.
+`--since YYYY-MM-DD --venues <watch list> --kinds journal,conference` and
+reads JSON Lines from stdout, one paper per line (shape `FeedLine` in
+shapes.py). `--since` asks for papers the sources listed on or after that day;
+journals and conferences share the one cursor, so every run asks for both.
 
 Feed papers are published under the day they were fetched, in the same raw
 file as that day's arXiv papers, so a two-week-old journal paper reaches
@@ -50,6 +51,7 @@ HISTORY_DAYS = 60  # dedupe looks this far back on the data branch
 MAX_PER_RUN = 150  # FEED_MAX_PER_RUN default: proceedings arrive in one batch (ECCV about 2,800, Phase 0)
 FEED_TIMEOUT = 30 * 60
 KINDS = ("conference", "journal")
+ASKED_KINDS = "journal,conference"  # LitScout's watch reads only journals unless --kinds says otherwise
 MATCHES = ("all", "topics")  # `match`: every paper of the venue, or only those on an interest topic
 TEXT_FIELDS = ("area", "openalex_source", "acl_anthology", "pmlr", "doi_prefix")
 LIST_FIELDS = ("issn", "openreview_venues")
@@ -259,7 +261,7 @@ def feed_command(env):
 
 def run_command(argv, since, venues, cwd):
     """The command's stdout; FeedError with its one-line reason when it fails."""
-    full = [*argv, "--since", since, "--venues", str(venues)]
+    full = [*argv, "--since", since, "--venues", str(venues), "--kinds", ASKED_KINDS]
     try:
         result = subprocess.run(full, cwd=str(cwd), capture_output=True, text=True, timeout=FEED_TIMEOUT, stdin=subprocess.DEVNULL, check=False)
     except (subprocess.TimeoutExpired, OSError) as error:
