@@ -2,96 +2,379 @@
   {
     "name": "CVPR",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ICCV",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ECCV",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "NeurIPS",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ICML",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ICLR",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "AAAI",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "IJCAI",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ACM MM",
     "kind": "conference",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "ACM TOG",
     "kind": "journal",
-    "area": "Graphics and VR"
+    "area": "Graphics and VR",
+    "top": true
   },
   {
     "name": "IEEE TVCG",
     "kind": "journal",
-    "area": "Graphics and VR"
+    "area": "Graphics and VR",
+    "top": true
   },
   {
     "name": "Computer Graphics Forum",
     "kind": "journal",
-    "area": "Graphics and VR"
+    "area": "Graphics and VR",
+    "top": true
   },
   {
     "name": "IEEE TPAMI",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "IJCV",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "IEEE TIP",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "IEEE TCSVT",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "JMLR",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "TMLR",
     "kind": "journal",
-    "area": "ML and vision"
+    "area": "ML and vision",
+    "top": true
   },
   {
     "name": "Journal of Vision",
     "kind": "journal",
-    "area": "Vision science"
+    "area": "3D, stereo and perception",
+    "top": true
+  },
+  {
+    "name": "ACL",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": true
+  },
+  {
+    "name": "EMNLP",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": true
+  },
+  {
+    "name": "NAACL",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": true
+  },
+  {
+    "name": "EACL",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": false
+  },
+  {
+    "name": "TACL",
+    "kind": "journal",
+    "area": "NLP and linguistics",
+    "top": true
+  },
+  {
+    "name": "Computational Linguistics",
+    "kind": "journal",
+    "area": "NLP and linguistics",
+    "top": true
+  },
+  {
+    "name": "CoNLL",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": false
+  },
+  {
+    "name": "Mathematics of Language",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": false
+  },
+  {
+    "name": "COLM",
+    "kind": "conference",
+    "area": "NLP and linguistics",
+    "top": false
+  },
+  {
+    "name": "AAMAS",
+    "kind": "conference",
+    "area": "RL and AI",
+    "top": true
+  },
+  {
+    "name": "JAAMAS",
+    "kind": "journal",
+    "area": "RL and AI",
+    "top": false
+  },
+  {
+    "name": "JAIR",
+    "kind": "journal",
+    "area": "RL and AI",
+    "top": true
+  },
+  {
+    "name": "Artificial Intelligence (Elsevier)",
+    "kind": "journal",
+    "area": "RL and AI",
+    "top": true
+  },
+  {
+    "name": "RLC",
+    "kind": "conference",
+    "area": "RL and AI",
+    "top": false
+  },
+  {
+    "name": "COLT",
+    "kind": "conference",
+    "area": "Learning theory",
+    "top": true
+  },
+  {
+    "name": "ALT",
+    "kind": "conference",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "AISTATS",
+    "kind": "conference",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "UAI",
+    "kind": "conference",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "Annals of Statistics",
+    "kind": "journal",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "SIMODS",
+    "kind": "journal",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "Information and Inference",
+    "kind": "journal",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "Machine Learning (Springer)",
+    "kind": "journal",
+    "area": "Learning theory",
+    "top": false
+  },
+  {
+    "name": "IEEE TIT",
+    "kind": "journal",
+    "area": "Learning theory",
+    "top": true
+  },
+  {
+    "name": "LICS",
+    "kind": "conference",
+    "area": "Logic and formal languages",
+    "top": true
+  },
+  {
+    "name": "LMCS",
+    "kind": "journal",
+    "area": "Logic and formal languages",
+    "top": false
+  },
+  {
+    "name": "Journal of Automated Reasoning",
+    "kind": "journal",
+    "area": "Logic and formal languages",
+    "top": false
+  },
+  {
+    "name": "CPP",
+    "kind": "conference",
+    "area": "Logic and formal languages",
+    "top": false
+  },
+  {
+    "name": "ITP",
+    "kind": "conference",
+    "area": "Logic and formal languages",
+    "top": false
+  },
+  {
+    "name": "ICALP",
+    "kind": "conference",
+    "area": "Logic and formal languages",
+    "top": true
+  },
+  {
+    "name": "Cognitive Science",
+    "kind": "journal",
+    "area": "Cognitive science",
+    "top": false
+  },
+  {
+    "name": "Open Mind",
+    "kind": "journal",
+    "area": "Cognitive science",
+    "top": false
+  },
+  {
+    "name": "Computational Brain and Behavior",
+    "kind": "journal",
+    "area": "Cognitive science",
+    "top": false
+  },
+  {
+    "name": "Journal of Language Evolution",
+    "kind": "journal",
+    "area": "Cognitive science",
+    "top": false
+  },
+  {
+    "name": "CoLLAs",
+    "kind": "conference",
+    "area": "Neural networks and continual learning",
+    "top": false
+  },
+  {
+    "name": "Neural Computation",
+    "kind": "journal",
+    "area": "Neural networks and continual learning",
+    "top": true
+  },
+  {
+    "name": "Foundations and Trends in ML",
+    "kind": "journal",
+    "area": "Neural networks and continual learning",
+    "top": false
+  },
+  {
+    "name": "Nature Machine Intelligence",
+    "kind": "journal",
+    "area": "Neural networks and continual learning",
+    "top": true
+  },
+  {
+    "name": "Neural Networks",
+    "kind": "journal",
+    "area": "Neural networks and continual learning",
+    "top": false
+  },
+  {
+    "name": "IEEE TNNLS",
+    "kind": "journal",
+    "area": "Neural networks and continual learning",
+    "top": false
+  },
+  {
+    "name": "3DV",
+    "kind": "conference",
+    "area": "3D, stereo and perception",
+    "top": false
+  },
+  {
+    "name": "QoMEX",
+    "kind": "conference",
+    "area": "3D, stereo and perception",
+    "top": false
+  },
+  {
+    "name": "IEEE TMM",
+    "kind": "journal",
+    "area": "3D, stereo and perception",
+    "top": false
+  },
+  {
+    "name": "Vision Research",
+    "kind": "journal",
+    "area": "3D, stereo and perception",
+    "top": false
+  },
+  {
+    "name": "PLOS Computational Biology",
+    "kind": "journal",
+    "area": "Computational neuroscience",
+    "top": false
   }
 ]
