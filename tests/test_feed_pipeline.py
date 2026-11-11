@@ -108,8 +108,9 @@ def test_a_run_after_five_missed_days_publishes_them_once_and_a_second_run_nothi
     code, out = feed.run(capsys=capsys)
 
     report = report_of(out)
-    assert code == 0 and report["feed"]["status"] == "nothing new" and report["feed"]["since"] == TODAY
-    assert report["feed"]["received"] == 1 and report["feed"]["duplicates"] == 1
+    # The feed is asked again for the last four days, so papers listed without an abstract can gain one.
+    assert code == 0 and report["feed"]["status"] == "nothing new" and report["feed"]["since"] == "2026-11-05"
+    assert report["feed"]["received"] == 5 and report["feed"]["duplicates"] == 5 and report["feed"]["abstracts_added"] == 0
     assert git(feed.remote, "rev-parse", "data") == head
 
 
@@ -426,3 +427,114 @@ def test_the_report_has_an_empty_off_topic_count_when_nothing_was_dropped(feed, 
     _, out = feed.run(capsys=capsys)
 
     assert report_of(out)["feed"]["off_topic"] == {}
+
+
+# --- Abstracts that arrive on a later run -------------------------------------------------
+
+
+def without_abstract(n, published):
+    """The record a paper got when the feed first listed it without an abstract (Crossref before OpenAlex)."""
+    from summaries.feed import parse_line
+
+    record = parse_line(json.dumps(feed_line(n, published, abstract=None)))
+    assert record is not None and record.record["has_abstract"] is False
+    return record.record
+
+
+def data_history(remote):
+    """Every version of every file the data branch ever held."""
+    return git(remote, "log", "-p", "--format=", "data")
+
+
+def test_the_feed_asks_again_for_the_last_four_days(feed, capsys):
+    seed(feed, {"2026-11-06": [paper("A")]}, cursor="2026-11-08")
+
+    _, out = feed.run(capsys=capsys)
+
+    assert feed.calls()[0]["since"] == "2026-11-05" and report_of(out)["feed"]["since"] == "2026-11-05"
+    assert json.loads(branch_file(feed.remote, CURSOR))["since"] == TODAY
+
+
+def test_a_paper_published_without_an_abstract_gets_it_on_a_later_run(feed, capsys):
+    """Day one: Crossref lists the paper, no abstract. Three days later OpenAlex has it: it becomes pending on day one."""
+    seed(feed, {"2026-11-06": [paper("A"), without_abstract(1, "2026-11-06")]}, cursor="2026-11-08")
+    feed.set_lines([feed_line(1, "2026-11-06", abstract="Private publisher abstract.")])
+    paper_id = "doi:10.1109/tip.2026.1"
+    assert status_of(feed.clone, "2026-11-06", capsys) == {"date": "2026-11-06", "total": 2, "done": 0, "pending": 1, "no_abstract": 1}
+
+    code, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert code == 0 and report["status"] == "published"
+    assert (report["added"], report["duplicates"], report["abstracts_added"]) == (0, 0, 1)
+    old_day = parse_jsonl(branch_file(feed.remote, "data/2026-11-06.jsonl"))
+    assert [(r["id"], r.get("has_abstract")) for r in old_day] == [("A", None), (paper_id, True)]
+    assert paper_id not in ids_on(feed.remote, TODAY)  # not today's news a second time
+    assert "Private publisher abstract" not in data_history(feed.remote)
+    saved = parse_jsonl((feed.work / "abstracts.jsonl").read_text())
+    assert saved == [{"id": paper_id, "abstract": "Private publisher abstract."}]
+    _, out = run(feed.clone, "status", "--days", "4", capsys=capsys)
+    assert {"date": "2026-11-06", "total": 2, "done": 0, "pending": 2} in json.loads(out)["dates"]
+
+    _, out = run(feed.clone, "prepare", "--date", "2026-11-06", capsys=capsys)
+    chunk = Path(json.loads(out)["chunks"][0]["input"]).read_text()
+    assert f"=== {paper_id}\n" in chunk and "abstract: Private publisher abstract." in chunk
+    run(feed.clone, "finish", capsys=capsys)
+
+    code, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["status"], report["abstracts_added"], report["duplicates"]) == ("nothing new", 0, 1)
+
+
+def test_a_later_copy_without_an_abstract_changes_nothing(feed, capsys):
+    seed(feed, {"2026-11-06": [paper("A"), without_abstract(1, "2026-11-06")]}, cursor=TODAY)
+    feed.set_lines([feed_line(1, "2026-11-06", abstract=None)])
+    before = branch_file(feed.remote, "data/2026-11-06.jsonl")
+
+    _, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["status"], report["duplicates"], report["abstracts_added"]) == ("nothing new", 1, 0)
+    assert branch_file(feed.remote, "data/2026-11-06.jsonl") == before
+    assert "feed papers" not in git(feed.remote, "log", "--format=%s", "data")
+    assert not (feed.work / "abstracts.jsonl").exists()
+
+
+def test_a_paper_older_than_the_window_is_left_as_it_is(feed, capsys):
+    """Published on 11-04, five days before today: no backfill of old days, even if the feed lists it again."""
+    seed(feed, {"2026-11-04": [paper("A"), without_abstract(1, "2026-11-05")]}, cursor="2026-11-08")
+    feed.set_lines([feed_line(1, "2026-11-05", abstract="Late abstract.")])
+
+    _, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["abstracts_added"], report["duplicates"], report["added"]) == (0, 1, 0)
+    assert parse_jsonl(branch_file(feed.remote, "data/2026-11-04.jsonl"))[1]["has_abstract"] is False
+    assert not (feed.work / "abstracts.jsonl").exists()
+
+
+def test_papers_that_gain_an_abstract_do_not_count_against_the_cap(feed, monkeypatch, capsys):
+    monkeypatch.setenv("FEED_MAX_PER_RUN", "1")
+    seed(feed, {"2026-11-06": [paper("A"), without_abstract(1, "2026-11-06"), without_abstract(2, "2026-11-06")]}, cursor="2026-11-08")
+    feed.set_lines([feed_line(1, "2026-11-06"), feed_line(2, "2026-11-06"), feed_line(3, "2026-11-08")])
+
+    _, out = feed.run(capsys=capsys)
+
+    report = report_of(out)["feed"]
+    assert (report["added"], report["deferred"], report["abstracts_added"]) == (1, 0, 2)
+    assert json.loads(branch_file(feed.remote, CURSOR))["since"] == TODAY
+    assert ids_on(feed.remote, TODAY) == ["B", "C", "doi:10.1109/tip.2026.3"]
+
+
+def test_a_paper_gaining_an_abstract_on_its_own_day_is_updated_in_place(feed, capsys):
+    """A second run on the same day: the record is in today's file, which also takes the day's new papers."""
+    seed(feed, {"2026-11-06": [paper("A")], TODAY: [paper("B"), without_abstract(1, "2026-11-08")]}, cursor=TODAY)
+    feed.new = [paper("B")]
+    feed.set_lines([feed_line(1, "2026-11-08"), feed_line(2, "2026-11-08")])
+
+    _, out = feed.run(capsys=capsys)
+
+    assert (report_of(out)["feed"]["added"], report_of(out)["feed"]["abstracts_added"]) == (1, 1)
+    today = parse_jsonl(branch_file(feed.remote, f"data/{TODAY}.jsonl"))
+    assert [(r["id"], r.get("has_abstract")) for r in today] == [("B", None), ("doi:10.1109/tip.2026.1", True), ("doi:10.1109/tip.2026.2", True)]

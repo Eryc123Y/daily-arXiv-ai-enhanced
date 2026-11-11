@@ -276,3 +276,67 @@ def test_no_two_published_records_have_titles_more_than_ninety_percent_alike():
     assert dropped == 5
     for a, b in combinations(published, 2):
         assert similar(a["title"], b["title"]) <= 0.9, (a["title"], b["title"])
+
+
+# --- Abstracts that arrive on a later run ---------------------------------------------
+
+
+def test_a_published_paper_without_an_abstract_gains_the_abstract_of_a_later_copy():
+    """IEEE: Crossref lists the paper first, OpenAlex's abstract follows a day later."""
+    published = {**parsed(abstract=None).record, "id": "doi:10.1109/tcsvt.2026.1234567"}
+    assert published["has_abstract"] is False
+
+    result = dedupe.sort([published], [parsed(source="crossref")], lacking={published["id"]})
+
+    assert result.fresh == [] and result.duplicates == 0
+    assert result.gained == {"doi:10.1109/tcsvt.2026.1234567": "We convert monocular clips to stereo."}
+
+
+def test_the_abstract_is_kept_under_the_published_id_when_the_copy_matches_by_title():
+    published = {**parsed(abstract=None, doi=None, url="https://ieeexplore.ieee.org/document/1").record}
+    copy = parsed(source="openalex", title="Stereo video from monocular clips.")
+
+    result = dedupe.sort([published], [copy], lacking={published["id"]})
+
+    assert list(result.gained) == ["url:https://ieeexplore.ieee.org/document/1"]
+
+
+def test_a_later_copy_without_an_abstract_stays_a_duplicate():
+    published = parsed(abstract=None).record
+
+    result = dedupe.sort([published], [parsed(abstract=None), parsed(abstract=None, source="crossref")], lacking={published["id"]})
+
+    assert (result.fresh, result.duplicates, result.gained) == ([], 2, {})
+
+
+def test_a_copy_of_a_paper_that_already_has_its_abstract_stays_a_duplicate():
+    published = parsed().record
+
+    result = dedupe.sort([published], [parsed(source="crossref")], lacking=set())
+
+    assert (result.fresh, result.duplicates, result.gained) == ([], 1, {})
+
+
+def test_a_paper_outside_the_recheck_window_gains_nothing():
+    """`lacking` names only the papers of the last few days; older ones stay as they are."""
+    published = parsed(abstract=None).record
+
+    result = dedupe.sort([published], [parsed()], lacking=set())
+
+    assert (result.fresh, result.duplicates, result.gained) == ([], 1, {})
+
+
+def test_two_copies_with_abstracts_give_the_first_one():
+    published = parsed(abstract=None).record
+    later = [parsed(abstract=None), parsed(abstract="First."), parsed(source="crossref", abstract="Second.")]
+
+    result = dedupe.sort([published], later, lacking={published["id"]})
+
+    assert result.gained == {published["id"]: "First."} and result.duplicates == 2
+
+
+def test_fresh_is_sort_without_gains():
+    published = parsed(abstract=None).record
+    new = parsed(doi="10.1/other", title="Another paper entirely", url="https://doi.org/10.1/other")
+
+    assert dedupe.fresh([published], [parsed(), new]) == ([new], 1)

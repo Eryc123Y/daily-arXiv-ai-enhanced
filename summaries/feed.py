@@ -14,6 +14,16 @@ today's page instead of an old day nobody opens. The cursor
 a run after missed days publishes them once, and the next run nothing.
 Abstracts stay in the local work folder (abstracts.py).
 
+Each run asks again for the last RECHECK_DAYS days, even when the cursor is
+newer: Crossref lists a fresh IEEE paper the day it is registered, while its
+abstract comes from OpenAlex a day or so later. A paper published in that
+window without an abstract that comes back with one gains it (dedupe.sort):
+the abstract goes to the local file, the published record gets
+`has_abstract: true` on the day it was first published, and it is pending
+there until the summary step writes its summary. It is not published again,
+does not count against the per-run cap, and is reported as `abstracts_added`.
+Older papers are left as they are.
+
 A venue with `match: "topics"` in the watch list (a large conference or
 journal) contributes only papers whose title or abstract matches one of the
 interest keywords, with the matching the daily report and the page use
@@ -40,13 +50,14 @@ from summaries.datafiles import (
     with_venue_days,
 )
 from summaries.interests import load_topics, topics_for
-from summaries.records import dedupe_by_id, dump_jsonl
+from summaries.records import dedupe_by_id, dump_jsonl, is_arxiv
 
 # R6: official APIs and the publishers' own indexes (ACL Anthology, PMLR, JMLR, DataCite for LIPIcs);
 # nothing else is accepted. The names are LitScout's `source` values (contract of 2026-11-12).
 SOURCES = ("openalex", "crossref", "openreview", "acl-anthology", "pmlr", "datacite", "jmlr")
 FEED_CURSOR = "assets/feed-cursor.json"
 FIRST_LOOKBACK_DAYS = 7  # how far back the very first run asks
+RECHECK_DAYS = 4  # every run asks again this far back, for abstracts that came late (status and run-local look at the same days)
 HISTORY_DAYS = 60  # dedupe looks this far back on the data branch
 MAX_PER_RUN = 150  # FEED_MAX_PER_RUN default: proceedings arrive in one batch (ECCV about 2,800, Phase 0)
 FEED_TIMEOUT = 30 * 60
@@ -275,27 +286,55 @@ def run_command(argv, since, venues, cwd):
 # --- Cursor and publishing -------------------------------------------------------
 
 
-def cursor_since(branch, day):
+def cursor_since(branch, day) -> str:
     """The day the next request starts from: the stored cursor, else FIRST_LOOKBACK_DAYS before `day`."""
     try:
         stored = json.loads(branch.read(FEED_CURSOR) or "null")
     except ValueError:
         stored = None
     since = stored.get("since") if isinstance(stored, dict) else None
-    if _valid_day(since):
+    if isinstance(since, str) and _valid_day(since):
         return since
     return (date.fromisoformat(day) - timedelta(days=FIRST_LOOKBACK_DAYS)).isoformat()
 
 
-def history(branch, day, days=HISTORY_DAYS):
-    """Every record in the raw files of the `days` days up to and including `day`."""
-    start = (date.fromisoformat(day) - timedelta(days=days)).isoformat()
-    records = []
+def days_before(day, days):
+    return (date.fromisoformat(day) - timedelta(days=days)).isoformat()
+
+
+def request_since(branch, day):
+    """The `--since` the feed command is asked with: the cursor, or RECHECK_DAYS before `day` if that is earlier."""
+    return min(cursor_since(branch, day), days_before(day, RECHECK_DAYS))
+
+
+def raw_days(branch, day, days=HISTORY_DAYS):
+    """{day: records} for the raw files of the `days` days up to and including `day`."""
+    start = days_before(day, days)
+    found = {}
     for path in branch.list_files("data/"):
         match = RAW_FILE.match(path)
         if match and start <= match.group(1) <= day:
-            records += read_records(branch, path)
-    return records
+            found[match.group(1)] = read_records(branch, path)
+    return found
+
+
+def history(branch, day, days=HISTORY_DAYS):
+    """Every record in the raw files of the `days` days up to and including `day`."""
+    return [record for records in raw_days(branch, day, days).values() for record in records]
+
+
+def lacking_abstracts(by_day, day):
+    """Ids of feed papers published in the last RECHECK_DAYS days without an abstract."""
+    start = days_before(day, RECHECK_DAYS)
+    return {
+        r["id"] for d, records in by_day.items() if d >= start
+        for r in records if isinstance(r, dict) and r.get("id") and not is_arxiv(r) and r.get("has_abstract") is False
+    }
+
+
+def with_abstracts_flagged(records, gained):
+    """`records` with `has_abstract: true` on those whose id gained an abstract (the text stays local)."""
+    return [{**r, "has_abstract": True} if isinstance(r, dict) and r.get("id") in gained else r for r in records]
 
 
 def max_per_run(env):
@@ -312,28 +351,37 @@ def publish(branch, day, papers, work_dir, limit=MAX_PER_RUN):
 
     At most `limit` new papers go in, first come first; when more arrived the cursor stays, so the next
     run asks for the same window again and dedupe drops what this one published (`deferred` in the report).
+    Recent papers published without an abstract that came back with one are flagged where they are
+    (`has_abstract: true` on their own day) and their abstracts saved locally; they are not new papers.
     """
     result = {}
     at = datetime.now(UTC).isoformat(timespec="seconds")
 
     def build(current):
-        fresh, dropped = dedupe.fresh(history(current, day), papers)
-        kept = fresh[:limit]
-        existing = read_records(current, raw_path(day))
-        combined = dedupe_by_id(existing + [p.record for p in kept])
-        result.update(kept=kept, duplicates=dropped, deferred=len(fresh) - len(kept), added=len(combined) - len(existing))
+        by_day = raw_days(current, day)
+        found = dedupe.sort([r for records in by_day.values() for r in records], papers, lacking_abstracts(by_day, day))
+        kept = found.fresh[:limit]
+        existing = by_day.get(day, [])
+        combined = dedupe_by_id(with_abstracts_flagged(existing, found.gained) + [p.record for p in kept])
+        result.update(kept=kept, gained=found.gained, duplicates=found.duplicates, deferred=len(found.fresh) - len(kept), added=len(combined) - len(dedupe_by_id(existing)))
         moves = not result["deferred"] and not (cursor_since(current, day) == day and current.read(FEED_CURSOR))
         cursor = {FEED_CURSOR: json.dumps({"since": day, "at": at}, indent=2) + "\n"} if moves else {}
-        papers_file = {raw_path(day): dump_jsonl(combined)} if result["added"] else {}
-        return with_venue_days(current, {**papers_file, **cursor, **venue_settings()}) if papers_file or cursor else {}
+        flagged = {
+            raw_path(d): dump_jsonl(with_abstracts_flagged(records, found.gained))
+            for d, records in by_day.items() if d != day and any(isinstance(r, dict) and r.get("id") in found.gained for r in records)
+        }
+        today_changed = result["added"] or any(isinstance(r, dict) and r.get("id") in found.gained for r in existing)
+        papers_files = {**flagged, **({raw_path(day): dump_jsonl(combined)} if today_changed else {})}
+        return with_venue_days(current, {**papers_files, **cursor, **venue_settings()}) if papers_files or cursor else {}
 
     # Abstracts are saved before the push: one saved for a paper a racing run published instead is harmless,
     # while a paper published without its local abstract would get no summary.
     build(branch)
-    abstracts.save(work_dir, {p.record["id"]: p.abstract for p in result["kept"] if p.abstract})
+    abstracts.save(work_dir, {**result["gained"], **{p.record["id"]: p.abstract for p in result["kept"] if p.abstract}})
     commit = branch.publish(build, f"update: {day} feed papers")
     return {
         "added": result["added"],
+        "abstracts_added": len(result["gained"]),
         "duplicates": result["duplicates"],
         "deferred": result["deferred"],
         "no_abstract": sum(1 for p in result["kept"] if not p.abstract),
@@ -352,7 +400,7 @@ def run(branch, day, repo_dir, work_dir, env):
     except FeedError as error:
         return {"status": "error", "reason": str(error)}
     branch.fetch()
-    since = cursor_since(branch, day)
+    since = request_since(branch, day)
     try:
         output = run_command(argv, since, WATCHLIST, repo_dir)
     except FeedError as error:
@@ -360,5 +408,5 @@ def run(branch, day, repo_dir, work_dir, env):
     papers, invalid = parse_output(output)
     kept, off_topic = on_topic(papers, venues, topics)
     published = publish(branch, day, kept, work_dir, max_per_run(env))
-    status = "published" if published["added"] else "nothing new"
+    status = "published" if published["added"] or published["abstracts_added"] else "nothing new"
     return {"status": status, "since": since, "received": len(papers), "invalid": invalid, "off_topic": off_topic, **published}
