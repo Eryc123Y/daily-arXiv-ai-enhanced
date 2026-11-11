@@ -121,3 +121,20 @@ test('a failed download is not remembered, so trying again downloads again', asy
   fail = false;
   assert.equal((await s.loadDay('2026-11-11')).length, 4);
 });
+
+test('the day list carries the venue papers per day from assets/venue-days.json', async () => {
+  const listing = await source({
+    'assets/file-list.txt': [200, '2026-11-11.jsonl\n'],
+    'assets/venue-days.json': [200, '{"2026-11-11": 187, "2026-11-14": 3}'],
+  }).listDays();
+  assert.deepEqual([...listing.venueDays], [['2026-11-11', 187], ['2026-11-14', 3]]);
+});
+
+test('the venue-day counts are optional: missing, broken or malformed means none, so the page counts', async () => {
+  const answers = [404, 503, [200, '{not json'], [200, '[1]'], [200, '{"2026-11-11": "many"}'], [200, '{"later": 3}'], new TypeError('offline')];
+  for (const answer of answers) {
+    const listing = await source({ 'assets/file-list.txt': [200, '2026-11-11.jsonl\n'], 'assets/venue-days.json': answer }).listDays();
+    assert.deepEqual(listing.days, ['2026-11-11']);
+    assert.equal(listing.venueDays, null, JSON.stringify(answer));
+  }
+});

@@ -32,7 +32,10 @@ from summaries.datafiles import (
     recent_days,
     record_run,
     site_settings,
+    venue_day_counts,
+    venue_days_file,
     venue_settings,
+    with_venue_days,
 )
 from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
@@ -74,7 +77,7 @@ def publish_crawl(branch, day, crawled, history_days, language, dry_run=None):
         # When the papers landed, for the week's health table and the status line.
         entry = {"date": day, "path": "crawl", "at": at, "total": len(combined), "added": result["added"]}
         log = (current.read(RUN_LOG) or "") + dump_jsonl([entry])
-        return {raw_path(day): dump_jsonl(combined), RUN_LOG: log, **site_settings(language)}
+        return with_venue_days(current, {raw_path(day): dump_jsonl(combined), RUN_LOG: log, **site_settings(language)})
 
     content = build(branch)
     report = {"crawled": len(crawled), "already_seen": len(crawled) - len(fresh)}
@@ -282,12 +285,16 @@ def cmd_ensure_day(args):
 
 
 def publish_venues(branch):
-    """Bring assets/venues.json up to date when no crawl or feed commit did; {} when it already was."""
-    files = venue_settings()
-    if not files:
-        return {}
+    """Bring assets/venues.json and assets/venue-days.json up to date when no crawl or feed commit did.
+
+    The venue-day counts are recounted from every raw file, so a missing or stale file is repaired once
+    per run. {} when both already were.
+    """
+    def build(current):
+        return {**venue_settings(), **venue_days_file(venue_day_counts(current))}
+
     try:
-        commit = branch.publish(files, "update: venue list")
+        commit = branch.publish(build, "update: venue list")
     except PublishError as error:
         return {"venues": {"status": "error", "reason": str(error)}}
     return {"venues": "published"} if commit else {}

@@ -369,11 +369,11 @@ def ids_on(remote, day):
 
 
 def test_ensure_day_does_nothing_when_the_day_is_published(tmp_path, pipeline, capsys):
-    from summaries.datafiles import venue_settings
+    from summaries.datafiles import venue_days_file, venue_settings
 
     files = {f"data/{d}.jsonl": dump_jsonl([paper(i)]) for d, i in (("2026-11-06", "A"), ("2026-11-09", "B"))}
     listing = {"assets/file-list.txt": "2026-11-06.jsonl\n2026-11-09.jsonl\n"}
-    seed_data_branch(tmp_path, pipeline.remote, {**files, **listing, **venue_settings()})
+    seed_data_branch(tmp_path, pipeline.remote, {**files, **listing, **venue_settings(), **venue_days_file({})})
 
     code, out = pipeline.run(capsys=capsys)
 

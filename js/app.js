@@ -19,6 +19,8 @@ const state = {
   dayRecords: [],
   records: [],
   venueDays: new Map(),
+  venueNames: new Map(),
+  indexed: false,
   weeks: new Map(),
   groups: [],
   info: new Map(),
@@ -465,6 +467,7 @@ async function showSelection({ keepTopic = false } = {}) {
     return;
   }
   state.records = Streams.streamRecords(state.dayRecords, state.stream);
+  days.forEach(d => noteVenueDay(d, state.dayRecords.filter(r => r.date === d)));
   describeAll();
   const anyMatch = state.records.some(r => state.info.get(r.id).matched);
   const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
@@ -484,7 +487,6 @@ async function openLinkedPaper(id) {
   if (!id) return;
   const venuePaper = !inVenues() && state.dayRecords.find(r => r.id === id && !PaperData.isArxiv(r));
   if (venuePaper) {
-    noteVenueDay(venuePaper.date, state.dayRecords.filter(r => r.date === venuePaper.date));
     await setStream(Streams.VENUES, Streams.weekOf(venuePaper.date), { paper: id });
   }
   if (!state.records.some(r => r.id === id)) return;
@@ -497,14 +499,20 @@ async function openLinkedPaper(id) {
 
 // --- Streams and weeks ----------------------------------------------------------
 
+/** Remember a day's venue papers (their count, and their venues for the "+ N" line's wording). */
+function noteVenueNames(day, names) {
+  state.venueNames.set(day, names);
+  state.venueDays.set(day, names.length);
+}
+
 /** Remember a day's venue papers from records already loaded. */
 function noteVenueDay(day, records) {
-  state.venueDays.set(day, records.filter(r => !PaperData.isArxiv(r)).map(r => r.venue || ''));
+  noteVenueNames(day, records.filter(r => !PaperData.isArxiv(r)).map(r => r.venue || ''));
   refreshWeeks();
 }
 
 function refreshWeeks() {
-  state.weeks = Streams.venueWeeks(new Map([...state.venueDays].map(([day, names]) => [day, names.length])));
+  state.weeks = Streams.venueWeeks(state.venueDays);
   const chosen = $('weekSelect').value;
   $('weekSelect').innerHTML = [...state.weeks.keys()].map(m => `<option value="${m}">${esc(Streams.weekLabel(m))}</option>`).join('');
   if (state.weeks.has(chosen)) $('weekSelect').value = chosen;
@@ -516,18 +524,26 @@ async function countWeek(monday) {
   const days = Streams.daysInWeek(monday, state.days);
   const lists = await Promise.all(days.map(d => DataSource.venuePapers(d).catch(() => null)));
   days.forEach((d, i) => {
-    if (lists[i]) state.venueDays.set(d, lists[i]);
+    if (lists[i]) noteVenueNames(d, lists[i]);
   });
   return lists.reduce((n, list) => n + (list ? list.length : 0), 0);
 }
 
 /**
- * Which weeks have venue papers. The file list does not say, so weeks are
- * counted newest first until the first empty week before one with papers
- * (the feed runs every day, so that is where it started), or until a few
- * empty weeks in a row when none has any.
+ * Which weeks have venue papers: from assets/venue-days.json when the
+ * branch has it. Without it (an older fork), weeks are counted from the day
+ * files newest first until the first empty week before one with papers (the
+ * feed runs every day, so that is where it started), or until a few empty
+ * weeks in a row when none has any.
  */
 async function discoverWeeks() {
+  if (!state.indexed) await countWeeks();
+  refreshWeeks();
+  updateDayButtons();
+  renderStreams(streamDays());
+}
+
+async function countWeeks() {
   const mondays = [...new Set(state.days.map(Streams.weekOf))];
   let found = false;
   let empty = 0;
@@ -539,9 +555,6 @@ async function discoverWeeks() {
       break;
     }
   }
-  refreshWeeks();
-  updateDayButtons();
-  renderStreams(streamDays());
 }
 
 /** The week the stream switch and the line under the day are about. */
@@ -560,7 +573,7 @@ function renderStreams(days) {
   const showNote = !inVenues() && days.length === 1 && count > 0;
   $('weekNote').hidden = !showNote;
   if (!showNote) return;
-  const kinds = Streams.daysInWeek(week, state.days).flatMap(d => (state.venueDays.get(d) || []).map(name => (state.venues.get(name) || {}).kind));
+  const kinds = Streams.daysInWeek(week, state.days).flatMap(d => (state.venueNames.get(d) || []).map(name => (state.venues.get(name) || {}).kind));
   $('weekNote').innerHTML = `<a href="#stream=venues&amp;week=${week}" data-week="${week}">${esc(Streams.weekNote(count, kinds))}</a>`;
 }
 
@@ -741,6 +754,8 @@ async function init() {
   state.days = days;
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
   state.venues = Sources.venueIndex(listing.venues);
+  state.indexed = Boolean(listing.venueDays);
+  if (state.indexed) state.venueDays = new Map(listing.venueDays);
   if (!days.length) {
     $('dayTitle').textContent = 'No papers yet';
     $('paperList').innerHTML = `<li class="empty">Nothing has been published to the data branch of ${esc(DATA_CONFIG.repoOwner)}/${esc(DATA_CONFIG.repoName)} yet, or it could not be reached. On a new fork, run the arXiv-daily-ai-enhanced workflow from the Actions tab; the first day appears a few minutes after it finishes.</li>`;
