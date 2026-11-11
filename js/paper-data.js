@@ -16,6 +16,11 @@
   const AI_FILE = /^(\d{4}-\d{2}-\d{2})_AI_enhanced_([A-Za-z]+)\.jsonl$/;
   const SEPARATOR = '[\\s\\-\\u2010-\\u2014_/]+';
 
+  /** arXiv records carry no `source`; every other source names itself. */
+  function isArxiv(record) {
+    return Boolean(record) && (!record.source || record.source === 'arxiv');
+  }
+
   function hasSummary(record) {
     return Boolean(record && record.AI) &&
       AI_FIELDS.every(f => typeof record.AI[f] === 'string' && record.AI[f].trim() !== '');
@@ -54,9 +59,11 @@
 
   /**
    * One day's records: the raw crawl decides which papers exist and their
-   * order; a paper with a complete summary uses the summary record, any
-   * other is marked `pending`. Summary records without a raw entry (older
-   * days) are kept.
+   * order; a paper with a complete summary uses the summary record (over the
+   * raw fields it does not repeat), any other arXiv paper is marked
+   * `pending`. A paper from another source without a summary is not pending:
+   * its abstract is not published, so it may never get one. Summary records
+   * without a raw entry (older days) are kept.
    */
   function mergeDay(rawText, aiText) {
     const summaries = new Map();
@@ -69,7 +76,7 @@
       if (seen.has(r.id)) return;
       seen.add(r.id);
       const summary = summaries.get(r.id);
-      records.push(summary ? { ...summary, pending: false } : { ...r, pending: true });
+      records.push(summary ? { ...r, ...summary, pending: false } : { ...r, pending: isArxiv(r) });
     });
     summaries.forEach((r, id) => {
       if (!seen.has(id)) records.push({ ...r, pending: false });
@@ -120,5 +127,5 @@
       .replace(/"/g, '&quot;');
   }
 
-  return { AI_FIELDS, hasSummary, parseJsonl, parseFileList, mergeDay, keywordMatches, highlight, escapeHtml };
+  return { AI_FIELDS, isArxiv, hasSummary, parseJsonl, parseFileList, mergeDay, keywordMatches, highlight, escapeHtml };
 });
