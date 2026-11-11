@@ -1,8 +1,8 @@
 import json
 
 import pytest
-from conftest import git, seed_data_branch
 
+from conftest import git, seed_data_branch
 from summaries import signals
 from summaries.cli import main
 from summaries.records import dump_jsonl

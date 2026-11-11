@@ -13,7 +13,9 @@ Daily arXiv: a scheduled task on the maintainer's Mac crawls arXiv's `/new` list
 
 ## Working on the code
 
-- Tests: `uv run pytest -q` and `node --test tests/js/*.test.js`. Write the failing test first. No CI runs (Actions is disabled on the repository), so run both before merging.
+- Checks: `scripts/check.sh` runs both type checkers, ruff and both test suites (`uv run pytest -q`, `node --test tests/js/*.test.js`), stopping at the first failure. Write the failing test first. No CI runs (Actions is disabled on the repository), so run it before merging.
+- Types: the page's JS is typed with JSDoc and checked by `tsc --checkJs` (`tsconfig.json`, strict, no emit); nothing is compiled, the browser runs the files as written. Record shapes are in `js/types.js`, the globals the scripts share in `js/globals.d.ts`, `app.js`'s state and elements in `js/app-state.d.ts`. Python is checked by pyright (basic; strict for the modules listed in `pyproject.toml`) and ruff.
+- Record shapes are written twice, `summaries/shapes.py` and `js/types.js`; change both together. `tests/test_shapes_parity.py` fails when a field or shape is on one side only.
 - Commits: `<type>: <description>` (feat, fix, refactor, docs, test, chore), no attribution lines, identity `Eryc123Y <145822832+Eryc123Y@users.noreply.github.com>`.
 - After changing anything under `js/` or `css/`, bump every `?v=` in `index.html`, or browser and CDN caches serve the old file. A new file the page loads must also be added to the allowlist in `scripts/build_site.py` (`tests/test_build_site.py` fails otherwise).
 - Never edit the `data` branch by hand or check it out; the CLI commits to it with git plumbing. `.cache/` is local scratch and is not committed.

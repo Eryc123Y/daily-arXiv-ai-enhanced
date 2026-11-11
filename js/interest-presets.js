@@ -145,12 +145,21 @@
     previousDefaults: PREVIOUS_DEFAULTS,
   };
 
+  /**
+   * @param {string[]} a
+   * @param {string[]} b
+   */
   const sameSet = (a, b) => {
+    /** @param {string[]} list */
     const norm = list => [...new Set(list.map(k => k.trim().toLowerCase()))].sort().join('\n');
     return norm(a) === norm(b);
   };
 
-  /** Keywords to use given what a browser saved, and whether to drop the saved copy. */
+  /**
+   * Keywords to use given what a browser saved, and whether to drop the saved copy.
+   * @param {unknown} saved
+   * @returns {{ keywords: string[], clearSaved: boolean }}
+   */
   function keywordsFor(saved) {
     if (!Array.isArray(saved)) return { keywords: INTEREST_PRESETS.keywords, clearSaved: false };
     const isDefault = [INTEREST_PRESETS.keywords, ...PREVIOUS_DEFAULTS].some(list => sameSet(saved, list));

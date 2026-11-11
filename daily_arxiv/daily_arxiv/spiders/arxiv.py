@@ -1,6 +1,7 @@
 import os
 import re
 from datetime import date, datetime, timedelta
+from typing import ClassVar
 
 import scrapy
 
@@ -36,7 +37,7 @@ class ArxivSpider(scrapy.Spider):
     """
 
     name = "arxiv"
-    allowed_domains = ["arxiv.org"]
+    allowed_domains: ClassVar[list[str]] = ["arxiv.org"]
 
     def __init__(self, categories=None, listing="new", *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -154,7 +155,9 @@ class ArxivSpider(scrapy.Spider):
         category is another one counts as a late cross-list when it is numbered
         before the month of that day's oldest paper of this category.
         """
-        category = re.search(r"/list/([^/]+)/recent", response.url).group(1)
+        category_match = re.search(r"/list/([^/]+)/recent", response.url)
+        assert category_match is not None, response.url
+        category = category_match.group(1)
         for block in response.css("div[id=dlpage] dl"):
             heading = DAY_HEADING.match(block.css("h3::text").get() or "")
             if not heading:
@@ -169,6 +172,7 @@ class ArxivSpider(scrapy.Spider):
                     continue
                 yield {**paper, "announced": day}
         total = TOTAL.search(response.text)
-        skip = int(re.search(r"skip=(\d+)", response.url).group(1)) if "skip=" in response.url else 0
+        skip_match = re.search(r"skip=(\d+)", response.url)
+        skip = int(skip_match.group(1)) if skip_match else 0
         if total and skip + PAGE_SIZE < int(total.group(1)):
             yield response.follow(self._recent_url(category, skip + PAGE_SIZE), callback=self.parse)

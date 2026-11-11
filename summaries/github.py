@@ -10,18 +10,18 @@ GITHUB_REMOTE = re.compile(r"github\.com[:/]([^/\s]+)/([^/\s]+?)(?:\.git)?/?$")
 GH_TIMEOUT = 120
 
 
-def parse_repo_slug(url):
+def parse_repo_slug(url: str) -> str | None:
     match = GITHUB_REMOTE.search(url.strip())
     return f"{match.group(1)}/{match.group(2)}" if match else None
 
 
-def repo_slug(repo_dir):
+def repo_slug(repo_dir: str | Path) -> str:
     """owner/name of the GitHub repository: DATA_REPO, GITHUB_REPOSITORY, else the origin remote."""
     for name in ("DATA_REPO", "GITHUB_REPOSITORY"):
         if os.environ.get(name, "").strip():
             return os.environ[name].strip()
     url = subprocess.run(
-        ["git", "remote", "get-url", "origin"], cwd=str(repo_dir), capture_output=True, text=True
+        ["git", "remote", "get-url", "origin"], cwd=str(repo_dir), capture_output=True, text=True, check=False
     ).stdout
     slug = parse_repo_slug(url)
     if not slug:
@@ -32,7 +32,7 @@ def repo_slug(repo_dir):
 SITES = Path(__file__).with_name("sites.json")
 
 
-def site_url(slug, sites=SITES):
+def site_url(slug: str, sites: str | Path = SITES) -> str:
     """Address of the reading page for owner/name.
 
     An entry under "addresses" in summaries/sites.json (repository slugs compared
@@ -40,6 +40,7 @@ def site_url(slug, sites=SITES):
     or https://<owner>.github.io/ for a repository named <owner>.github.io. Forks
     that host on GitHub Pages need no entry.
     """
+    addresses: dict[str, str]
     try:
         addresses = json.loads(Path(sites).read_text(encoding="utf-8")).get("addresses", {})
     except FileNotFoundError:
@@ -52,6 +53,6 @@ def site_url(slug, sites=SITES):
     return f"https://{owner}.github.io/" if name.lower() == f"{owner}.github.io" else f"https://{owner}.github.io/{name}/"
 
 
-def gh(*args):
+def gh(*args: str) -> str:
     """Run the GitHub CLI as the user it is logged in as."""
     return subprocess.run(["gh", *args], capture_output=True, text=True, check=True, timeout=GH_TIMEOUT).stdout

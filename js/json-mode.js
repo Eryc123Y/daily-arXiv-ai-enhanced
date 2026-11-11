@@ -4,16 +4,25 @@
  * JSON instead of the page. Loaded as the global `JsonMode`.
  */
 (function (root) {
-  /** The request in the query string, or null when it asks for the page. */
+  /**
+   * The request in the query string, or null when it asks for the page.
+   * @param {string} search
+   * @returns {JsonRequest | null}
+   */
   function params(search) {
     const query = new URLSearchParams(search);
-    const list = name => (query.get(name) ? query.get(name).split(',').map(s => s.trim()).filter(Boolean) : null);
+    /** @param {string} name */
+    const list = name => (query.get(name) ? String(query.get(name)).split(',').map(s => s.trim()).filter(Boolean) : null);
     const category = query.get('category') || query.get('json');
     const keywords = list('keywords');
     const authors = list('author');
     return category || keywords || authors ? { category: category || 'all', keywords, authors } : null;
   }
 
+  /**
+   * @param {JsonRequest} request
+   * @param {PageRecord[]} records
+   */
   function output(request, records) {
     const papers = records
       .filter(r => request.category === 'all' || (r.categories || [])[0] === request.category)
@@ -25,9 +34,9 @@
         authors: (r.authors || []).join(', '),
         categories: r.categories,
         source: Sources.sourceLabel(r),
-        summary: r.AI && !r.pending ? r.AI.tldr : r.summary || null,
+        summary: r.AI && !r.pending ? r.AI.tldr : /** @type {{ summary?: string }} */ (r).summary || null,
         date: r.date,
-        url: PaperData.isArxiv(r) ? r.abs || `https://arxiv.org/abs/${r.id}` : Sources.safeUrl(r.oa_url) || Sources.publisherUrl(r),
+        url: PaperData.isArxiv(r) ? r.abs || `https://arxiv.org/abs/${r.id}` : Sources.safeUrl(/** @type {VenueRecord} */ (r).oa_url) || Sources.publisherUrl(/** @type {VenueRecord} */ (r)),
         reason: [...m.keywords.map(k => `keyword: ${k}`), ...m.authors.map(a => `author: ${a}`)].join(' | ') || null,
       }));
     document.head.innerHTML = '';

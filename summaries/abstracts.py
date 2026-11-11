@@ -8,32 +8,38 @@ listed without a summary rather than left pending.
 """
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, cast
 
 FILE_NAME = "abstracts.jsonl"
 
 
-def path(work_dir):
+def path(work_dir: str | Path) -> Path:
     return Path(work_dir) / FILE_NAME
 
 
-def load(work_dir):
+def load(work_dir: str | Path) -> dict[str, str]:
     """{id: abstract}; a later line for the same id wins; unreadable lines are skipped."""
-    found = {}
+    found: dict[str, str] = {}
     file = path(work_dir)
     if not file.exists():
         return found
     for line in file.read_text(encoding="utf-8").splitlines():
         try:
-            entry = json.loads(line)
+            entry: Any = json.loads(line)
         except ValueError:
             continue
-        if isinstance(entry, dict) and isinstance(entry.get("id"), str) and isinstance(entry.get("abstract"), str):
-            found[entry["id"]] = entry["abstract"]
+        if not isinstance(entry, dict):
+            continue
+        fields = cast("dict[str, object]", entry)
+        paper_id, abstract = fields.get("id"), fields.get("abstract")
+        if isinstance(paper_id, str) and isinstance(abstract, str):
+            found[paper_id] = abstract
     return found
 
 
-def save(work_dir, abstracts):
+def save(work_dir: str | Path, abstracts: Mapping[str, str]) -> None:
     """Append {id: abstract} to the work folder's file."""
     if not abstracts:
         return

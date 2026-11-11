@@ -22,7 +22,14 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from summaries import abstracts, dedupe
-from summaries.datafiles import RAW_FILE, WATCHLIST, raw_path, read_records, venue_settings, with_venue_days
+from summaries.datafiles import (
+    RAW_FILE,
+    WATCHLIST,
+    raw_path,
+    read_records,
+    venue_settings,
+    with_venue_days,
+)
 from summaries.records import dedupe_by_id, dump_jsonl
 
 SOURCES = ("openalex", "crossref", "openreview")  # R6: official APIs only; nothing else is accepted

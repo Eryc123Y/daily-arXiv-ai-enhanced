@@ -11,22 +11,39 @@
     root.PaperData = api;
   }
 })(typeof self !== 'undefined' ? self : this, function () {
+  /** @type {Array<keyof AiSummary>} */
   const AI_FIELDS = ['tldr', 'motivation', 'method', 'result', 'conclusion'];
   const RAW_FILE = /^(\d{4}-\d{2}-\d{2})\.jsonl$/;
   const AI_FILE = /^(\d{4}-\d{2}-\d{2})_AI_enhanced_([A-Za-z]+)\.jsonl$/;
   const SEPARATOR = '[\\s\\-\\u2010-\\u2014_/]+';
 
-  /** arXiv records carry no `source`; every other source names itself. */
+  /**
+   * arXiv records carry no `source`; every other source names itself.
+   * @template {{ source?: string }} R
+   * @param {R | null | undefined} record
+   * @returns {record is Extract<R, ArxivRecord>}
+   */
   function isArxiv(record) {
-    return Boolean(record) && (!record.source || record.source === 'arxiv');
+    return !!record && (!record.source || record.source === 'arxiv');
   }
 
+  /**
+   * @param {object | null | undefined} record
+   * @returns {boolean}
+   */
   function hasSummary(record) {
-    return Boolean(record && record.AI) &&
-      AI_FIELDS.every(f => typeof record.AI[f] === 'string' && record.AI[f].trim() !== '');
+    const ai = record && /** @type {{ AI?: Partial<AiSummary> }} */ (record).AI;
+    return Boolean(ai) &&
+      AI_FIELDS.every(f => { const v = ai && ai[f]; return typeof v === 'string' && v.trim() !== ''; });
   }
 
+  /**
+   * The records in a JSONL file; lines that are not records are skipped.
+   * @param {string | null | undefined} text
+   * @returns {RawRecord[]}
+   */
   function parseJsonl(text) {
+    /** @type {RawRecord[]} */
     const records = [];
     (text || '').split('\n').forEach(line => {
       if (!line.trim()) return;
@@ -40,9 +57,14 @@
     return records;
   }
 
-  /** Dates (newest first) and, per date, the summary languages available. */
+  /**
+   * Dates (newest first) and, per date, the summary languages available.
+   * @param {string | null | undefined} text
+   */
   function parseFileList(text) {
+    /** @type {Map<string, string[]>} */
     const languages = new Map();
+    /** @type {Set<string>} */
     const rawDates = new Set();
     (text || '').split('\n').map(s => s.trim()).forEach(name => {
       const raw = name.match(RAW_FILE);
@@ -51,7 +73,8 @@
       if (!date) return;
       if (!languages.has(date)) languages.set(date, []);
       if (raw) rawDates.add(date);
-      if (ai && !languages.get(date).includes(ai[2])) languages.get(date).push(ai[2]);
+      const dayLanguages = languages.get(date) || [];
+      if (ai && !dayLanguages.includes(ai[2])) dayLanguages.push(ai[2]);
     });
     const dates = [...languages.keys()].sort().reverse();
     return { dates, languages, rawDates };
@@ -65,19 +88,25 @@
    * when the pipeline has its abstract (`has_abstract: true`); otherwise it
    * will never get one. Summary records
    * without a raw entry (older days) are kept.
+   * @param {string | null | undefined} rawText
+   * @param {string | null | undefined} aiText
+   * @returns {PageRecord[]}
    */
   function mergeDay(rawText, aiText) {
+    /** @type {Map<string, SummaryRecord>} */
     const summaries = new Map();
     parseJsonl(aiText).forEach(r => {
-      if (hasSummary(r) && !summaries.has(r.id)) summaries.set(r.id, r);
+      if (hasSummary(r) && !summaries.has(r.id)) summaries.set(r.id, /** @type {SummaryRecord} */ (r));
     });
+    /** @type {Set<string>} */
     const seen = new Set();
+    /** @type {PageRecord[]} */
     const records = [];
     parseJsonl(rawText).forEach(r => {
       if (seen.has(r.id)) return;
       seen.add(r.id);
       const summary = summaries.get(r.id);
-      records.push(summary ? { ...r, ...summary, pending: false } : { ...r, pending: isArxiv(r) || r.has_abstract === true });
+      records.push(summary ? /** @type {PageRecord} */ ({ ...r, ...summary, pending: false }) : { ...r, pending: isArxiv(r) || r.has_abstract === true });
     });
     summaries.forEach((r, id) => {
       if (!seen.has(id)) records.push({ ...r, pending: false });
@@ -85,6 +114,7 @@
     return records;
   }
 
+  /** @param {string} text */
   function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
@@ -93,12 +123,18 @@
    * A keyword as a whole word or phrase: case-insensitive, hyphens and spaces
    * interchangeable, an optional plural "s"/"es". "stereo" does not match
    * "stereotypes"; "PPO" does not match "support".
+   * @param {string} term
+   * @returns {string | null}
    */
   function termPattern(term) {
     const words = term.trim().split(/[\s\-‐-—_/]+/).filter(Boolean).map(escapeRegExp);
     return words.length ? `${words.join(SEPARATOR)}(?:e?s)?` : null;
   }
 
+  /**
+   * @param {string[]} terms
+   * @param {string} flags
+   */
   function keywordRegex(terms, flags) {
     const patterns = terms
       .filter(t => t && t.trim())
@@ -109,17 +145,29 @@
     return new RegExp(`(^|[^A-Za-z0-9])(${patterns.join('|')})(?![A-Za-z0-9])`, flags);
   }
 
+  /**
+   * @param {string | null | undefined} text
+   * @param {string} keyword
+   */
   function keywordMatches(text, keyword) {
     const regex = keywordRegex([keyword], 'i');
     return Boolean(text && regex && regex.test(text));
   }
 
+  /**
+   * `text` with each term wrapped in <mark class="className">.
+   * @param {string} text
+   * @param {string[] | null | undefined} terms
+   * @param {string} className
+   * @returns {string}
+   */
   function highlight(text, terms, className) {
     const regex = text && terms && terms.length ? keywordRegex(terms, 'gi') : null;
     if (!regex) return text;
-    return text.replace(regex, (match, before, word) => `${before}<mark class="${className}">${word}</mark>`);
+    return text.replace(regex, (/** @type {string} */ match, /** @type {string} */ before, /** @type {string} */ word) => `${before}<mark class="${className}">${word}</mark>`);
   }
 
+  /** @param {unknown} text */
   function escapeHtml(text) {
     return String(text == null ? '' : text)
       .replace(/&/g, '&amp;')

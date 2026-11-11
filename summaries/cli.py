@@ -12,12 +12,22 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
-from summaries import abstracts, digest, feed, github, local_runner, localcrawl, missed, setup, signals, weekly
+from summaries import (
+    abstracts,
+    digest,
+    feed,
+    github,
+    local_runner,
+    localcrawl,
+    missed,
+    setup,
+    signals,
+    weekly,
+)
 from summaries.databranch import PublishError
 from summaries.datafiles import (
     RAW_FILE,
@@ -40,7 +50,14 @@ from summaries.datafiles import (
 from summaries.localtask import acquire_lock, merge_outputs, release_lock, write_chunks
 from summaries.mode import resolve_mode
 from summaries.providers import resolve_provider
-from summaries.records import dedupe_by_id, dump_jsonl, is_arxiv, parse_jsonl, pending_papers, with_abstracts
+from summaries.records import (
+    dedupe_by_id,
+    dump_jsonl,
+    is_arxiv,
+    parse_jsonl,
+    pending_papers,
+    with_abstracts,
+)
 
 INGEST_HISTORY_DAYS = 7
 HANDOVER_BATCH = 50
@@ -68,7 +85,7 @@ def publish_crawl(branch, day, crawled, history_days, language, dry_run=None):
     seen = history_ids(branch, date.fromisoformat(day), history_days)
     fresh = [p for p in crawled if p["id"] not in seen]
     result = {}
-    at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    at = datetime.now(UTC).isoformat(timespec="seconds")
 
     def build(current):
         existing = read_records(current, raw_path(day))
@@ -136,7 +153,7 @@ def api_summaries(branch, days, language, batch_size, max_workers, config, local
 
 def cmd_api(args):
     config, problem = resolve_provider(os.environ)
-    if problem:
+    if config is None or problem:
         print(f"::error::Cannot summarise with the API: {problem}.")
         return 2
     print(f"Summarising with {config.provider} ({config.model})")
@@ -220,7 +237,7 @@ def weekdays_between(start, end):
 
 
 def utc_today():
-    return datetime.now(timezone.utc).date().isoformat()
+    return datetime.now(UTC).date().isoformat()
 
 
 def backfill(args, branch, slug, missing):

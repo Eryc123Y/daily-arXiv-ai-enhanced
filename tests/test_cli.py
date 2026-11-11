@@ -5,8 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from conftest import git, seed_data_branch
 
+from conftest import git, seed_data_branch
 from summaries import anthropic_api
 from summaries.cli import main
 from summaries.records import dump_jsonl, parse_jsonl
@@ -43,7 +43,7 @@ def test_ingest_publishes_only_papers_not_seen_in_the_last_week(tmp_path, remote
     gh_output = tmp_path / "gh_output"
     monkeypatch.setenv("GITHUB_OUTPUT", str(gh_output))
 
-    code, out = run(clone, "ingest", "--date", DAY, "--input", str(crawl), capsys=capsys)
+    code, _out = run(clone, "ingest", "--date", DAY, "--input", str(crawl), capsys=capsys)
 
     assert code == 0
     assert [p["id"] for p in parse_jsonl(branch_file(remote, f"data/{DAY}.jsonl"))] == ["B", "C"]
@@ -125,7 +125,7 @@ def test_prepare_merges_outputs_left_by_an_interrupted_run(tmp_path, remote_and_
     (work / "chunk-000.out.txt").write_text("=== 2\n" + FIELDS.format(n=2))
     run(clone, "finish", capsys=capsys)
 
-    code, out = run(clone, "prepare", "--date", DAY, capsys=capsys)
+    _code, out = run(clone, "prepare", "--date", DAY, capsys=capsys)
 
     plan = json.loads(out)
     assert plan["merged_leftovers"]["done"] == 1
@@ -142,7 +142,7 @@ def test_status_reports_progress_for_recent_days(tmp_path, remote_and_clone, cap
         {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")]), AI_FILE: dump_jsonl(ai), "data/2026-09-07.jsonl": "{}\n"},
     )
 
-    code, out = run(clone, "status", "--days", "36500", capsys=capsys)
+    _code, out = run(clone, "status", "--days", "36500", capsys=capsys)
 
     dates = {d["date"]: d for d in json.loads(out)["dates"]}
     assert dates[DAY] == {"date": DAY, "total": 2, "done": 1, "pending": 1}
@@ -155,7 +155,7 @@ def test_mode_command_writes_the_decision_for_the_workflow(tmp_path, remote_and_
     monkeypatch.setenv("SUMMARY_MODE", "api")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-    code, out = run(clone, "mode", capsys=capsys)
+    _code, out = run(clone, "mode", capsys=capsys)
 
     assert "mode=claude-code" in gh_output.read_text()
     assert "::warning::" in out
@@ -197,7 +197,7 @@ def test_api_without_a_date_fills_pending_papers_of_recent_days(tmp_path, remote
     monkeypatch.setattr(anthropic_api, "make_client", lambda api_key=None: client)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
 
-    code, out = run(clone, "api", "--days", "36500", capsys=capsys)
+    code, _out = run(clone, "api", "--days", "36500", capsys=capsys)
 
     assert code == 0
     assert [r["id"] for r in parse_jsonl(branch_file(remote, AI_FILE))] == ["1"]
@@ -248,7 +248,7 @@ def test_prepare_releases_the_lock_when_it_fails(tmp_path, remote_and_clone, cap
     _, clone = remote_and_clone
     git(clone, "remote", "set-url", "origin", str(tmp_path / "unreachable.git"))
 
-    with pytest.raises(Exception):
+    with pytest.raises(subprocess.CalledProcessError):
         run(clone, "prepare", "--date", DAY, capsys=capsys)
 
     assert not (clone / ".cache" / "summaries" / "LOCK").exists()
@@ -386,7 +386,7 @@ def test_ensure_day_skips_weekends(pipeline, capsys):
     pipeline.seed({"2026-11-06": [paper("A")]})
     pipeline.today = "2026-11-08"
 
-    code, out = pipeline.run(capsys=capsys)
+    _code, out = pipeline.run(capsys=capsys)
 
     assert json.loads(out)["status"] == "weekend" and pipeline.crawls == []
 

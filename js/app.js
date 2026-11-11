@@ -12,7 +12,7 @@ const PHONE = window.matchMedia('(max-width: 760px)');
 // Weeks are counted newest first; after this many weeks without a venue paper, the feed is taken never to have run.
 const EMPTY_WEEKS_BEFORE_GIVING_UP = 2;
 
-const state = {
+const state = /** @type {AppState} */ ({
   days: [],
   day: null,
   from: null,
@@ -43,15 +43,15 @@ const state = {
   mainCategories: [],
   visible: [],
   status: null,
-};
+});
 
-const $ = id => document.getElementById(id);
-const esc = text => PaperData.escapeHtml(text);
-let picker = null;
+/** @template {keyof PageElements} K @param {K} id @returns {PageElements[K]} */ const $ = id => /** @type {PageElements[K]} */ (document.getElementById(id));
+const esc = (/** @type {unknown} */ text) => PaperData.escapeHtml(text);
+/** @type {CalendarPickerHandle | null} */ let picker = null;
 
 // --- Preferences --------------------------------------------------------------
 
-function readList(key, fallback) {
+function readList(/** @type {string} */ key, /** @type {any} */ fallback) {
   try {
     const saved = localStorage.getItem(key);
     return saved ? JSON.parse(saved) : fallback;
@@ -60,7 +60,7 @@ function readList(key, fallback) {
   }
 }
 
-function writeList(key, list) {
+function writeList(/** @type {string} */ key, /** @type {unknown} */ list) {
   try {
     localStorage.setItem(key, JSON.stringify(list));
   } catch (error) {
@@ -72,7 +72,7 @@ function defaultKeywords() {
   return window.INTEREST_PRESETS ? [...INTEREST_PRESETS.keywords] : [];
 }
 
-function forgetList(key) {
+function forgetList(/** @type {string} */ key) {
   try {
     localStorage.removeItem(key);
   } catch (error) {
@@ -80,7 +80,7 @@ function forgetList(key) {
   }
 }
 
-/** Saved keywords, unless they are an unchanged copy of a default list. */
+/** Saved keywords, unless they are an unchanged copy of a default list. @param {string[] | null} saved @returns {string[]} */
 function resolveKeywords(saved) {
   if (!window.keywordsFor) return saved || defaultKeywords();
   const { keywords, clearSaved } = keywordsFor(saved);
@@ -101,7 +101,7 @@ function loadPreferences() {
 }
 
 function describeAll() {
-  state.info = new Map(state.records.map(r => [r.id, Render.describe(r, state.keywords, state.authors, state.topics)]));
+  state.info = new Map(state.records.map(r => /** @type {[string, PaperInfo]} */ ([r.id, Render.describe(r, state.keywords, state.authors, state.topics)])));
 }
 
 // --- Filtering ----------------------------------------------------------------
@@ -111,7 +111,7 @@ function activeFilters() {
   return { topic, category, codeOnly, freeOnly, type, area, source, query };
 }
 
-/** Set the type, area, venue and "Free to read" choices from a filters object. */
+/** Set the type, area, venue and "Free to read" choices from a filters object. @param {Pick<FilterState, 'type' | 'area' | 'source' | 'freeOnly'>} choices */
 function setSourceChoices({ type, area, source, freeOnly }) {
   Object.assign(state, { type, area, source, freeOnly });
 }
@@ -121,7 +121,7 @@ function currentCounts() {
 }
 
 function entries() {
-  return state.records.map((record, index) => ({ record, index, info: state.info.get(record.id) }));
+  return state.records.map((record, index) => ({ record, index, info: /** @type {PaperInfo} */ (state.info.get(record.id)) }));
 }
 
 const inVenues = () => state.stream === Streams.VENUES;
@@ -135,7 +135,7 @@ function computeVisible() {
     : shown.sort((a, b) => b.info.score - a.info.score || a.index - b.index);
 }
 
-function topicLabel(topic) {
+function topicLabel(/** @type {string | null} */ topic) {
   if (topic === 'matches') return 'Interest matches';
   if (topic === 'authors') return 'Your authors';
   if (topic === 'all') return 'All papers';
@@ -144,18 +144,18 @@ function topicLabel(topic) {
 
 // --- Rendering ----------------------------------------------------------------
 
-/** One chip of a chip list; disabled when it would show nothing, unless it is the active one. */
+/** One chip of a chip list; disabled when it would show nothing, unless it is the active one. @param {string} kind @param {string} key @param {string} label @param {number} count @param {string | null} active */
 function chip(kind, key, label, count, active) {
   const disabled = count === 0 && active !== key ? ' disabled' : '';
   return `<li><button type="button" data-${kind}="${esc(key)}" aria-pressed="${active === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
 }
 
-function filterItem(kind, key, label, count, active, colourIndex) {
+function filterItem(/** @type {string} */ kind, /** @type {string} */ key, /** @type {string} */ label, /** @type {number | undefined} */ count, /** @type {string | null} */ active, /** @type {number | string | undefined} */ colourIndex = undefined) {
   const dot = colourIndex === undefined ? '' : `<span class="dot topic-${colourIndex}"></span>`;
   return `<li><button type="button" data-${kind}="${esc(key)}" aria-pressed="${active === key}">${dot}<span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
 }
 
-/** One day as two lines, weekday then date; a range on one. */
+/** One day as two lines, weekday then date; a range on one. @param {string[]} days */
 function dayHeading(days) {
   if (!days.length) return 'No day selected';
   if (days.length > 1) return esc(Render.formatRange(days[0], days[days.length - 1]));
@@ -164,14 +164,14 @@ function dayHeading(days) {
   return `${esc(weekday)}<br>${esc(date)}`;
 }
 
-function renderNav(days) {
+function renderNav(/** @type {string[]} */ days) {
   const total = state.records.length;
   const progress = Render.summaryProgress(state.records);
-  const matched = state.records.filter(r => state.info.get(r.id).matched).length;
+  const matched = state.records.filter(r => /** @type {PaperInfo} */ (state.info.get(r.id)).matched).length;
   const hasInterests = state.keywords.length + state.authors.length > 0;
   if (inVenues()) {
     const venueCount = new Set(state.records.map(r => Sources.sourceKey(r))).size;
-    $('dayTitle').textContent = Streams.weekRange(state.week);
+    $('dayTitle').textContent = Streams.weekRange(/** @type {string} */ (state.week));
     $('daySentence').textContent = total ? Streams.weekSentence(total, venueCount, matched, hasInterests) : '';
   } else {
     $('dayTitle').innerHTML = dayHeading(days);
@@ -187,7 +187,7 @@ function renderNav(days) {
   renderStatus(days);
 
   const counts = currentCounts();
-  const count = topic => counts.topics.get(topic);
+  const count = (/** @type {string} */ topic) => counts.topics.get(topic);
   const topics = [filterItem('topic', 'matches', 'Interest matches', count('matches'), state.topic)];
   state.topics.forEach((t, i) => topics.push(filterItem('topic', t.name, t.name, count(t.name), state.topic, i)));
   if (state.authors.length) topics.push(filterItem('topic', 'authors', 'Your authors', count('authors'), state.topic, 'author'));
@@ -197,12 +197,12 @@ function renderNav(days) {
   renderSources(counts);
 }
 
-/** Type, area and venue rows; the section is hidden when every paper is from arXiv. */
+/** Type, area and venue rows; the section is hidden when every paper is from arXiv. @param {FilterCounts} counts */
 function renderSources(counts) {
   const groups = Filters.sourceGroups(state.records, counts, activeFilters(), state.venues);
   $('sourceFilter').hidden = !groups;
   if (!groups) return;
-  const row = (list, options, kind, active) => {
+  const row = (/** @type {'typeList' | 'areaList' | 'sourceList'} */ list, /** @type {FilterOption[]} */ options, /** @type {string} */ kind, /** @type {string} */ active) => {
     $(list).innerHTML = options.map(({ key, label, count }) => chip(kind, key, label, count, active)).join('');
   };
   row('typeList', groups.types, 'type', state.type);
@@ -210,7 +210,7 @@ function renderSources(counts) {
   row('sourceList', groups.venues, 'source', state.source);
   $('areaRow').hidden = !groups.areas.length;
   $('venueRow').hidden = !groups.venues.length;
-  ['typeList', 'areaList', 'sourceList'].forEach(id => revealPressed($(id)));
+  /** @type {const} */ (['typeList', 'areaList', 'sourceList']).forEach(id => revealPressed($(id)));
 }
 
 /**
@@ -218,33 +218,33 @@ function renderSources(counts) {
  * every render; scroll it so the chosen chip is in view. An "All" chip is
  * the default and needs no scrolling.
  */
-function revealPressed(list) {
-  const pressed = [...list.querySelectorAll('button[aria-pressed="true"]')].find(b => !Object.values(b.dataset).includes('all'));
+function revealPressed(/** @type {HTMLElement} */ list) {
+  const pressed = [.../** @type {NodeListOf<HTMLButtonElement>} */ (list.querySelectorAll('button[aria-pressed="true"]'))].find(b => !Object.values(b.dataset).includes('all'));
   if (!pressed || list.scrollWidth <= list.clientWidth) return;
   const box = list.getBoundingClientRect();
   const chipBox = pressed.getBoundingClientRect();
   if (chipBox.left < box.left || chipBox.right > box.right) list.scrollLeft += chipBox.left - box.left - 8;
 }
 
-function sourceName(key) {
+function sourceName(/** @type {string} */ key) {
   const record = state.records.find(r => Sources.sourceKey(r) === key);
   return record ? Sources.sourceLabel(record) : key.replace(/^venue:/, '');
 }
 
 const FREE_TITLE = 'arXiv papers, and journal or conference papers with an open-access copy.';
 
-/** "Has code" and the arXiv categories: refinements applied on top of the topic. */
+/** "Has code" and the arXiv categories: refinements applied on top of the topic. @param {FilterCounts} counts */
 function renderRefine(counts) {
-  const totals = new Map();
+  const totals = /** @type {Map<string | null, number>} */ (new Map());
   state.records.forEach(r => {
     const key = Filters.categoryOf(r, state.mainCategories);
     totals.set(key, (totals.get(key) || 0) + 1);
   });
-  const category = (key, label) => chip('category', key, label, counts.categories.get(key) || 0, state.category);
+  const category = (/** @type {string} */ key, /** @type {string} */ label) => chip('category', key, label, counts.categories.get(key) || 0, state.category);
   const free = Filters.hasVenuePapers(state.records)
     ? [`<li><button type="button" data-free aria-pressed="${state.freeOnly}" title="${FREE_TITLE}"><span class="label">Free to read</span><span class="count">${counts.free}</span></button></li>`]
     : [];
-  const main = state.mainCategories.filter(c => totals.has(c)).sort((a, b) => totals.get(b) - totals.get(a));
+  const main = state.mainCategories.filter(c => totals.has(c)).sort((a, b) => (totals.get(b) || 0) - (totals.get(a) || 0));
   const categories = inVenues()
     ? []
     : ['<li class="chip-break" aria-hidden="true"></li>', category('all', 'All fields'), ...main.map(c => category(c, c))];
@@ -284,7 +284,7 @@ function renderList() {
   if (!state.visible.some(e => e.record.id === state.selectedId) && !PHONE.matches) {
     state.selectedId = state.visible[0].record.id;
   }
-  const row = e => Render.renderRow(e.record, e.info, e.record.id === state.selectedId);
+  const row = (/** @type {ListEntry} */ e) => Render.renderRow(e.record, e.info, e.record.id === state.selectedId);
   $('paperList').innerHTML = inVenues()
     ? state.groups.map(g => Render.groupHead(g) + g.entries.map(row).join('')).join('')
     : state.visible.map(row).join('');
@@ -306,14 +306,14 @@ function renderReader() {
   $('reader').scrollTop = 0;
 }
 
-function renderAll(days) {
+function renderAll(/** @type {string[]} */ days) {
   renderNav(days);
   renderList();
 }
 
 // --- Selection and navigation ------------------------------------------------
 
-function select(id, { open = true } = {}) {
+function select(/** @type {string} */ id, { open = true } = {}) {
   state.selectedId = id;
   document.querySelectorAll('.row.is-selected').forEach(b => {
     b.classList.remove('is-selected');
@@ -330,7 +330,7 @@ function select(id, { open = true } = {}) {
   writeHash();
 }
 
-function move(delta) {
+function move(/** @type {number} */ delta) {
   if (!state.visible.length) return;
   const position = state.visible.findIndex(e => e.record.id === state.selectedId);
   const next = Math.min(state.visible.length - 1, Math.max(0, position + delta));
@@ -339,13 +339,13 @@ function move(delta) {
 
 function closeReader() {
   document.body.classList.remove('reader-open');
-  const button = document.querySelector('.row.is-selected');
+  const button = /** @type {HTMLElement | null} */ (document.querySelector('.row.is-selected'));
   if (button) button.focus();
 }
 
 // --- Pipeline status ----------------------------------------------------------
 
-/** "10:41" today, "2 Nov 21:59" on another day, in the reader's time zone. */
+/** "10:41" today, "2 Nov 21:59" on another day, in the reader's time zone. @param {string} iso */
 function clockTime(iso) {
   const when = new Date(iso);
   if (Number.isNaN(when.getTime())) return '';
@@ -354,7 +354,7 @@ function clockTime(iso) {
   return `${when.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} ${clock}`;
 }
 
-/** One line under the day: crawl, summaries and report, for a single selected day. */
+/** One line under the day: crawl, summaries and report, for a single selected day. @param {string[]} days */
 function renderStatus(days) {
   const box = $('pipelineStatus');
   if (!state.status || days.length !== 1 || inVenues()) {
@@ -377,13 +377,13 @@ function renderStatus(days) {
 function selectedDays() {
   if (!state.day) return [];
   if (!state.range) return [state.day];
-  const [from, to] = state.from <= state.day ? [state.from, state.day] : [state.day, state.from];
+  const [from, to] = /** @type {string[]} */ (/** @type {string} */ (state.from) <= state.day ? [state.from, state.day] : [state.day, state.from]);
   return state.days.filter(d => d >= from && d <= to).sort();
 }
 
 function writeHash() {
   const days = selectedDays();
-  const params = inVenues() ? new URLSearchParams({ stream: Streams.VENUES, week: state.week }) : new URLSearchParams({ day: days[days.length - 1] });
+  const params = inVenues() ? new URLSearchParams({ stream: Streams.VENUES, week: /** @type {string} */ (state.week) }) : new URLSearchParams({ day: days[days.length - 1] });
   if (!inVenues() && days.length > 1) params.set('from', days[0]);
   if (state.topic && state.topic !== 'matches') params.set('topic', state.topic);
   if (state.codeOnly) params.set('code', '1');
@@ -417,14 +417,14 @@ function readHash() {
 /** The top bar: the date button and its calendar, and the ‹ › buttons. */
 function updateDayButtons() {
   const venues = inVenues();
-  $('rangeToggle').parentElement.hidden = venues;
+  /** @type {HTMLElement} */ ($('rangeToggle').parentElement).hidden = venues;
   $('dayForm').setAttribute('aria-label', venues ? 'Choose a week' : 'Choose a day');
   $('prevDay').setAttribute('aria-label', venues ? 'Previous week' : 'Previous day');
   $('nextDay').setAttribute('aria-label', venues ? 'Next week' : 'Next day');
   const { older, newer } = steps();
   $('prevDay').disabled = !older;
   $('nextDay').disabled = !newer;
-  picker.update(Calendar.viewFor({ ...state, venues, selected: selectedDays() }));
+  if (picker) picker.update(Calendar.viewFor({ ...state, venues, selected: selectedDays() }));
 }
 
 /** The choices either side of the current one, for the ‹ › buttons. */
@@ -432,15 +432,15 @@ function steps() {
   return inVenues() ? Calendar.neighbours([...state.weeks.keys()], state.week) : Calendar.neighbours(state.days, state.day);
 }
 
-/** A choice from the date picker: { day }, { start, end } or { week }. */
+/** A choice from the date picker: { day }, { start, end } or { week }. @param {{ day?: string, start?: string, end?: string, week?: string }} pick */
 function pickDays({ day, start, end, week }) {
   if (week) state.week = week;
   else if (start) Object.assign(state, { from: start, day: end });
-  else state.day = day;
+  else state.day = day || null;
   showSelection();
 }
 
-/** A failed download, shown as a failure with a way to try again, never as an empty day. */
+/** A failed download, shown as a failure with a way to try again, never as an empty day. @param {any} error a LoadError, or anything thrown @param {() => void} retry */
 function showLoadError(error, retry) {
   console.error('Could not load data:', error);
   const status = error && error.status;
@@ -466,7 +466,7 @@ function showLoadError(error, retry) {
 
 /** The days the current stream shows: the chosen day or days, or the chosen week's files. */
 function streamDays() {
-  return inVenues() ? Streams.daysInWeek(state.week, state.days) : selectedDays();
+  return inVenues() ? Streams.daysInWeek(/** @type {string} */ (state.week), state.days) : selectedDays();
 }
 
 async function showSelection({ keepTopic = false } = {}) {
@@ -483,8 +483,8 @@ async function showSelection({ keepTopic = false } = {}) {
   state.records = Streams.streamRecords(state.dayRecords, state.stream);
   days.forEach(d => noteVenueDay(d, state.dayRecords.filter(r => r.date === d)));
   describeAll();
-  const anyMatch = state.records.some(r => state.info.get(r.id).matched);
-  const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
+  const anyMatch = state.records.some(r => /** @type {PaperInfo} */ (state.info.get(r.id)).matched);
+  const known = /** @type {(string | null)[]} */ (['matches', 'all', 'authors', ...state.topics.map(t => t.name)]);
   if (!keepTopic || !known.includes(state.topic)) state.topic = anyMatch ? 'matches' : 'all';
   state.category = 'all';
   setSourceChoices(Filters.keepValid(activeFilters(), state.records, state.venues));
@@ -497,11 +497,11 @@ async function showSelection({ keepTopic = false } = {}) {
  * if its topic hides it; a journal or conference paper opens in the weekly
  * stream, on the week of the day it arrived.
  */
-async function openLinkedPaper(id) {
+async function openLinkedPaper(/** @type {string | null} */ id) {
   if (!id) return;
   const venuePaper = !inVenues() && state.dayRecords.find(r => r.id === id && !PaperData.isArxiv(r));
   if (venuePaper) {
-    await setStream(Streams.VENUES, Streams.weekOf(venuePaper.date), { paper: id });
+    await setStream(Streams.VENUES, Streams.weekOf(/** @type {string} */ (venuePaper.date)), { paper: id });
   }
   if (!state.records.some(r => r.id === id)) return;
   if (!state.visible.some(e => e.record.id === id)) {
@@ -513,15 +513,15 @@ async function openLinkedPaper(id) {
 
 // --- Streams and weeks ----------------------------------------------------------
 
-/** Remember a day's venue papers (their count, and their venues for the "+ N" line's wording). */
+/** Remember a day's venue papers (their count, and their venues for the "+ N" line's wording). @param {string} day @param {string[]} names */
 function noteVenueNames(day, names) {
   state.venueNames.set(day, names);
   state.venueDays.set(day, names.length);
 }
 
-/** Remember a day's venue papers from records already loaded. */
+/** Remember a day's venue papers from records already loaded. @param {string} day @param {PageRecord[]} records */
 function noteVenueDay(day, records) {
-  noteVenueNames(day, records.filter(r => !PaperData.isArxiv(r)).map(r => r.venue || ''));
+  noteVenueNames(day, records.flatMap(r => (PaperData.isArxiv(r) ? [] : [r.venue || ''])));
   refreshWeeks();
 }
 
@@ -529,12 +529,12 @@ function refreshWeeks() {
   state.weeks = Streams.venueWeeks(state.venueDays);
 }
 
-/** The week's venue papers, counted from its day files; a day that cannot be read counts as unknown. */
+/** The week's venue papers, counted from its day files; a day that cannot be read counts as unknown. @param {string} monday */
 async function countWeek(monday) {
   const days = Streams.daysInWeek(monday, state.days);
   const lists = await Promise.all(days.map(d => DataSource.venuePapers(d).catch(() => null)));
   days.forEach((d, i) => {
-    if (lists[i]) noteVenueNames(d, lists[i]);
+    if (lists[i]) noteVenueNames(d, /** @type {string[]} */ (lists[i]));
   });
   return lists.reduce((n, list) => n + (list ? list.length : 0), 0);
 }
@@ -567,49 +567,49 @@ async function countWeeks() {
   }
 }
 
-/** The week the stream switch and the line under the day are about. */
+/** The week the stream switch and the line under the day are about. @param {string[]} days */
 function currentWeek(days) {
   if (inVenues()) return state.week;
   return days.length ? Streams.weekOf(days[days.length - 1]) : null;
 }
 
-/** The stream switch, hidden while no week has venue papers, and the arXiv day's "+ N journal papers this week". */
+/** The stream switch, hidden while no week has venue papers, and the arXiv day's "+ N journal papers this week". @param {string[]} days */
 function renderStreams(days) {
   const week = currentWeek(days);
   const count = (week && state.weeks.get(week)) || 0;
   $('streamSwitch').hidden = !state.weeks.size && !inVenues();
-  document.querySelectorAll('#streamSwitch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stream === state.stream)));
+  /** @type {NodeListOf<HTMLButtonElement>} */ (document.querySelectorAll('#streamSwitch button')).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stream === state.stream)));
   $('streamCount').textContent = count ? count.toLocaleString('en-GB') : '';
   const showNote = !inVenues() && days.length === 1 && count > 0;
   $('weekNote').hidden = !showNote;
   if (!showNote) return;
-  const kinds = Streams.daysInWeek(week, state.days).flatMap(d => (state.venueNames.get(d) || []).map(name => (state.venues.get(name) || {}).kind));
+  const kinds = Streams.daysInWeek(/** @type {string} */ (week), state.days).flatMap(d => (state.venueNames.get(d) || []).map(name => (state.venues.get(name) || /** @type {Partial<VenueInfo>} */ ({})).kind));
   $('weekNote').innerHTML = `<a href="#stream=venues&amp;week=${week}" data-week="${week}">${esc(Streams.weekNote(count, kinds))}</a>`;
 }
 
-/** Switch stream (and, for the weekly one, week), keeping the topic. */
+/** Switch stream (and, for the weekly one, week), keeping the topic. @param {string} stream @param {string | null} [week] @param {{ paper?: string | null }} [options] */
 async function setStream(stream, week = null, { paper = null } = {}) {
   state.stream = stream;
-  if (stream === Streams.VENUES) state.week = state.weeks.has(week) ? week : [...state.weeks.keys()][0] || null;
+  if (stream === Streams.VENUES) state.week = week !== null && state.weeks.has(week) ? week : [...state.weeks.keys()][0] || null;
   state.selectedId = paper;
   await showSelection({ keepTopic: true });
 }
 
 // --- Events -------------------------------------------------------------------
 
-function themeOption(theme, name, current) {
+function themeOption(/** @type {{ id: string, name: string, note: string }} */ theme, /** @type {string} */ name, /** @type {string} */ current) {
   const checked = theme.id === current ? ' checked' : '';
   return `<label class="theme-option"><input type="radio" name="${name}" value="${theme.id}"${checked}>
 <span class="swatch" data-swatch="${theme.id}" aria-hidden="true"><i></i><i></i><i></i></span>
 <span class="theme-text"><span class="theme-name">${esc(theme.name)}</span><span class="theme-note">${esc(theme.note)}</span></span></label>`;
 }
 
-function modeOption(mode, current) {
+function modeOption(/** @type {{ id: string, name: string }} */ mode, /** @type {string} */ current) {
   const checked = mode.id === current ? ' checked' : '';
   return `<label><input type="radio" name="mode" value="${mode.id}"${checked}><span>${esc(mode.name)}</span></label>`;
 }
 
-/** The theme choices currently ticked in the dialog. */
+/** The theme choices currently ticked in the dialog. @param {SettingsForm} form */
 function themeChoices(form) {
   return { mode: form.elements.mode.value, light: form.elements.lightTheme.value, dark: form.elements.darkTheme.value };
 }
@@ -620,7 +620,7 @@ function openSettings() {
   $('lightOptions').innerHTML = Theme.LIGHT.map(theme => themeOption(theme, 'lightTheme', prefs.light)).join('');
   $('darkOptions').innerHTML = Theme.DARK.map(theme => themeOption(theme, 'darkTheme', prefs.dark)).join('');
   const openOn = primaryLink();
-  document.querySelectorAll('input[name="openOn"]').forEach(input => {
+  /** @type {NodeListOf<HTMLInputElement>} */ (document.querySelectorAll('input[name="openOn"]')).forEach(input => {
     input.checked = input.value === openOn;
   });
   $('keywordsInput').value = state.keywords.join('\n');
@@ -630,7 +630,7 @@ function openSettings() {
 
 /** Save the dialog; the theme previews as soon as it is picked and reverts on Cancel. */
 function closeSettings() {
-  const form = $('settings').querySelector('form');
+  const form = /** @type {SettingsForm} */ ($('settings').querySelector('form'));
   if ($('settings').returnValue !== 'save') {
     Theme.show();
     return;
@@ -638,7 +638,7 @@ function closeSettings() {
   Theme.save(localStorage, themeChoices(form));
   Theme.show();
   writeList(OPEN_ON_KEY, form.elements.openOn.value || DATA_CONFIG.primaryLink);
-  const lines = id => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
+  const lines = (/** @type {'keywordsInput' | 'authorsInput'} */ id) => [...new Set($(id).value.split('\n').map(s => s.trim()).filter(Boolean))];
   writeList(KEYWORDS_KEY, lines('keywordsInput'));
   state.keywords = resolveKeywords(lines('keywordsInput'));
   state.authors = lines('authorsInput');
@@ -648,7 +648,7 @@ function closeSettings() {
   renderAll(streamDays());
 }
 
-function isTyping(target) {
+function isTyping(/** @type {EventTarget | null} */ target) {
   return target instanceof Element && Boolean(target.closest('input, textarea, select, dialog[open]'));
 }
 
@@ -657,7 +657,7 @@ function bindEvents() {
     state.range = $('rangeToggle').checked;
     showSelection();
   });
-  const step = which => {
+  const step = (/** @type {'older' | 'newer'} */ which) => {
     const next = steps()[which];
     if (!next) return;
     state[inVenues() ? 'week' : 'day'] = next;
@@ -666,30 +666,30 @@ function bindEvents() {
   $('prevDay').addEventListener('click', () => step('older'));
   $('nextDay').addEventListener('click', () => step('newer'));
   $('streamSwitch').addEventListener('click', event => {
-    const button = event.target.closest('button[data-stream]');
-    if (button && button.dataset.stream !== state.stream) setStream(button.dataset.stream, currentWeek(selectedDays()));
+    const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('button[data-stream]'));
+    if (button && button.dataset.stream !== state.stream) setStream(/** @type {string} */ (button.dataset.stream), currentWeek(selectedDays()));
   });
   $('weekNote').addEventListener('click', event => {
-    const link = event.target.closest('a[data-week]');
+    const link = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('a[data-week]'));
     if (!link) return;
     event.preventDefault();
-    setStream(Streams.VENUES, link.dataset.week);
+    setStream(Streams.VENUES, link.dataset.week || null);
   });
   $('search').addEventListener('input', event => {
-    state.query = event.target.value;
+    state.query = /** @type {HTMLInputElement} */ (event.target).value;
     renderNav(streamDays());
     renderList();
   });
   $('topicList').addEventListener('click', event => {
-    const button = event.target.closest('button[data-topic]');
+    const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('button[data-topic]'));
     if (!button) return;
-    state.topic = button.dataset.topic;
+    state.topic = button.dataset.topic || null;
     renderNav(streamDays());
     renderList();
     writeHash();
   });
   $('refineList').addEventListener('click', event => {
-    const button = event.target.closest('button');
+    const button = /** @type {Element} */ (event.target).closest('button');
     if (!button) return;
     if (button.hasAttribute('data-code')) state.codeOnly = !state.codeOnly;
     else if (button.hasAttribute('data-free')) state.freeOnly = !state.freeOnly;
@@ -699,11 +699,11 @@ function bindEvents() {
     renderList();
     writeHash();
   });
-  [['typeList', 'type'], ['areaList', 'area'], ['sourceList', 'source']].forEach(([list, kind]) => {
+  /** @type {const} */ ([['typeList', 'type'], ['areaList', 'area'], ['sourceList', 'source']]).forEach(([list, kind]) => {
     $(list).addEventListener('click', event => {
-      const button = event.target.closest(`button[data-${kind}]`);
+      const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest(`button[data-${kind}]`));
       if (!button) return;
-      state[kind] = button.dataset[kind];
+      state[kind] = /** @type {string} */ (button.dataset[kind]);
       if (kind !== 'source') state.source = 'all'; // the venue row now lists other venues
       renderNav(streamDays());
       renderList();
@@ -719,8 +719,8 @@ function bindEvents() {
     writeHash();
   });
   $('paperList').addEventListener('click', event => {
-    const button = event.target.closest('button.row');
-    if (button) select(button.dataset.id);
+    const button = /** @type {HTMLElement | null} */ (/** @type {Element} */ (event.target).closest('button.row'));
+    if (button) select(/** @type {string} */ (button.dataset.id));
   });
   $('prevPaper').addEventListener('click', () => move(-1));
   $('nextPaper').addEventListener('click', () => move(1));
@@ -740,7 +740,7 @@ function bindEvents() {
     $('keywordsInput').value = defaultKeywords().join('\n');
   });
   $('settings').addEventListener('close', closeSettings);
-  $('appearance').addEventListener('change', () => Theme.show(themeChoices($('settings').querySelector('form'))));
+  $('appearance').addEventListener('change', () => Theme.show(themeChoices(/** @type {SettingsForm} */ ($('settings').querySelector('form')))));
 }
 
 async function init() {
@@ -789,7 +789,7 @@ async function init() {
     await showSelection({ keepTopic });
   } else {
     // Start loading the day or the linked week first, so counting weeks reuses the download.
-    if (linkedWeek) Object.assign(state, { stream: Streams.VENUES, week: Streams.weekOf(params.get('week')) });
+    if (linkedWeek) Object.assign(state, { stream: Streams.VENUES, week: Streams.weekOf(/** @type {string} */ (params.get('week'))) });
     const shown = showSelection({ keepTopic });
     discoverWeeks();
     await shown;

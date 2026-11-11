@@ -19,7 +19,7 @@ def refused(result):
 
 def test_git_cannot_reach_the_real_remote_by_any_route(tmp_path):
     def run(argv, **kwargs):
-        return subprocess.run(argv, capture_output=True, text=True, **kwargs)
+        return subprocess.run(argv, capture_output=True, text=True, check=False, **kwargs)
 
     assert refused(run(["git", "ls-remote", "--heads", "origin", "data"], cwd=REPO_ROOT))
     assert refused(run(["git", "-C", str(REPO_ROOT), "fetch", "origin"], cwd=tmp_path))
@@ -31,15 +31,15 @@ def test_git_cannot_reach_the_real_remote_by_any_route(tmp_path):
 def test_local_git_and_temporary_remotes_still_work(remote_and_clone):
     _, clone = remote_and_clone
     assert git(clone, "ls-remote", "--heads", "origin", "main")
-    result = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=REPO_ROOT, capture_output=True, text=True)
+    result = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=REPO_ROOT, capture_output=True, text=True, check=False)
     assert result.stdout.strip() == "true"
 
 
 @pytest.mark.parametrize("call", [
-    lambda: subprocess.run(["gh", "run", "list"], capture_output=True),
+    lambda: subprocess.run(["gh", "run", "list"], capture_output=True, check=False),
     lambda: subprocess.Popen(["gh", "api", "user"]),
     lambda: local_runner.run_command(["gh", "--version"]),
-    lambda: subprocess.run(["/usr/bin/true"], executable="/usr/bin/curl"),
+    lambda: subprocess.run(["/usr/bin/true"], executable="/usr/bin/curl", check=False),
 ])
 def test_gh_and_downloaders_are_refused(call):
     with pytest.raises(RuntimeError, match="must not run"):
@@ -48,8 +48,8 @@ def test_gh_and_downloaders_are_refused(call):
 
 @pytest.mark.parametrize("call", [
     lambda: subprocess.check_output("curl https://arxiv.org", shell=True),
-    lambda: subprocess.run(["/bin/sh", "-c", "curl --version"]),
-    lambda: subprocess.run(["env", "curl", "--version"]),
+    lambda: subprocess.run(["/bin/sh", "-c", "curl --version"], check=False),
+    lambda: subprocess.run(["env", "curl", "--version"], check=False),
 ])
 def test_shells_and_env_are_refused(call):
     with pytest.raises(RuntimeError, match="through a shell or env"):
@@ -64,12 +64,10 @@ def test_the_network_is_refused_before_any_lookup():
     for resolve in (socket.gethostbyname, socket.gethostbyname_ex, socket.gethostbyaddr):
         with pytest.raises(RuntimeError, match="resolve arxiv.org"):
             resolve("arxiv.org")
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        with pytest.raises(RuntimeError, match="network"):
-            sock.connect_ex(("192.0.2.1", 443))
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-        with pytest.raises(RuntimeError, match="network"):
-            sock.sendto(b"x", ("192.0.2.1", 53))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock, pytest.raises(RuntimeError, match="network"):
+        sock.connect_ex(("192.0.2.1", 443))
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock, pytest.raises(RuntimeError, match="network"):
+        sock.sendto(b"x", ("192.0.2.1", 53))
 
 
 def test_loopback_is_allowed():

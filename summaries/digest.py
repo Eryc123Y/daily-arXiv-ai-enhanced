@@ -24,6 +24,7 @@ import json
 import os
 import re
 import subprocess
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -47,11 +48,11 @@ SUMMARISED_ENOUGH = 0.95  # --wait-summaries: a few papers left pending by faile
 # A paper id in the radar table or the brief: an arXiv ID, or a feed paper's doi:/openreview: id.
 ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b|\b(?:doi|openreview):[^\s|]+")
 BARE_ARXIV_ID = re.compile(r"\d{4}\.\d{4,5}")
-RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
-SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.I)
-INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.I)
+RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.MULTILINE)
+SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.IGNORECASE)
+INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.IGNORECASE)
 LIST_MARKER = re.compile(r"^[\s>*`\-]*(?:\d+[.)]\s*)?")
-PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/|$)", re.I)  # as in js/render.js
+PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/|$)", re.IGNORECASE)  # as in js/render.js
 REFERENCES = re.compile(r"\n\s*(References|REFERENCES|Bibliography)\s*\n")
 FULLTEXT_CHARS = 60_000
 DEFAULT_CACHE = ".cache/digest"  # Sunday's page reads each day's picks.json here
@@ -75,7 +76,7 @@ def radar_patterns(brief):
     patterns = {}
     for name, source in RADAR_RULE.findall(brief or ""):
         try:
-            patterns[name] = re.compile(source.strip(), re.I)
+            patterns[name] = re.compile(source.strip(), re.IGNORECASE)
         except re.error:
             continue
     return patterns
@@ -264,7 +265,7 @@ radar | <高|中|可借鉴|无> | <arXiv id> | <中文一句话> | <建议动作
 {blocks}"""
 
 
-def parse_picks(text, valid_ids, topic_names, journal_ids=frozenset()):
+def parse_picks(text, valid_ids, topic_names, journal_ids: Collection[str] = frozenset()):
     """The writer's answer as {topics, radar, other, journal, note}, and the lines it had to drop.
 
     `journal_ids`: the day's journal papers, the only papers a `journal` line may name.
@@ -411,6 +412,7 @@ def run_model(argv, prompt, cwd):
             capture_output=True,
             text=True,
             timeout=MODEL_TIMEOUT,
+            check=False,
             env={**os.environ, "DISABLE_PROMPT_CACHING": "1"},
         )
     except subprocess.TimeoutExpired as error:

@@ -22,7 +22,7 @@ class ModeDecision:
     warning: str | None = None
 
 
-def resolve_mode(requested, provider_problem):
+def resolve_mode(requested: str | None, provider_problem: str | None) -> ModeDecision:
     """`provider_problem` is None when the API provider is fully configured."""
     value = (requested or "").strip().lower()
     if value in ("", CLAUDE_CODE):
@@ -30,7 +30,7 @@ def resolve_mode(requested, provider_problem):
     if value != API:
         return ModeDecision(
             CLAUDE_CODE,
-            f"Unknown SUMMARY_MODE '{requested.strip()}'; using {CLAUDE_CODE}.",
+            f"Unknown SUMMARY_MODE '{(requested or "").strip()}'; using {CLAUDE_CODE}.",
         )
     if provider_problem:
         return ModeDecision(

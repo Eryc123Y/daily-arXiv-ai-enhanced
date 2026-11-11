@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 检查Scrapy爬取统计信息的脚本 / Script to check Scrapy crawling statistics
 用于获取去重检查的状态结果 / Used to get deduplication check status results
@@ -9,9 +8,10 @@
 - 根据去重后的结果决定工作流是否继续 / Decide workflow continuation based on deduplication results
 """
 import json
-import sys
 import os
+import sys
 from datetime import datetime, timedelta
+
 
 def load_papers_data(file_path):
     """
@@ -38,7 +38,7 @@ def load_papers_data(file_path):
                     papers.append(data)
                     ids.add(data.get('id', ''))
         return papers, ids
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report and carry on; the dedup must not stop the crawl
         print(f"Error reading {file_path}: {e}", file=sys.stderr)
         return [], set()
 
@@ -53,10 +53,9 @@ def save_papers_data(papers, file_path):
     """
     try:
         with open(file_path, 'w', encoding='utf-8') as f:
-            for paper in papers:
-                f.write(json.dumps(paper, ensure_ascii=False) + '\n')
+            f.writelines(json.dumps(paper, ensure_ascii=False) + '\n' for paper in papers)
         return True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report and carry on; the dedup must not stop the crawl
         print(f"Error saving {file_path}: {e}", file=sys.stderr)
         return False
 
@@ -117,14 +116,14 @@ def perform_deduplication():
                 try:
                     os.remove(today_file)
                     print("所有论文均为重复内容，已删除今日文件 / All papers are duplicate content, today's file deleted", file=sys.stderr)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001 - report and carry on; the dedup must not stop the crawl
                     print(f"删除文件失败: {e} / Failed to delete file: {e}", file=sys.stderr)
                 return "no_new_content"
         else:
             print("所有内容均为新内容 / All content is new", file=sys.stderr)
             return "has_new_content"
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - report and carry on; the dedup must not stop the crawl
         print(f"去重处理失败: {e} / Deduplication processing failed: {e}", file=sys.stderr)
         return "error"
 

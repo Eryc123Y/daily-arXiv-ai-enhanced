@@ -32,6 +32,10 @@ class ArxivRecord(TypedDict):
     comment: NotRequired[str | None]
     code_url: NotRequired[str | None]
     source: NotRequired[Literal["arxiv"]]  # absent on every record written so far
+    # Set once the paper is published ("published in IEEE TCSVT"); the page shows them.
+    # Nothing writes them yet (S1 spec, "Should have").
+    venue: NotRequired[str]
+    doi: NotRequired[str]
     AI: NotRequired[AISummary]
 
 
@@ -50,6 +54,7 @@ class FeedRecord(TypedDict):
     url: str  # the publisher's or OpenReview's page
     categories: list[str]  # always empty; kept so readers that expect it need no special case
     has_abstract: bool  # an abstract was received (it stays local): a summary can be written for this paper
+    code_url: NotRequired[str | None]  # the page shows it when present; the feed does not set it yet
 
 
 class FeedLine(TypedDict):
