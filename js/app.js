@@ -18,6 +18,7 @@ const state = {
   topic: null,
   category: 'all',
   codeOnly: false,
+  source: 'all',
   query: '',
   selectedId: null,
   mainCategories: [],
@@ -86,7 +87,7 @@ function describeAll() {
 // --- Filtering ----------------------------------------------------------------
 
 function activeFilters() {
-  return { topic: state.topic, category: state.category, codeOnly: state.codeOnly, query: state.query };
+  return { topic: state.topic, category: state.category, codeOnly: state.codeOnly, source: state.source, query: state.query };
 }
 
 function entries() {
@@ -123,15 +124,15 @@ function dayHeading(days) {
 
 function renderNav(days) {
   const total = state.records.length;
-  const done = state.records.filter(r => !r.pending).length;
+  const progress = Render.summaryProgress(state.records);
   const matched = state.records.filter(r => state.info.get(r.id).matched).length;
   $('dayTitle').innerHTML = dayHeading(days);
   $('daySentence').textContent = total ? Render.daySentence(total, matched, state.keywords.length + state.authors.length > 0) : '';
-  const pending = total > 0 && done < total;
+  const pending = progress.done < progress.total;
   $('progress').hidden = !pending;
   if (pending) {
-    $('progressFill').style.width = `${Math.round((100 * done) / total)}%`;
-    $('progressText').textContent = Render.progressText(done, total);
+    $('progressFill').style.width = `${Math.round((100 * progress.done) / progress.total)}%`;
+    $('progressText').textContent = Render.progressText(progress.done, progress.total, progress);
   }
   renderStatus(days);
 
@@ -143,6 +144,24 @@ function renderNav(days) {
   topics.push(filterItem('topic', 'all', 'All papers', count('all'), state.topic));
   $('topicList').innerHTML = topics.join('');
   renderRefine(counts);
+  renderSources(counts);
+}
+
+/** arXiv and each venue of the day; hidden when every paper is from arXiv. */
+function renderSources(counts) {
+  const options = Filters.sourceOptions(state.records, counts);
+  $('sourceFilter').hidden = !options.length;
+  $('sourceList').innerHTML = options
+    .map(({ key, label, count }) => {
+      const disabled = count === 0 && state.source !== key ? ' disabled' : '';
+      return `<li><button type="button" data-source="${esc(key)}" aria-pressed="${state.source === key}"${disabled}><span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
+    })
+    .join('');
+}
+
+function sourceName(key) {
+  const record = state.records.find(r => Sources.sourceKey(r) === key);
+  return record ? Sources.sourceLabel(record) : key;
 }
 
 /** "Has code" and the arXiv categories: refinements applied on top of the topic. */
@@ -170,7 +189,8 @@ function renderRefine(counts) {
 function renderList() {
   computeVisible();
   const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === Filters.OTHER_FIELDS ? 'other fields' : state.category}`;
-  const scope = state.codeOnly ? `${place}, with code` : place;
+  const coded = state.codeOnly ? `${place}, with code` : place;
+  const scope = state.source === 'all' ? coded : `${coded}, from ${sourceName(state.source)}`;
   $('listHeading').innerHTML = `${esc(scope)} <span class="count">${state.visible.length}</span>`;
   $('listNote').textContent = state.topic === 'all' && state.visible.length ? 'Interest matches first' : '';
   $('clearFilters').hidden = !Filters.isRefined(activeFilters());
@@ -332,6 +352,7 @@ function showLoadError(error, retry) {
   $('progress').hidden = true;
   $('topicList').innerHTML = '';
   $('refineList').innerHTML = '';
+  $('sourceFilter').hidden = true;
   $('listHeading').textContent = 'Papers';
   $('listNote').textContent = '';
   $('clearFilters').hidden = true;
@@ -356,6 +377,7 @@ async function showSelection({ keepTopic = false } = {}) {
   const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
   if (!keepTopic || !known.includes(state.topic)) state.topic = anyMatch ? 'matches' : 'all';
   state.category = 'all';
+  state.source = 'all';
   renderAll(days);
   writeHash();
 }
@@ -391,9 +413,10 @@ function outputJson(params, records) {
       title: r.title,
       authors: (r.authors || []).join(', '),
       categories: r.categories,
-      summary: r.pending ? r.summary : r.AI.tldr,
+      source: Sources.sourceLabel(r),
+      summary: r.AI && !r.pending ? r.AI.tldr : r.summary || null,
       date: r.date,
-      url: r.abs || `https://arxiv.org/abs/${r.id}`,
+      url: PaperData.isArxiv(r) ? r.abs || `https://arxiv.org/abs/${r.id}` : Sources.safeUrl(r.oa_url) || Sources.publisherUrl(r),
       reason: [...m.keywords.map(k => `keyword: ${k}`), ...m.authors.map(a => `author: ${a}`)].join(' | ') || null,
     }));
   document.head.innerHTML = '';
@@ -499,9 +522,17 @@ function bindEvents() {
     renderList();
     writeHash();
   });
+  $('sourceList').addEventListener('click', event => {
+    const button = event.target.closest('button[data-source]');
+    if (!button) return;
+    state.source = button.dataset.source;
+    renderNav(selectedDays());
+    renderList();
+  });
   $('clearFilters').addEventListener('click', () => {
     state.category = 'all';
     state.codeOnly = false;
+    state.source = 'all';
     renderNav(selectedDays());
     renderList();
     writeHash();

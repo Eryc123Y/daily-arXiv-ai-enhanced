@@ -4,13 +4,14 @@
  * global `Render`, and by node for tests.
  */
 (function (root, factory) {
-  const api = factory(root.PaperData || (typeof require === 'function' ? require('./paper-data.js') : null));
+  const load = (name, file) => root[name] || (typeof require === 'function' ? require(file) : null);
+  const api = factory(load('PaperData', './paper-data.js'), load('Sources', './sources.js'));
   if (typeof module === 'object' && module.exports) {
     module.exports = api;
   } else {
     root.Render = api;
   }
-})(typeof self !== 'undefined' ? self : this, function (PaperData) {
+})(typeof self !== 'undefined' ? self : this, function (PaperData, Sources) {
   const esc = PaperData.escapeHtml;
   const FIELDS = [
     ['motivation', 'Motivation'],
@@ -124,6 +125,15 @@
     return `<span class="row-topic">${esc((paper.categories || [])[0] || '')}</span>`;
   }
 
+  /** Under the title: categories and arXiv ID, or venue and publication date. */
+  function rowMeta(paper) {
+    if (PaperData.isArxiv(paper)) {
+      return `<span class="row-meta"><span>${esc((paper.categories || []).slice(0, 2).join(', '))}</span><span>${esc(paper.id)}</span></span>`;
+    }
+    const day = Sources.publishedLabel(paper);
+    return `<span class="row-meta is-venue"><span>${esc(Sources.sourceLabel(paper))}</span>${day ? `<span>${esc(day)}</span>` : ''}</span>`;
+  }
+
   function renderRow(paper, info, selected) {
     const ai = paper.pending ? null : paper.AI;
     const lead = ai ? ai.tldr : paper.summary;
@@ -132,34 +142,84 @@
   <span class="row-title">${esc(paper.title)}</span>
   <span class="row-authors">${esc(authorLine(paper.authors, 3))}</span>
   <span class="row-lead">${esc(lead || '')}</span>
-  <span class="row-meta"><span>${esc((paper.categories || []).slice(0, 2).join(', '))}</span><span>${esc(paper.id)}</span></span>
+  ${rowMeta(paper)}
 </button></li>`;
   }
 
-  function links(paper, primaryLink = 'alphaxiv') {
+  function arxivLinks(paper, primaryLink) {
     const abs = paper.abs || `https://arxiv.org/abs/${paper.id}`;
     const alphaxiv = `https://www.alphaxiv.org/abs/${encodeURIComponent(paper.id)}`;
     const sites = primaryLink === 'arxiv'
       ? [[abs, 'Open on arXiv', 'button-solid'], [alphaxiv, 'alphaXiv', 'button-outline']]
       : [[alphaxiv, 'Open on alphaXiv', 'button-solid'], [abs, 'arXiv', 'button-outline']];
-    const items = [
+    return [
       ...sites,
       [paper.pdf || abs.replace('/abs/', '/pdf/'), 'PDF', 'button-outline'],
       [abs.replace('/abs/', '/html/'), 'HTML', 'button-outline'],
     ];
+  }
+
+  /** The reader's buttons. The alphaXiv-or-arXiv choice applies to arXiv papers only. */
+  function links(paper, primaryLink = 'alphaxiv') {
+    const arxiv = PaperData.isArxiv(paper);
+    const items = arxiv ? arxivLinks(paper, primaryLink) : Sources.venueLinks(paper, primaryLink);
     const kind = codeKind(paper);
     if (kind) items.push([paper.code_url, kind === 'code' ? 'Code' : 'Project page', 'button-outline']);
-    if (paper.hf) items.push([`https://huggingface.co/papers/${encodeURIComponent(paper.id)}`, `Hugging Face ▲ ${Number(paper.hf)}`, 'button-outline']);
+    if (paper.hf && Sources.arxivId(paper)) items.push([`https://huggingface.co/papers/${encodeURIComponent(paper.id)}`, `Hugging Face ▲ ${Number(paper.hf)}`, 'button-outline']);
     return items
       .map(([href, label, cls]) => `<a class="${cls}" href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`)
       .join('');
   }
 
-  /** The vertical line in the left margin of every arXiv PDF: identifier, primary category, date. */
+  /**
+   * The vertical line in the left margin of every arXiv PDF: identifier,
+   * primary category, date. Without an arXiv ID: venue, DOI, publication date.
+   */
   function stamp(paper) {
+    if (!PaperData.isArxiv(paper)) {
+      return [Sources.sourceLabel(paper), paper.doi ? `doi:${paper.doi}` : '', Sources.publishedLabel(paper)].filter(Boolean).join(' ');
+    }
     const primary = (paper.categories || [])[0];
     const day = paper.date ? formatDay(paper.date, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
     return [`arXiv:${paper.id}`, primary ? `[${primary}]` : '', day].filter(Boolean).join(' ');
+  }
+
+  function readerMeta(paper) {
+    if (!PaperData.isArxiv(paper)) {
+      const day = Sources.publishedLabel(paper);
+      return [Sources.sourceLabel(paper), day ? `Published ${day}` : '', paper.doi ? `DOI ${paper.doi}` : '']
+        .filter(Boolean).map(text => `<span>${esc(text)}</span>`).join('');
+    }
+    const venue = paper.venue ? `<span>Published in ${esc(paper.venue)}</span>` : '';
+    return `<span>${esc((paper.categories || []).join(', '))}</span><span>arXiv ${esc(paper.id)}</span>${venue}${paper.comment ? `<span>${esc(paper.comment)}</span>` : ''}`;
+  }
+
+  /** Where the abstract would be, for a paper whose abstract is not published here. */
+  function abstractElsewhere(paper, lead = '') {
+    const href = Sources.publisherUrl(paper);
+    const where = href
+      ? `The abstract is on the <a href="${esc(href)}" target="_blank" rel="noopener">publisher's page</a>.`
+      : 'The abstract is not available here.';
+    return `<p class="abstract-elsewhere">${lead}${where}</p>`;
+  }
+
+  function summaryBody(paper, ai, terms) {
+    const tail = paper.summary || PaperData.isArxiv(paper)
+      ? `<details class="abstract"><summary>Show the abstract</summary><p>${mark(paper.summary, terms)}</p></details>`
+      : abstractElsewhere(paper);
+    return `<section class="tldr" aria-labelledby="tldrHeading"><h3 id="tldrHeading">TL;DR</h3><p class="provenance">AI summary of the title and abstract, not the full paper</p><p>${mark(ai.tldr, terms)}</p></section>
+<div class="fields">${FIELDS.map(([key, label]) => `<section><h3>${label}</h3><p>${mark(ai[key], terms)}</p></section>`).join('')}</div>
+${tail}`;
+  }
+
+  function readerBody(paper, ai, terms) {
+    if (ai) return summaryBody(paper, ai, terms);
+    const abstract = `<section class="abstract-open"><h3>Abstract</h3><p>${mark(paper.summary, terms)}</p></section>`;
+    if (paper.pending && PaperData.isArxiv(paper)) return `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>\n${abstract}`;
+    if (paper.pending) {
+      return `<p class="pending-note">This paper's summary has not been written yet.</p>\n${paper.summary ? abstract : abstractElsewhere(paper)}`;
+    }
+    return paper.summary ? abstract : abstractElsewhere(paper, 'There is no summary of this paper. ');
   }
 
   function renderReader(paper, info, terms, options = {}) {
@@ -171,18 +231,13 @@
     const matches = reasons.length
       ? `<span class="reader-matches">matches ${reasons.map(r => `<mark class="hl">${esc(r)}</mark>`).join(' ')}</span>`
       : '';
-    const body = ai
-      ? `<section class="tldr" aria-labelledby="tldrHeading"><h3 id="tldrHeading">TL;DR</h3><p class="provenance">AI summary of the title and abstract, not the full paper</p><p>${mark(ai.tldr, terms)}</p></section>
-<div class="fields">${FIELDS.map(([key, label]) => `<section><h3>${label}</h3><p>${mark(ai[key], terms)}</p></section>`).join('')}</div>
-<details class="abstract"><summary>Show the abstract</summary><p>${mark(paper.summary, terms)}</p></details>`
-      : `<p class="pending-note">This paper's summary has not been written yet. Here is its abstract.</p>
-<section class="abstract-open"><h3>Abstract</h3><p>${mark(paper.summary, terms)}</p></section>`;
+    const body = readerBody(paper, ai, terms);
     return `<p class="reader-stamp" aria-hidden="true">${esc(stamp(paper))}</p>
 <article class="reader-body" aria-labelledby="readerTitle">
 <p class="reader-kicker">${topicLine}${matches}</p>
 <h2 class="reader-title" id="readerTitle">${mark(paper.title, terms)}</h2>
 <p class="reader-authors">${PaperData.highlight(esc(authorLine(paper.authors, 12)), info.match.authors, 'hl')}</p>
-<p class="reader-meta"><span>${esc((paper.categories || []).join(', '))}</span><span>arXiv ${esc(paper.id)}</span>${paper.comment ? `<span>${esc(paper.comment)}</span>` : ''}</p>
+<p class="reader-meta">${readerMeta(paper)}</p>
 <p class="reader-links">${links(paper, options.primaryLink)}</p>
 ${body}
 </article>`;
@@ -194,9 +249,18 @@ ${body}
     return `${papers}, ${matched === 0 ? 'none' : matched} matching your interests.`;
   }
 
-  function progressText(done, total) {
-    if (done === 0) return `Summaries are being written. Each paper shows its abstract until its summary is ready.`;
-    return `Summaries ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}. The rest show their abstract for now.`;
+  /** Summaries written, out of the papers that can get one (every arXiv paper, and the others that have one). */
+  /** `linkOnly`: some pending paper has no abstract on the page, only a link to it. */
+  function summaryProgress(records) {
+    const pending = records.filter(r => r.pending);
+    const done = records.filter(r => !r.pending && PaperData.hasSummary(r)).length;
+    return { done, total: done + pending.length, linkOnly: pending.some(r => !r.summary) };
+  }
+
+  function progressText(done, total, { linkOnly = false } = {}) {
+    const abstract = linkOnly ? 'its abstract, or a link to it,' : 'its abstract';
+    if (done === 0) return `Summaries are being written. Each paper shows ${abstract} until its summary is ready.`;
+    return `Summaries ready for ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}. The rest show ${linkOnly ? 'their abstract, or a link to it,' : 'their abstract'} for now.`;
   }
 
   return {
@@ -213,6 +277,7 @@ ${body}
     links,
     renderReader,
     daySentence,
+    summaryProgress,
     progressText,
   };
 });
