@@ -1,15 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LitScout">
-  <!-- A spyglass drawn in strokes and printed twice like a red/cyan stereo pair. -->
-  <rect width="64" height="64" rx="14" fill="#1c2430"/>
-  <defs>
-    <g id="spyglass" fill="none" stroke-width="4.6" stroke-linecap="round" stroke-linejoin="round" transform="translate(32 32) rotate(-30) scale(1.04) translate(-29 -32)">
-      <path d="M8.5 27.5L22 26.5M8.5 36.5L22 37.5"/>
-      <path d="M23 22.5L44 19.5M23 41.5L44 44.5"/>
-      <ellipse cx="8.5" cy="32" rx="2.2" ry="4.5"/>
-      <ellipse cx="23" cy="32" rx="2.2" ry="9.5"/>
-      <ellipse cx="45" cy="32" rx="4.6" ry="12.5"/>
-    </g>
-  </defs>
-  <use href="#spyglass" stroke="#e8424a" transform="translate(-3 0)" style="mix-blend-mode:screen"/>
-  <use href="#spyglass" stroke="#2fd0dd" transform="translate(3 0)" style="mix-blend-mode:screen"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LitScout"><path fill="#1f8f7a" d="M15 4H33V36H49V60L32 48.5L15 60Z"/></svg>

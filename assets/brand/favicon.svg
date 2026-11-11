@@ -1,12 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Simplified mark for 16 and 32 px: a short tube and the lens ring, strokes 6.5. -->
-  <rect width="64" height="64" rx="14" fill="#1c2430"/>
-  <defs>
-    <g id="spyglass" fill="none" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" transform="translate(32 32) rotate(-30) scale(1.02) translate(-28.5 -32)">
-      <path d="M13 25V39M13 25L41 19.5M13 39L41 44.5"/>
-      <ellipse cx="43" cy="32" rx="5" ry="13"/>
-    </g>
-  </defs>
-  <use href="#spyglass" stroke="#e8424a" transform="translate(-2.8 0)" style="mix-blend-mode:screen"/>
-  <use href="#spyglass" stroke="#2fd0dd" transform="translate(2.8 0)" style="mix-blend-mode:screen"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path fill="#1f8f7a" d="M15 4H33V36H49V60L32 48.5L15 60Z"/></svg>

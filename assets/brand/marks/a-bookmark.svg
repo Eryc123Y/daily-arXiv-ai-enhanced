@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LitScout">
+  <!-- A: a bookmark ribbon that is also an L. 64 grid: stem x 15 to 33, foot to x 49, swallowtail apex on the centre line. -->
+  <path fill="#1f8f7a" d="M15 4H33V36H49V60L32 48.5L15 60Z"/>
+</svg>
