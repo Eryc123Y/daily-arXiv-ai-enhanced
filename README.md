@@ -135,7 +135,7 @@ Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-br
 
 ## Brand assets
 
-The mark, wordmark, favicons and GitHub social preview are in [`assets/brand/`](assets/brand/): `litscout-mark.svg` is the hand-drawn source (a spyglass printed twice as a red and cyan stereo pair), and `build.py` regenerates the mono mark, wordmark, favicon and PNG exports from it. `concepts.png` shows the three directions that were tried. `assets/logo.svg` (the old chi mark) stays because older reports link it.
+The mark, wordmark, favicons and GitHub social preview are in [`assets/brand/`](assets/brand/); its [README](assets/brand/README.md) has the design brief, the critique of the directions that were tried, and how to swap between the two shortlisted marks (`build.py --mark a|b`). `assets/logo.svg` (the old chi mark) stays because older reports link it.
 
 ## Changes from upstream
 
