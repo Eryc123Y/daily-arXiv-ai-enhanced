@@ -1,16 +1,28 @@
 /**
  * Daily arXiv reading page (three panes): topics and filters, the paper list,
- * and the selected paper. Data comes from window.DataSource; keyword and
- * author lists live in localStorage under the keys upstream used.
+ * and the selected paper, in two streams: arXiv papers by day, and journal
+ * and conference papers by week (js/streams.js). Data comes from
+ * window.DataSource; keyword and author lists live in localStorage under the
+ * keys upstream used.
  */
 const KEYWORDS_KEY = 'preferredKeywords';
 const AUTHORS_KEY = 'preferredAuthors';
 const OPEN_ON_KEY = 'daily-arxiv-open-on';
 const PHONE = window.matchMedia('(max-width: 760px)');
+// Weeks are counted newest first; after this many weeks without a venue paper, the feed is taken never to have run.
+const EMPTY_WEEKS_BEFORE_GIVING_UP = 2;
 
 const state = {
   days: [],
+  stream: 'arxiv',
+  week: null,
+  dayRecords: [],
   records: [],
+  venueDays: new Map(),
+  venueNames: new Map(),
+  indexed: false,
+  weeks: new Map(),
+  groups: [],
   info: new Map(),
   topics: [],
   keywords: [],
@@ -108,9 +120,15 @@ function entries() {
   return state.records.map((record, index) => ({ record, index, info: state.info.get(record.id) }));
 }
 
+const inVenues = () => state.stream === Streams.VENUES;
+
+/** The list in order: by interest in the arXiv stream; by venue, newest first, in the weekly one. */
 function computeVisible() {
-  state.visible = Filters.apply(entries(), activeFilters(), state.mainCategories, state.venues)
-    .sort((a, b) => b.info.score - a.info.score || a.index - b.index);
+  const shown = Filters.apply(entries(), activeFilters(), state.mainCategories, state.venues);
+  state.groups = inVenues() ? Streams.venueGroups(shown, state.venues) : [];
+  state.visible = inVenues()
+    ? state.groups.flatMap(g => g.entries)
+    : shown.sort((a, b) => b.info.score - a.info.score || a.index - b.index);
 }
 
 function topicLabel(topic) {
@@ -146,8 +164,16 @@ function renderNav(days) {
   const total = state.records.length;
   const progress = Render.summaryProgress(state.records);
   const matched = state.records.filter(r => state.info.get(r.id).matched).length;
-  $('dayTitle').innerHTML = dayHeading(days);
-  $('daySentence').textContent = total ? Render.daySentence(total, matched, state.keywords.length + state.authors.length > 0) : '';
+  const hasInterests = state.keywords.length + state.authors.length > 0;
+  if (inVenues()) {
+    const venueCount = new Set(state.records.map(r => Sources.sourceKey(r))).size;
+    $('dayTitle').textContent = Streams.weekRange(state.week);
+    $('daySentence').textContent = total ? Streams.weekSentence(total, venueCount, matched, hasInterests) : '';
+  } else {
+    $('dayTitle').innerHTML = dayHeading(days);
+    $('daySentence').textContent = total ? Render.daySentence(total, matched, hasInterests) : '';
+  }
+  renderStreams(days);
   const pending = progress.done < progress.total;
   $('progress').hidden = !pending;
   if (pending) {
@@ -215,14 +241,15 @@ function renderRefine(counts) {
     ? [`<li><button type="button" data-free aria-pressed="${state.freeOnly}" title="${FREE_TITLE}"><span class="label">Free to read</span><span class="count">${counts.free}</span></button></li>`]
     : [];
   const main = state.mainCategories.filter(c => totals.has(c)).sort((a, b) => totals.get(b) - totals.get(a));
+  const categories = inVenues()
+    ? []
+    : ['<li class="chip-break" aria-hidden="true"></li>', category('all', 'All fields'), ...main.map(c => category(c, c))];
+  if (!inVenues() && totals.has(Filters.OTHER_FIELDS)) categories.push(category(Filters.OTHER_FIELDS, 'Other fields'));
   const items = [
     `<li class="chip-code"><button type="button" data-code aria-pressed="${state.codeOnly}" title="Papers whose abstract or comments link a code repository. Links that appear only in the PDF are not seen.">${Render.CODE_ICON}<span class="label">Has code</span><span class="count">${counts.code}</span></button></li>`,
     ...free,
-    '<li class="chip-break" aria-hidden="true"></li>',
-    category('all', 'All fields'),
-    ...main.map(c => category(c, c)),
+    ...categories,
   ];
-  if (totals.has(Filters.OTHER_FIELDS)) items.push(category(Filters.OTHER_FIELDS, 'Other fields'));
   $('refineList').innerHTML = items.join('');
   revealPressed($('refineList'));
 }
@@ -232,10 +259,12 @@ function renderList() {
   const place = state.category === 'all' ? topicLabel(state.topic) : `${topicLabel(state.topic)} in ${state.category === Filters.OTHER_FIELDS ? 'other fields' : state.category}`;
   const scope = [place, ...Filters.refinementPhrases(activeFilters(), sourceName)].join(', ');
   $('listHeading').innerHTML = `${esc(scope)} <span class="count">${state.visible.length}</span>`;
-  $('listNote').textContent = state.topic === 'all' && state.visible.length ? 'Interest matches first' : '';
+  $('listNote').textContent = !state.visible.length ? '' : inVenues() ? 'By venue, newest first' : state.topic === 'all' ? 'Interest matches first' : '';
   $('clearFilters').hidden = !Filters.isRefined(activeFilters());
   if (!state.records.length) {
-    $('paperList').innerHTML = '<li class="empty">No papers were published for this day. arXiv makes no announcement on Friday and Saturday nights or on holidays; choose another day above.</li>';
+    $('paperList').innerHTML = inVenues()
+      ? '<li class="empty">No journal or conference papers arrived this week. Choose another week above.</li>'
+      : '<li class="empty">No papers were published for this day. arXiv makes no announcement on Friday and Saturday nights or on holidays; choose another day above.</li>';
     renderReader();
     return;
   }
@@ -244,14 +273,17 @@ function renderList() {
       ? `<li class="empty">No papers match "${esc(state.query)}" here. Clear the search or choose All papers.</li>`
       : Filters.isRefined(activeFilters())
         ? '<li class="empty">No papers in this topic match these refinements. Clear filters to see the whole topic.</li>'
-        : '<li class="empty">No papers in this topic today. Choose All papers to see everything.</li>';
+        : `<li class="empty">No papers in this topic ${inVenues() ? 'this week' : 'today'}. Choose All papers to see everything.</li>`;
     renderReader();
     return;
   }
   if (!state.visible.some(e => e.record.id === state.selectedId) && !PHONE.matches) {
     state.selectedId = state.visible[0].record.id;
   }
-  $('paperList').innerHTML = state.visible.map(e => Render.renderRow(e.record, e.info, e.record.id === state.selectedId)).join('');
+  const row = e => Render.renderRow(e.record, e.info, e.record.id === state.selectedId);
+  $('paperList').innerHTML = inVenues()
+    ? state.groups.map(g => Render.groupHead(g) + g.entries.map(row).join('')).join('')
+    : state.visible.map(row).join('');
   renderReader();
 }
 
@@ -321,7 +353,7 @@ function clockTime(iso) {
 /** One line under the day: crawl, summaries and report, for a single selected day. */
 function renderStatus(days) {
   const box = $('pipelineStatus');
-  if (!state.status || days.length !== 1) {
+  if (!state.status || days.length !== 1 || inVenues()) {
     box.hidden = true;
     return;
   }
@@ -348,8 +380,8 @@ function selectedDays() {
 
 function writeHash() {
   const days = selectedDays();
-  const params = new URLSearchParams({ day: days[days.length - 1] });
-  if (days.length > 1) params.set('from', days[0]);
+  const params = inVenues() ? new URLSearchParams({ stream: Streams.VENUES, week: state.week }) : new URLSearchParams({ day: days[days.length - 1] });
+  if (!inVenues() && days.length > 1) params.set('from', days[0]);
   if (state.topic && state.topic !== 'matches') params.set('topic', state.topic);
   if (state.codeOnly) params.set('code', '1');
   if (state.freeOnly) params.set('free', '1');
@@ -379,10 +411,19 @@ function readHash() {
   state.selectedId = params.get('paper');
 }
 
+/** The top bar's picker: days for arXiv, weeks with venue papers for the weekly stream. */
 function updateDayButtons() {
-  const index = state.days.indexOf($('daySelect').value);
-  $('prevDay').disabled = index >= state.days.length - 1;
-  $('nextDay').disabled = index <= 0;
+  const venues = inVenues();
+  $('daySelect').hidden = venues;
+  $('weekSelect').hidden = !venues;
+  $('rangeToggle').parentElement.hidden = venues;
+  $('rangeStart').hidden = venues || !$('rangeToggle').checked;
+  $('dayForm').setAttribute('aria-label', venues ? 'Choose a week' : 'Choose a day');
+  $('prevDay').setAttribute('aria-label', venues ? 'Previous week' : 'Previous day');
+  $('nextDay').setAttribute('aria-label', venues ? 'Next week' : 'Next day');
+  const select = venues ? $('weekSelect') : $('daySelect');
+  $('prevDay').disabled = select.selectedIndex < 0 || select.selectedIndex >= select.options.length - 1;
+  $('nextDay').disabled = select.selectedIndex <= 0;
 }
 
 /** A failed download, shown as a failure with a way to try again, never as an empty day. */
@@ -409,17 +450,24 @@ function showLoadError(error, retry) {
   renderReader();
 }
 
+/** The days the current stream shows: the chosen day or days, or the chosen week's files. */
+function streamDays() {
+  return inVenues() ? Streams.daysInWeek(state.week, state.days) : selectedDays();
+}
+
 async function showSelection({ keepTopic = false } = {}) {
-  const days = selectedDays();
+  const days = streamDays();
   updateDayButtons();
-  if (!days.length) return;
+  if (!days.length && !inVenues()) return;
   $('paperList').innerHTML = '<li class="empty">Loading papers…</li>';
   try {
-    state.records = (await Promise.all(days.map(d => DataSource.loadDay(d)))).flat();
+    state.dayRecords = (await Promise.all(days.map(d => DataSource.loadDay(d)))).flat();
   } catch (error) {
     showLoadError(error, () => showSelection({ keepTopic: true }));
     return;
   }
+  state.records = Streams.streamRecords(state.dayRecords, state.stream);
+  days.forEach(d => noteVenueDay(d, state.dayRecords.filter(r => r.date === d)));
   describeAll();
   const anyMatch = state.records.some(r => state.info.get(r.id).matched);
   const known = ['matches', 'all', 'authors', ...state.topics.map(t => t.name)];
@@ -430,49 +478,112 @@ async function showSelection({ keepTopic = false } = {}) {
   writeHash();
 }
 
-/** A link to one paper (the daily report's links) opens it, under All papers if its topic hides it. */
-function openLinkedPaper(id) {
-  if (!id || !state.records.some(r => r.id === id)) return;
+/**
+ * A link to one paper (the daily report's links) opens it, under All papers
+ * if its topic hides it; a journal or conference paper opens in the weekly
+ * stream, on the week of the day it arrived.
+ */
+async function openLinkedPaper(id) {
+  if (!id) return;
+  const venuePaper = !inVenues() && state.dayRecords.find(r => r.id === id && !PaperData.isArxiv(r));
+  if (venuePaper) {
+    await setStream(Streams.VENUES, Streams.weekOf(venuePaper.date), { paper: id });
+  }
+  if (!state.records.some(r => r.id === id)) return;
   if (!state.visible.some(e => e.record.id === id)) {
     state.topic = 'all';
-    renderAll(selectedDays());
+    renderAll(streamDays());
   }
   select(id);
 }
 
-// --- URL JSON mode (?json=<category>&keywords=a,b&author=x, for scripts) ------
+// --- Streams and weeks ----------------------------------------------------------
 
-function jsonParams() {
-  const params = new URLSearchParams(window.location.search);
-  const list = name => (params.get(name) ? params.get(name).split(',').map(s => s.trim()).filter(Boolean) : null);
-  const category = params.get('category') || params.get('json');
-  const keywords = list('keywords');
-  const authors = list('author');
-  return category || keywords || authors ? { category: category || 'all', keywords, authors } : null;
+/** Remember a day's venue papers (their count, and their venues for the "+ N" line's wording). */
+function noteVenueNames(day, names) {
+  state.venueNames.set(day, names);
+  state.venueDays.set(day, names.length);
 }
 
-function outputJson(params, records) {
-  const papers = records
-    .filter(r => params.category === 'all' || (r.categories || [])[0] === params.category)
-    .map(r => ({ r, m: Render.matchesFor(r, params.keywords || [], params.authors || []) }))
-    .filter(({ m }) => (!params.keywords && !params.authors) || m.keywords.length + m.authors.length > 0)
-    .map(({ r, m }) => ({
-      id: r.id,
-      title: r.title,
-      authors: (r.authors || []).join(', '),
-      categories: r.categories,
-      source: Sources.sourceLabel(r),
-      summary: r.AI && !r.pending ? r.AI.tldr : r.summary || null,
-      date: r.date,
-      url: PaperData.isArxiv(r) ? r.abs || `https://arxiv.org/abs/${r.id}` : Sources.safeUrl(r.oa_url) || Sources.publisherUrl(r),
-      reason: [...m.keywords.map(k => `keyword: ${k}`), ...m.authors.map(a => `author: ${a}`)].join(' | ') || null,
-    }));
-  document.head.innerHTML = '';
-  document.body.textContent = JSON.stringify(
-    { category: params.category, author: params.authors, keywords: params.keywords, count: papers.length, papers },
-    null,
-    2
-  );
+/** Remember a day's venue papers from records already loaded. */
+function noteVenueDay(day, records) {
+  noteVenueNames(day, records.filter(r => !PaperData.isArxiv(r)).map(r => r.venue || ''));
+  refreshWeeks();
+}
+
+function refreshWeeks() {
+  state.weeks = Streams.venueWeeks(state.venueDays);
+  const chosen = $('weekSelect').value;
+  $('weekSelect').innerHTML = [...state.weeks.keys()].map(m => `<option value="${m}">${esc(Streams.weekLabel(m))}</option>`).join('');
+  if (state.weeks.has(chosen)) $('weekSelect').value = chosen;
+  else if (state.week && state.weeks.has(state.week)) $('weekSelect').value = state.week;
+}
+
+/** The week's venue papers, counted from its day files; a day that cannot be read counts as unknown. */
+async function countWeek(monday) {
+  const days = Streams.daysInWeek(monday, state.days);
+  const lists = await Promise.all(days.map(d => DataSource.venuePapers(d).catch(() => null)));
+  days.forEach((d, i) => {
+    if (lists[i]) noteVenueNames(d, lists[i]);
+  });
+  return lists.reduce((n, list) => n + (list ? list.length : 0), 0);
+}
+
+/**
+ * Which weeks have venue papers: from assets/venue-days.json when the
+ * branch has it. Without it (an older fork), weeks are counted from the day
+ * files newest first until the first empty week before one with papers (the
+ * feed runs every day, so that is where it started), or until a few empty
+ * weeks in a row when none has any.
+ */
+async function discoverWeeks() {
+  if (!state.indexed) await countWeeks();
+  refreshWeeks();
+  updateDayButtons();
+  renderStreams(streamDays());
+}
+
+async function countWeeks() {
+  const mondays = [...new Set(state.days.map(Streams.weekOf))];
+  let found = false;
+  let empty = 0;
+  for (const monday of mondays) {
+    if ((await countWeek(monday)) > 0) {
+      found = true;
+      empty = 0;
+    } else if (found || ++empty >= EMPTY_WEEKS_BEFORE_GIVING_UP) {
+      break;
+    }
+  }
+}
+
+/** The week the stream switch and the line under the day are about. */
+function currentWeek(days) {
+  if (inVenues()) return state.week;
+  return days.length ? Streams.weekOf(days[days.length - 1]) : null;
+}
+
+/** The stream switch, hidden while no week has venue papers, and the arXiv day's "+ N journal papers this week". */
+function renderStreams(days) {
+  const week = currentWeek(days);
+  const count = (week && state.weeks.get(week)) || 0;
+  $('streamSwitch').hidden = !state.weeks.size && !inVenues();
+  document.querySelectorAll('#streamSwitch button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.stream === state.stream)));
+  $('streamCount').textContent = count ? count.toLocaleString('en-GB') : '';
+  const showNote = !inVenues() && days.length === 1 && count > 0;
+  $('weekNote').hidden = !showNote;
+  if (!showNote) return;
+  const kinds = Streams.daysInWeek(week, state.days).flatMap(d => (state.venueNames.get(d) || []).map(name => (state.venues.get(name) || {}).kind));
+  $('weekNote').innerHTML = `<a href="#stream=venues&amp;week=${week}" data-week="${week}">${esc(Streams.weekNote(count, kinds))}</a>`;
+}
+
+/** Switch stream (and, for the weekly one, week), keeping the topic. */
+async function setStream(stream, week = null, { paper = null } = {}) {
+  state.stream = stream;
+  if (stream === Streams.VENUES) state.week = state.weeks.has(week) ? week : [...state.weeks.keys()][0] || null;
+  if (state.week) $('weekSelect').value = state.week;
+  state.selectedId = paper;
+  await showSelection({ keepTopic: true });
 }
 
 // --- Events -------------------------------------------------------------------
@@ -525,7 +636,7 @@ function closeSettings() {
   state.topics = Render.topicsFor(state.keywords, window.INTEREST_PRESETS);
   writeList(AUTHORS_KEY, state.authors);
   describeAll();
-  renderAll(selectedDays());
+  renderAll(streamDays());
 }
 
 function isTyping(target) {
@@ -539,24 +650,38 @@ function bindEvents() {
     $('rangeStart').hidden = !$('rangeToggle').checked;
     showSelection();
   });
-  $('prevDay').addEventListener('click', () => {
-    $('daySelect').selectedIndex = Math.min($('daySelect').options.length - 1, $('daySelect').selectedIndex + 1);
+  const step = delta => {
+    const select = inVenues() ? $('weekSelect') : $('daySelect');
+    select.selectedIndex = Math.min(select.options.length - 1, Math.max(0, select.selectedIndex + delta));
+    if (inVenues()) state.week = select.value;
+    showSelection();
+  };
+  $('prevDay').addEventListener('click', () => step(1));
+  $('nextDay').addEventListener('click', () => step(-1));
+  $('weekSelect').addEventListener('change', () => {
+    state.week = $('weekSelect').value;
     showSelection();
   });
-  $('nextDay').addEventListener('click', () => {
-    $('daySelect').selectedIndex = Math.max(0, $('daySelect').selectedIndex - 1);
-    showSelection();
+  $('streamSwitch').addEventListener('click', event => {
+    const button = event.target.closest('button[data-stream]');
+    if (button && button.dataset.stream !== state.stream) setStream(button.dataset.stream, currentWeek(selectedDays()));
+  });
+  $('weekNote').addEventListener('click', event => {
+    const link = event.target.closest('a[data-week]');
+    if (!link) return;
+    event.preventDefault();
+    setStream(Streams.VENUES, link.dataset.week);
   });
   $('search').addEventListener('input', event => {
     state.query = event.target.value;
-    renderNav(selectedDays());
+    renderNav(streamDays());
     renderList();
   });
   $('topicList').addEventListener('click', event => {
     const button = event.target.closest('button[data-topic]');
     if (!button) return;
     state.topic = button.dataset.topic;
-    renderNav(selectedDays());
+    renderNav(streamDays());
     renderList();
     writeHash();
   });
@@ -567,7 +692,7 @@ function bindEvents() {
     else if (button.hasAttribute('data-free')) state.freeOnly = !state.freeOnly;
     else if (button.dataset.category) state.category = button.dataset.category;
     else return;
-    renderNav(selectedDays());
+    renderNav(streamDays());
     renderList();
     writeHash();
   });
@@ -577,7 +702,7 @@ function bindEvents() {
       if (!button) return;
       state[kind] = button.dataset[kind];
       if (kind !== 'source') state.source = 'all'; // the venue row now lists other venues
-      renderNav(selectedDays());
+      renderNav(streamDays());
       renderList();
       writeHash();
     });
@@ -586,7 +711,7 @@ function bindEvents() {
     state.category = 'all';
     state.codeOnly = false;
     setSourceChoices({ type: 'all', area: 'all', source: 'all', freeOnly: false });
-    renderNav(selectedDays());
+    renderNav(streamDays());
     renderList();
     writeHash();
   });
@@ -629,14 +754,16 @@ async function init() {
   state.days = days;
   state.mainCategories = categories || DATA_CONFIG.mainCategories;
   state.venues = Sources.venueIndex(listing.venues);
+  state.indexed = Boolean(listing.venueDays);
+  if (state.indexed) state.venueDays = new Map(listing.venueDays);
   if (!days.length) {
     $('dayTitle').textContent = 'No papers yet';
     $('paperList').innerHTML = `<li class="empty">Nothing has been published to the data branch of ${esc(DATA_CONFIG.repoOwner)}/${esc(DATA_CONFIG.repoName)} yet, or it could not be reached. On a new fork, run the arXiv-daily-ai-enhanced workflow from the Actions tab; the first day appears a few minutes after it finishes.</li>`;
     return;
   }
-  const params = jsonParams();
-  if (params) {
-    outputJson(params, await DataSource.loadDay(days[0]));
+  const json = JsonMode.params(window.location.search);
+  if (json) {
+    JsonMode.output(json, await DataSource.loadDay(days[0]));
     return;
   }
   const options = days
@@ -650,10 +777,24 @@ async function init() {
   bindEvents();
   DataSource.loadStatus().then(status => {
     state.status = status;
-    renderStatus(selectedDays());
+    renderStatus(streamDays());
   });
-  await showSelection({ keepTopic: Boolean(state.topic) });
-  openLinkedPaper(linkedPaper);
+  const params = new URLSearchParams(location.hash.slice(1));
+  const keepTopic = Boolean(state.topic);
+  const linkedWeek = params.get('stream') === Streams.VENUES && Streams.isDay(params.get('week'));
+  if (params.get('stream') === Streams.VENUES && !linkedWeek) {
+    await discoverWeeks();
+    Object.assign(state, Streams.readStream(params, state.weeks));
+    if (state.week) $('weekSelect').value = state.week;
+    await showSelection({ keepTopic });
+  } else {
+    // Start loading the day or the linked week first, so counting weeks reuses the download.
+    if (linkedWeek) Object.assign(state, { stream: Streams.VENUES, week: Streams.weekOf(params.get('week')) });
+    const shown = showSelection({ keepTopic });
+    discoverWeeks();
+    await shown;
+  }
+  await openLinkedPaper(linkedPaper);
 }
 
 document.addEventListener('DOMContentLoaded', init);

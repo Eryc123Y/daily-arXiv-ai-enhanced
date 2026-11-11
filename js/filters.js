@@ -118,8 +118,8 @@
 
   /**
    * The Source section's three rows, each [{ key, label, count }] with the
-   * faceted counts: Type (All, arXiv preprints, and each kind the venue list
-   * has), Area (empty when the list names no areas), and Venue (each venue
+   * faceted counts: Type (All, arXiv preprints when there are any, and each
+   * kind the venue list has), Area (empty when the list names no areas), and Venue (each venue
    * of the chosen type and area by how many papers it has that day, ties by
    * name; empty when there is none). null when every paper is from arXiv, so
    * an arXiv-only day shows no section.
@@ -127,8 +127,9 @@
   function sourceGroups(records, counts, filters, venues) {
     if (!hasVenuePapers(records)) return null;
     const kinds = venueKinds(venues);
+    const hasArxiv = records.some(r => PaperData.isArxiv(r));
     const option = (map, key, label) => ({ key, label, count: map.get(key) || 0 });
-    const types = TYPES.filter(([key]) => key === 'all' || key === Sources.ARXIV || kinds.has(key))
+    const types = TYPES.filter(([key]) => key === 'all' || (key === Sources.ARXIV ? hasArxiv : kinds.has(key)))
       .map(([key, label]) => option(counts.types, key, label));
     const names = venueAreas(venues);
     const areas = names.length ? [option(counts.areas, 'all', 'All'), ...names.map(a => option(counts.areas, a, a))] : [];

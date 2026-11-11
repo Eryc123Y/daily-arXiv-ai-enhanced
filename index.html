@@ -12,12 +12,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;500;700&family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;1,400&display=swap">
-  <script src="js/theme.js?v=27"></script>
-  <link rel="stylesheet" href="css/site.css?v=27">
-  <script src="js/data-config.js?v=27"></script>
-  <script src="js/paper-data.js?v=27"></script>
-  <script src="js/interest-presets.js?v=27"></script>
-  <script src="js/data-source.js?v=27"></script>
+  <script src="js/theme.js?v=29"></script>
+  <link rel="stylesheet" href="css/site.css?v=29">
+  <script src="js/data-config.js?v=29"></script>
+  <script src="js/paper-data.js?v=29"></script>
+  <script src="js/interest-presets.js?v=29"></script>
+  <script src="js/data-source.js?v=29"></script>
 </head>
 <body>
   <a class="skip-link" href="#paperList">Skip to the paper list</a>
@@ -35,6 +35,8 @@
       </span>
       <label class="visually-hidden" for="daySelect">Day</label>
       <select id="daySelect"></select>
+      <label class="visually-hidden" for="weekSelect">Week</label>
+      <select id="weekSelect" hidden></select>
       <button type="button" class="icon-button" id="nextDay" aria-label="Next day">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
       </button>
@@ -53,9 +55,15 @@
 
   <div class="app">
     <nav class="nav" aria-label="Day and filters">
+      <div class="stream-switch" id="streamSwitch" role="group" aria-label="Which papers to show" hidden>
+        <button type="button" data-stream="arxiv" aria-pressed="true"><span class="stream-name">arXiv</span><span class="stream-cadence">daily</span></button>
+        <button type="button" data-stream="venues" aria-pressed="false"><span class="stream-name">Journals &amp; conferences</span><span class="stream-cadence">weekly<span class="count" id="streamCount"></span></span></button>
+      </div>
+
       <section class="day" aria-live="polite">
         <h1 id="dayTitle">Loading</h1>
         <p id="daySentence" class="day-sentence"></p>
+        <p id="weekNote" class="week-note" hidden></p>
         <div id="progress" class="progress" hidden>
           <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
           <p id="progressText"></p>
@@ -157,10 +165,12 @@
     </form>
   </dialog>
 
-  <script src="js/sources.js?v=27"></script>
-  <script src="js/render.js?v=27"></script>
-  <script src="js/filters.js?v=27"></script>
-  <script src="js/status.js?v=27"></script>
-  <script src="js/app.js?v=27"></script>
+  <script src="js/sources.js?v=29"></script>
+  <script src="js/streams.js?v=29"></script>
+  <script src="js/render.js?v=29"></script>
+  <script src="js/filters.js?v=29"></script>
+  <script src="js/status.js?v=29"></script>
+  <script src="js/json-mode.js?v=29"></script>
+  <script src="js/app.js?v=29"></script>
 </body>
 </html>

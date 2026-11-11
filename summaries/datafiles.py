@@ -11,6 +11,7 @@ from summaries.databranch import DataBranch
 from summaries.records import (
     dedupe_by_id,
     dump_jsonl,
+    is_arxiv,
     merge_summaries,
     parse_jsonl,
     pending_papers,
@@ -19,6 +20,8 @@ from summaries.records import (
 
 SITE_SETTINGS = "assets/site.json"
 VENUES = "assets/venues.json"
+VENUE_DAYS = "assets/venue-days.json"
+ISO_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 WATCHLIST = Path(__file__).with_name("watchlist.json")
 VENUE_KINDS = ("conference", "journal")
 RUN_LOG = "logs/summary-runs.jsonl"
@@ -65,6 +68,58 @@ def venue_settings(path=WATCHLIST):
     except (OSError, ValueError):
         return {}
     return {VENUES: json.dumps(summary, ensure_ascii=False, indent=2) + "\n"}
+
+
+def count_venue_papers(text):
+    """How many records of a raw file are journal or conference papers (not from arXiv), each id once."""
+    # Only lines naming a source can hold one; skipping the rest avoids parsing a thousand arXiv records.
+    lines = "\n".join(line for line in (text or "").splitlines() if '"source"' in line)
+    return sum(1 for record in dedupe_by_id(parse_jsonl(lines)) if not is_arxiv(record))
+
+
+def venue_day_counts(branch, files=None):
+    """{day: venue papers} over every raw file on `branch`, days with none left out.
+
+    Raw files in `files` ({path: text}, about to be committed) count instead of the branch's copy.
+    Reads every raw file, about 15 seconds on the full branch.
+    """
+    files = files or {}
+    paths = sorted({p for p in branch.list_files("data/") if RAW_FILE.match(p)} | {p for p in files if RAW_FILE.match(p)})
+    counts = ((RAW_FILE.match(p).group(1), count_venue_papers(files[p] if p in files else branch.read(p))) for p in paths)
+    return {day: n for day, n in counts if n}
+
+
+def venue_days_file(counts):
+    """{assets/venue-days.json: text}: the counts by day, oldest first, and nothing else."""
+    return {VENUE_DAYS: json.dumps(dict(sorted(counts.items())), indent=2) + "\n"}
+
+
+def published_venue_days(branch):
+    """The counts on the branch, or None when the file is missing or not a {day: positive count} object."""
+    try:
+        counts = json.loads(branch.read(VENUE_DAYS) or "null")
+    except ValueError:
+        return None
+    valid = isinstance(counts, dict) and all(
+        ISO_DAY.match(day) and type(n) is int and n > 0 for day, n in counts.items()
+    )
+    return counts if valid else None
+
+
+def with_venue_days(current, files):
+    """`files` plus assets/venue-days.json when they hold a raw file, so the counts match the commit.
+
+    The days being written are recounted on top of the counts on `current`; without readable counts
+    there, every day is counted. ensure-day recounts every day once per run (publish_venue_days).
+    """
+    written = {RAW_FILE.match(p).group(1): count_venue_papers(text) for p, text in files.items() if RAW_FILE.match(p)}
+    if not written:
+        return files
+    known = published_venue_days(current)
+    if known is None:
+        return {**files, **venue_days_file(venue_day_counts(current, files))}
+    kept = {day: n for day, n in known.items() if day not in written}
+    return {**files, **venue_days_file({**kept, **{day: n for day, n in written.items() if n}})}
 
 
 def emit(**values):

@@ -459,8 +459,9 @@ textarea {
   color: var(--muted);
 }
 
-.range-start[hidden] {
-  display: none;
+/* The hidden attribute wins over any display rule (the range picker, the pipeline line, the stream switch). */
+[hidden] {
+  display: none !important;
 }
 
 .range-toggle {
@@ -532,6 +533,77 @@ textarea {
 .day h1 {
   margin: 0;
   font: 500 25px / 1.15 var(--serif);
+}
+
+/* Which stream: arXiv by day, or journals and conferences by week */
+
+.stream-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.stream-switch button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 6px 9px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.25;
+  cursor: pointer;
+}
+
+.stream-switch button:hover {
+  background: var(--surface);
+}
+
+.stream-switch button[aria-pressed="true"] {
+  background: var(--pill);
+  box-shadow: inset 0 0 0 1px var(--pill-edge);
+  color: var(--pill-ink);
+}
+
+.stream-name {
+  font-weight: 700;
+}
+
+.stream-cadence {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.stream-switch button[aria-pressed="true"] .stream-cadence {
+  color: inherit;
+}
+
+.stream-cadence .count:not(:empty)::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+.week-note {
+  margin: 6px 0 0;
+  font-size: 13px;
+}
+
+.week-note a {
+  color: var(--muted);
+  text-decoration-color: var(--line);
+  text-underline-offset: 3px;
+}
+
+.week-note a:hover {
+  color: var(--ink);
 }
 
 .day-sentence {
@@ -718,6 +790,33 @@ textarea {
 
 .list-head .link-button {
   font-size: 13px;
+}
+
+/* The weekly list: one header per venue */
+
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 14px 20px 8px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.group-name {
+  margin: 0;
+  font: 600 16px / 1.2 var(--serif);
+}
+
+.group-meta {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.group-head .count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .row {

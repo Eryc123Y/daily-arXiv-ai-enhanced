@@ -5,17 +5,26 @@
  *
  *   listDays()      -> { days: ['2026-10-30', ...] newest first, languages: Map(day -> ['English', ...]),
  *                        categories: crawled categories from assets/site.json, or null,
- *                        venues: the watched venues [{name, kind, area}] from assets/venues.json, or null }
+ *                        venues: the watched venues [{name, kind, area}] from assets/venues.json, or null,
+ *                        venueDays: Map(day -> journal and conference papers that day) from
+ *                        assets/venue-days.json, or null when the branch has none (the page then counts) }
  *   loadDay(day)    -> [record]  raw papers merged with summaries (PaperData.mergeDay),
  *                      with `hf` (Hugging Face upvotes) where data/<day>_hf.json has them
+ *   venuePapers(day) -> the venue of each journal or conference paper in the day's
+ *                      file (['ACM TOG', 'ACM TOG', 'ICLR']), for the weekly stream's
+ *                      counts; reads only data/<day>.jsonl, or the day already loaded
  *   loadStatus()    -> { log: [run log entries] } (crawl, summary and report runs)
  *                      for the pipeline line; never rejects
+ *
+ * Days and counts are kept for the page's lifetime, so switching streams or
+ * weeks does not download a day twice; a failed download is not kept.
  *
  * Both reject with a LoadError when a file that should be there cannot be
  * read, so a failed download is never shown as a day without papers. Files
  * that may legitimately not exist yet (a day's summaries, the day list on a
- * new fork, assets/site.json) read as empty on 404; assets/venues.json is
- * optional in every way (any failure means no venue grouping).
+ * new fork, assets/site.json) read as empty on 404; assets/venues.json and
+ * assets/venue-days.json are optional in every way (any failure means no
+ * venue grouping, and counting venue papers from the day files).
  */
 (function (root) {
   const PREFERRED_LANGUAGES = ['English', 'Chinese'];
@@ -43,6 +52,20 @@
   /** url(path): a data-branch file. */
   function createStaticSource({ fetch: fetchImpl, url }) {
     let languages = new Map();
+    const loadedDays = new Map();
+    const venueLists = new Map();
+
+    /** cache.get(key), else make() kept under key unless it rejects. */
+    function remember(cache, key, make) {
+      if (!cache.has(key)) {
+        const promise = make();
+        cache.set(key, promise);
+        promise.catch(() => cache.delete(key));
+      }
+      return cache.get(key);
+    }
+
+    const venueNames = records => records.filter(r => !PaperData.isArxiv(r)).map(r => (typeof r.venue === 'string' && r.venue.trim()) || '');
 
     async function fetchText(path, { optional = false } = {}) {
       let response;
@@ -76,6 +99,18 @@
       }
     }
 
+    /** assets/venue-days.json as a Map; null unless it is a {day: positive whole number} object. */
+    async function fetchVenueDays() {
+      try {
+        const parsed = JSON.parse((await fetchText('assets/venue-days.json', { optional: true })) || 'null');
+        const entries = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? Object.entries(parsed) : null;
+        const valid = entries && entries.every(([day, n]) => /^\d{4}-\d{2}-\d{2}$/.test(day) && Number.isInteger(n) && n > 0);
+        return valid ? new Map(entries) : null;
+      } catch (error) {
+        return null;
+      }
+    }
+
     function summaryLanguage(day) {
       const available = languages.get(day) || [];
       return PREFERRED_LANGUAGES.find(l => available.includes(l)) || available[0] || PREFERRED_LANGUAGES[0];
@@ -83,10 +118,11 @@
 
     return {
       async listDays() {
-        const [listText, siteText, venues] = await Promise.all([
+        const [listText, siteText, venues, venueDays] = await Promise.all([
           fetchText('assets/file-list.txt', { optional: true }),
           fetchText('assets/site.json', { optional: true }),
           fetchVenues(),
+          fetchVenueDays(),
         ]);
         const list = PaperData.parseFileList(listText);
         languages = list.languages;
@@ -96,15 +132,21 @@
         } catch (error) {
           console.error('Ignoring an unreadable assets/site.json:', error);
         }
-        return { days: list.dates, languages, categories, venues };
+        return { days: list.dates, languages, categories, venues, venueDays };
       },
-      async loadDay(day) {
-        const [raw, ai, hf] = await Promise.all([
-          fetchText(`data/${day}.jsonl`),
-          fetchText(`data/${day}_AI_enhanced_${summaryLanguage(day)}.jsonl`, { optional: true }),
-          fetchSignals(`data/${day}_hf.json`),
-        ]);
-        return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
+      loadDay(day) {
+        return remember(loadedDays, day, async () => {
+          const [raw, ai, hf] = await Promise.all([
+            fetchText(`data/${day}.jsonl`),
+            fetchText(`data/${day}_AI_enhanced_${summaryLanguage(day)}.jsonl`, { optional: true }),
+            fetchSignals(`data/${day}_hf.json`),
+          ]);
+          return PaperData.mergeDay(raw, ai).map(record => ({ ...record, date: day, ...(hf[record.id] ? { hf: hf[record.id] } : {}) }));
+        });
+      },
+      venuePapers(day) {
+        if (loadedDays.has(day)) return loadedDays.get(day).then(venueNames);
+        return remember(venueLists, day, async () => venueNames(PaperData.parseJsonl(await fetchText(`data/${day}.jsonl`))));
       },
       async loadStatus() {
         const logText = await fetchText('logs/summary-runs.jsonl', { optional: true }).catch(() => '');

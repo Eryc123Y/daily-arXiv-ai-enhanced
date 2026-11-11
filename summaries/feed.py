@@ -22,7 +22,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from summaries import abstracts, dedupe
-from summaries.datafiles import RAW_FILE, WATCHLIST, raw_path, read_records, venue_settings
+from summaries.datafiles import RAW_FILE, WATCHLIST, raw_path, read_records, venue_settings, with_venue_days
 from summaries.records import dedupe_by_id, dump_jsonl
 
 SOURCES = ("openalex", "crossref", "openreview")  # R6: official APIs only; nothing else is accepted
@@ -259,7 +259,7 @@ def publish(branch, day, papers, work_dir, limit=MAX_PER_RUN):
         moves = not result["deferred"] and not (cursor_since(current, day) == day and current.read(FEED_CURSOR))
         cursor = {FEED_CURSOR: json.dumps({"since": day, "at": at}, indent=2) + "\n"} if moves else {}
         papers_file = {raw_path(day): dump_jsonl(combined)} if result["added"] else {}
-        return {**papers_file, **cursor, **venue_settings()} if papers_file or cursor else {}
+        return with_venue_days(current, {**papers_file, **cursor, **venue_settings()}) if papers_file or cursor else {}
 
     # Abstracts are saved before the push: one saved for a paper a racing run published instead is harmless,
     # while a paper published without its local abstract would get no summary.
