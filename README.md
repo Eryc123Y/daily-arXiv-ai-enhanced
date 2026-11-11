@@ -1,11 +1,11 @@
-# Daily arXiv
+# LitScout Daily
 
 > [!CAUTION]
 > 若您所在法域对学术数据有审查要求，谨慎运行本代码；任何二次分发版本必须履行合规审查（包括但不限于原始论文合规性、AI合规性）义务，否则一切法律后果由下游自行承担。
 >
 > If your jurisdiction has censorship requirements for academic data, run this code with caution; any secondary distribution version must remove the entrance accessible to China and fulfill the content review obligations, otherwise all legal consequences will be borne by the downstream.
 
-A daily arXiv reading page with AI summaries, built on [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) and released under the same licence as upstream: the Modified Apache License in [LICENSE](LICENSE), which is Apache 2.0 with an added disclaimer for third-party content such as arXiv (section 9). This fork changes many upstream files; the git history records each change. Live instance: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
+LitScout Daily is a daily reading page for new arXiv papers with AI summaries (journals and conferences are planned; the repository, its `data` branch and the address keep the old name for now), built on [dw-dengwei/daily-arXiv-ai-enhanced](https://github.com/dw-dengwei/daily-arXiv-ai-enhanced) and released under the same licence as upstream: the Modified Apache License in [LICENSE](LICENSE), which is Apache 2.0 with an added disclaimer for third-party content such as arXiv (section 9). This fork changes many upstream files; the git history records each change. Live instance: **https://eryc123y.github.io/daily-arXiv-ai-enhanced/**
 
 Every new paper of the day in your arXiv categories (this instance: cs.CV, cs.AI, cs.LG, cs.CL, stat.ML and cs.GR) (new submissions and same-period cross-lists, not replacements), each with a five-part English summary (TL;DR, motivation, method, result, conclusion). Papers matching research-interest keywords or authors are marked and listed first. The default keywords are grouped into topics (this instance: 2D-to-3D and stereo; weak supervision and data reuse; continual learning; data and representation) in [`js/interest-presets.js`](js/interest-presets.js); the page filters by topic first, then refines by "Has code" and arXiv category, with every count showing what that choice would leave, and keywords can be changed per browser in Settings. Settings also choose a light theme (Preprint, Graphite) and a dark theme (Lilac, Lamplight, Anaglyph), whether the page follows the system or stays light or dark, and whether papers open on alphaXiv or arXiv; all of it is saved in the browser. Papers whose abstract or comments link a code repository (GitHub, GitLab, Codeberg, anonymous review repos) are marked Code, and the Has code refinement shows only those; links that appear only in the PDF are not seen. A linked project page is marked separately.
 
@@ -132,6 +132,10 @@ node --test tests/js/*.test.js
 No CI runs while Actions is disabled on this repository, so run both before merging to `main`. The suite never touches the network or the real remote (see `conftest.py`).
 
 Code map: `daily_arxiv/` (Scrapy spider for the listings), `summaries/` (data-branch publishing, both summary modes, CLI; API providers in `providers.py`, `anthropic_api.py`, `openai_compat.py` around one retry loop in `llm.py`; the daily report in `digest.py`, with the page's topic matching in `interests.py`), `index.html`, `css/site.css` and `js/{app,render,data-source,paper-data,interest-presets}.js` (the reading page; bump the `?v=` asset versions in `index.html` on each release so GitHub Pages' cache does not serve stale files; `statistic.html` is upstream's keyword-trends page).
+
+## Brand assets
+
+The mark, wordmark, favicons and GitHub social preview are in [`assets/brand/`](assets/brand/): `litscout-mark.svg` is the hand-drawn source (a spyglass printed twice as a red and cyan stereo pair), and `build.py` regenerates the mono mark, wordmark, favicon and PNG exports from it. `concepts.png` shows the three directions that were tried. `assets/logo.svg` (the old chi mark) stays because older reports link it.
 
 ## Changes from upstream
 
