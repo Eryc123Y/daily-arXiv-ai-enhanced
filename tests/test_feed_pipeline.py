@@ -490,13 +490,14 @@ def test_a_paper_published_without_an_abstract_gets_it_on_a_later_run(feed, caps
 def test_a_later_copy_without_an_abstract_changes_nothing(feed, capsys):
     seed(feed, {"2026-11-06": [paper("A"), without_abstract(1, "2026-11-06")]}, cursor=TODAY)
     feed.set_lines([feed_line(1, "2026-11-06", abstract=None)])
-    head = git(feed.remote, "rev-parse", "data")
+    before = branch_file(feed.remote, "data/2026-11-06.jsonl")
 
     _, out = feed.run(capsys=capsys)
 
     report = report_of(out)["feed"]
     assert (report["status"], report["duplicates"], report["abstracts_added"]) == ("nothing new", 1, 0)
-    assert git(feed.remote, "rev-parse", "data") == head
+    assert branch_file(feed.remote, "data/2026-11-06.jsonl") == before
+    assert "feed papers" not in git(feed.remote, "log", "--format=%s", "data")
     assert not (feed.work / "abstracts.jsonl").exists()
 
 

@@ -4,11 +4,16 @@ Matched by id (an arXiv ID, or a feed paper's openreview: or url: id), then
 DOI, then normalised title plus the first author's family name. Titles by the same first author that are more than 90% alike
 also match, so a journal version whose title gained a colon or lost a hyphen
 is not published again.
+
+A match may also bring what the published copy lacked: `sort` reports the
+abstract of a later copy of a paper that was published without one (R2b), so
+the feed can keep it locally and leave the paper pending on its own day.
 """
 
 import re
 import unicodedata
-from dataclasses import replace
+from collections.abc import Collection
+from dataclasses import dataclass, field, replace
 from difflib import SequenceMatcher
 
 TITLE_SIMILARITY = 0.9
@@ -51,8 +56,23 @@ def _keys(record):
     return same_id, doi, normalise_title(record.get("title")), family_name(authors[0])
 
 
+@dataclass(frozen=True)
+class Published:
+    """Index owner of a published paper that has no abstract yet: it may gain one from a later copy."""
+
+    id: str
+
+
+@dataclass(frozen=True)
+class Sorted:
+    fresh: list  # FeedPaper, to publish
+    duplicates: int  # copies that bring nothing new
+    gained: dict[str, str] = field(default_factory=dict)  # {published id: abstract} for papers that had none
+
+
 class Index:
-    """What is already published (owner None) or kept from this batch (owner the kept paper's position)."""
+    """What is already published (owner None, or Published for a paper lacking its abstract) or kept
+    from this batch (owner the kept paper's position)."""
 
     def __init__(self):
         self.ids, self.dois, self.titles = {}, {}, {}
@@ -89,17 +109,30 @@ def _fill(kept, other):
     return replace(kept, record={**record, "has_abstract": bool(abstract)}, abstract=abstract)
 
 
-def fresh(existing, batch):
-    """(papers of `batch` to publish, number dropped as duplicates); copies within the batch are merged."""
+def sort(existing, batch, lacking: Collection[str] = frozenset()):
+    """Sort `batch` against the `existing` records: papers to publish, duplicates, abstracts gained.
+
+    `lacking` holds the ids of existing records that were published without an abstract and may still
+    gain one; a copy with an abstract that matches such a record gives it (the first such copy wins).
+    Copies within the batch are merged into the paper kept.
+    """
     index = Index()
     for record in existing:
-        index.add(record)
-    kept = []
+        index.add(record, Published(record["id"]) if record.get("id") in lacking else None)
+    kept, gained = [], {}
     for paper in batch:
         matched, owner = index.find(paper.record)
         if not matched:
             index.add(paper.record, owner=len(kept))
             kept.append(paper)
-        elif owner is not None:
+        elif isinstance(owner, int):
             kept[owner] = _fill(kept[owner], paper)
-    return kept, len(batch) - len(kept)
+        elif isinstance(owner, Published) and paper.abstract and owner.id not in gained:
+            gained[owner.id] = paper.abstract
+    return Sorted(fresh=kept, duplicates=len(batch) - len(kept) - len(gained), gained=gained)
+
+
+def fresh(existing, batch):
+    """(papers of `batch` to publish, number dropped as duplicates); copies within the batch are merged."""
+    result = sort(existing, batch)
+    return result.fresh, result.duplicates
