@@ -1,6 +1,6 @@
 # Spec: sources beyond arXiv, and a new name (S1)
 
-Status: draft, 2026-11-11. Requested by Eric on 2026-11-11. Nothing here is built. Six decisions at the end are Eric's; Phase 0 needs none of them.
+Status: decided, 2026-11-11. Requested by Eric on 2026-11-11; his answers are in "Decisions" below. Nothing here is built yet.
 
 ## Problem
 
@@ -103,20 +103,33 @@ So the page does not call the MCP. The pipeline gets a **feed**: code that asks 
 - **Two repositories.** If the feed lives in LitScout, a session is already working in its `feat/v0.1` worktree; feed work there starts only after that branch is merged.
 - **Time.** Eric's exam is on 2026-11-16; he is away from 11-26 and the Mac may be off. Feature work stops in January.
 
-## Decisions for Eric
+## Decisions (Eric, 2026-11-11)
 
-| # | Question | Recommendation |
+Eric's rule for the details: he must be able to see everything he needs on his own page; how that is done is the builder's call.
+
+| # | Question | Decision |
 |---|---|---|
-| Q1 | Who builds the feed? (a) LitScout gets `watch` now and the pipeline runs it as a local command, like it runs Scrapy; (b) a small OpenAlex-only fetcher in this repository, replaced later. | **(a)**. It keeps the 11-04 decision (one set of source adapters, in LitScout) and needs LitScout's code merged, not deployed. (b) is about a week faster and reverses that decision. |
-| Q2 | What does the feed watch? (a) a list of venues; (b) topic keywords across all venues; (c) both. | **(a) first**: the 15 measured venues plus ICLR, ICML and NeurIPS, edited in one file. Keyword queries across all venues bring in low-quality venues; add them later, limited to ranked venues. |
-| Q3 | Abstracts of non-arXiv papers on the public `data` branch? | **No.** Publish title, authors, venue, links and our own summary; keep the abstract in the local work folder for the summary step only. The page links to the publisher for the abstract. |
-| Q4 | Record identity for non-arXiv papers. | `id` stays the one key: the arXiv ID as today, else `doi:<doi>`, else `openreview:<forum id>`. Shapes go in `summaries/shapes.py` and `js/types.js` as decided on 11-05. |
-| Q5 | Daily or weekly for each source? | Let Phase 0 decide by a rule: median delay of 3 days or less goes on the daily page; slower sources go on Sunday's page. |
-| Q6 | The name, and when the address changes. | Options: **(a)** make the site LitScout's reading page ("LitScout Daily"), one name for both projects; (b) a separate new name; (c) keep "Daily arXiv" with a subtitle. Whichever name: change the title and README when the second source ships, and change the address once, together with the move to Cloudflare Pages in M2, because a renamed repository breaks the GitHub Pages address and the links in past reports. |
+| Q1 | Who builds the feed? | LitScout gets `watch` ("new since a date" for a list of venues) and this pipeline runs it as a local command, as it runs Scrapy. It keeps the 11-04 decision of one set of source adapters, in LitScout. Starts after LitScout's `feat/v0.1` branch is merged. |
+| Q2 | What does the feed watch? | High-quality venues only: the watch list below, kept in one file. No keyword queries across all venues. |
+| Q3 | Abstracts of non-arXiv papers | The `data` branch is a public GitHub repository, so files there can be downloaded by anyone, not only read on the page. Publisher abstracts are often copyrighted, so they are not published there. Eric still sees what he needs: title, authors, venue, our five-part summary (written from the abstract, which stays in the local work folder) and one click to the abstract on the publisher's page; after M2's login, the abstract itself in the reader. |
+| Q4 | Record identity | `id` stays the one key: the arXiv ID as today, else `doi:<doi>`, else `openreview:<forum id>`. Shapes in `summaries/shapes.py` and `js/types.js`. |
+| Q5 | Daily or weekly per source | By Phase 0's numbers: a source that lists papers within 3 days (median) of publication goes on the daily page; a slower one goes on Sunday's page as "new in your venues this week", so a two-week-old journal paper is not shown as today's news. |
+| Q6 | The name | **LitScout**: the site becomes LitScout's reading page ("LitScout Daily"); both projects share one name and one set of visual assets. The title, logo and README change when the second source ships; the address changes once, with the move to Cloudflare Pages in M2. |
+
+### Watch list v1 (Q2)
+
+Chosen for Eric's topics (stereo and 3D video, weak supervision and data reuse, continual learning, representation) from CCF-A and CORE A* venues, plus the venues the 11-04 measurement showed are mostly missing from arXiv. Edited in one file; Phase 0 measures each.
+
+| Kind | Venues |
+|---|---|
+| ML and CV conferences | CVPR, ICCV, ECCV, NeurIPS, ICML, ICLR, AAAI, IJCAI, ACM MM |
+| Graphics and VR | ACM TOG (SIGGRAPH, SIGGRAPH Asia), IEEE TVCG (IEEE VR, ISMAR), Eurographics (CGF) |
+| Journals | IEEE TPAMI, IJCV, IEEE TIP, IEEE TCSVT, JMLR, TMLR |
+| Vision science | Journal of Vision |
 
 ## How the work is run
 
-Eric decides Q1 to Q6; the main session writes each brief, reviews each pull request and reports. One session per row; rows 2 and 3 can run at the same time once Q3 and Q4 are settled, because they touch different files.
+Eric decided Q1 to Q6 on 2026-11-11; the main session writes each brief, reviews each pull request and reports. One session per row; rows 2 and 3 can run at the same time once Q3 and Q4 are settled, because they touch different files.
 
 | # | Session | Where | Starts when |
 |---|---|---|---|
