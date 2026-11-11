@@ -126,7 +126,7 @@ def test_published_record_has_the_shape_and_no_abstract():
         "categories": [],
         "has_abstract": True,
     }
-    assert set(paper.record) == set(shapes.FeedRecord.__annotations__)
+    assert set(paper.record) == shapes.FeedRecord.__required_keys__
     assert paper.abstract == "We convert monocular clips to stereo."
     assert not is_arxiv(paper.record)
 
