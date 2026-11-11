@@ -283,7 +283,7 @@ def test_a_mixed_day_end_to_end(feed, monkeypatch, capsys):
 
     found = digest.build_candidates(parse_jsonl(raw), ai, [{"name": "stereo", "keywords": ["binocular"]}], {}, known=set())
     assert [p["id"] for p in found.by_topic["stereo"]] == ["doi:10.1109/tip.2026.1", "doi:10.1109/tip.2026.2"]
-    assert "=== doi:10.1109/tip.2026.2\n" in digest.writer_prompt(TODAY, found, [{"name": "stereo", "keywords": ["binocular"]}], "", "")
+    assert "=== doi:10.1109/tip.2026.2 [IEEE TIP]\n" in digest.writer_prompt(TODAY, found, [{"name": "stereo", "keywords": ["binocular"]}], "", "")
 
 
 def test_a_feed_paper_whose_local_abstract_is_gone_is_not_pending(feed, capsys):

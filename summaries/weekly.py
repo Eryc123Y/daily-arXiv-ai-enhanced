@@ -1,8 +1,9 @@
 """Sunday's page: the week's daily reports on one page, with no model call.
 
 Reads the `picks.json` that `digest` keeps for each reported day in its cache
-folder, and lists the week's radar papers and how many picks each topic got,
-with links to the week on the reading page. Ends with the pipeline's health:
+folder, and lists the week's radar papers and how many picks each topic got
+(journal papers included), the week's journal papers by venue, with links to
+the week on the reading page. Ends with the pipeline's health:
 when each day's papers landed, its summaries finished and its report was
 written, from logs/summary-runs.jsonl on the data branch.
 """
@@ -107,6 +108,25 @@ def read_log(args):
         return []
 
 
+def topic_count(saved, name):
+    """Picks under the topic, plus the day's journal-section picks that matched it."""
+    under = len(saved["topics"].get(name, []))
+    journal_topics = saved.get("journal_topics", {})
+    return under + sum(1 for pid, _ in saved.get("journal", []) if name in journal_topics.get(pid, []))
+
+
+def journal_line(days):
+    """The week's journal papers by venue, or None for an arXiv-only week."""
+    venues = {}
+    for saved in days:
+        for venue, count in saved.get("venues", {}).items():
+            venues[venue] = venues.get(venue, 0) + count
+    if not venues:
+        return None
+    by_count = sorted(venues.items(), key=lambda item: (-item[1], item[0]))
+    return f"**本周期刊**：{sum(venues.values())} 篇（{' · '.join(f'{venue} {n}' for venue, n in by_count)}）"
+
+
 def render_week(today, days, topics, site, log=(), misses=None):
     start, end = days[0]["day"], days[-1]["day"]
     total = sum(d["total"] for d in days)
@@ -120,8 +140,11 @@ def render_week(today, days, topics, site, log=(), misses=None):
         lines.append(f"- [{title}]({link})（{item['level']}，{day[5:]}）— {item['reason']}")
     lines += ["", "**各主题本周精选**"]
     for topic in topics:
-        count = sum(len(d["topics"].get(topic["name"], [])) for d in days)
+        count = sum(topic_count(d, topic["name"]) for d in days)
         lines.append(f"- {topic['name']}：{count} 篇 · [本周全部]({digest.day_link(site, end, topic=topic['name'], start=start)})")
+    journals = journal_line(days)
+    if journals:
+        lines += ["", journals]
     if log or misses is not None:
         lines += ["", *health_lines(log, week_days(log, [d["day"] for d in days], today), misses=misses)]
     return "\n".join(lines) + "\n", total, len(radar)
@@ -156,5 +179,5 @@ def add_parser(sub):
     week.add_argument("--today", help="report date (local), default today")
     week.add_argument("--force", action="store_true")
     week.add_argument("--site", help="reading page URL; default from the repository")
-    week.add_argument("--cache", default=".cache/digest")
+    week.add_argument("--cache", default=digest.DEFAULT_CACHE)
     week.set_defaults(func=cmd_digest_week)

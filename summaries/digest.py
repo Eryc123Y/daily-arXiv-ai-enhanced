@@ -8,6 +8,12 @@ second call reads the full text of at most two radar papers before they are
 graded. Code renders the report with links into the reading page, appends the
 radar rows and a ledger entry, and prints a push message.
 
+Journal papers from the feed (spec S1, R9) are candidates like arXiv papers,
+matched on their title and the abstract kept in the local work folder (or their
+TL;DR when it is not there). The report labels them with their venue and, on a
+day that has journal candidates, adds a short section for them. Their full text
+is never read: the check reads arXiv PDFs only.
+
 The digest folder (--dir) holds feedback.md (standing preferences, given to
 the model), project-brief.md (radar regex and collision levels),
 project-radar.md and ledger.md (both appended), and digests/<today>.md.
@@ -34,12 +40,13 @@ from summaries.signals import read_signals
 WEEKDAYS = "一二三四五六日"
 LEVELS = {"高": "高", "high": "高", "中": "中", "medium": "中", "可借鉴": "可借鉴", "borrow": "可借鉴", "无": None, "none": None}
 LEVEL_ORDER = {"高": 0, "中": 1, "可借鉴": 2}
-MAX_PER_TOPIC, MAX_RADAR, MAX_OTHER, MAX_DEEP = 3, 3, 2, 2
+MAX_PER_TOPIC, MAX_RADAR, MAX_OTHER, MAX_DEEP, MAX_JOURNAL = 3, 3, 2, 2, 2
 SNIPPET_CHARS, TITLE_CHARS = 160, 90
 HOT_UPVOTES, HOT_PAPERS = 10, 2  # the previous batch's Hugging Face favourites named in the report
 SUMMARISED_ENOUGH = 0.95  # --wait-summaries: a few papers left pending by failed chunks do not hold the report
 # A paper id in the radar table or the brief: an arXiv ID, or a feed paper's doi:/openreview: id.
 ARXIV_ID = re.compile(r"\b\d{4}\.\d{4,5}\b|\b(?:doi|openreview):[^\s|]+")
+BARE_ARXIV_ID = re.compile(r"\d{4}\.\d{4,5}")
 RADAR_RULE = re.compile(r"^(SUP|REUSE|INFO|GROUND)\s*=\s*(.+)$", re.M)
 SUP_CONTEXT = re.compile(r"efficien|sample|epoch|update|budget|compute|information|bits|scal", re.I)
 INFO_CONTEXT = re.compile(r"supervis|label|feedback|reward", re.I)
@@ -47,11 +54,13 @@ LIST_MARKER = re.compile(r"^[\s>*`\-]*(?:\d+[.)]\s*)?")
 PROJECT_PAGE = re.compile(r"^https?://[\w-]+\.git(?:hub|lab)\.io(?:/|$)", re.I)  # as in js/render.js
 REFERENCES = re.compile(r"\n\s*(References|REFERENCES|Bibliography)\s*\n")
 FULLTEXT_CHARS = 60_000
+DEFAULT_CACHE = ".cache/digest"  # Sunday's page reads each day's picks.json here
 MODEL_TIMEOUT = 900
 DEFAULT_COMMAND = ["claude", "-p", "--model", "{model}", "--tools", "", "--strict-mcp-config"]
 # Tried when the default client fails, for example when the claude sign-in has expired.
 FALLBACK_COMMAND = ["codex", "exec", "-s", "read-only", "--skip-git-repo-check", "-c", 'model_reasoning_effort="medium"', "-"]
 USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
+JOURNAL_SECTION = "来自期刊"
 NO_STEREO = "今日无 2D→3D / 立体视觉相关论文"
 UNREAD_ACTION = "仅摘要；需要时读全文"
 RADAR_HEADER = "| 日期 | arXiv ID | 标题 | 等级 | 一句话关系 | 建议动作 |\n|---|---|---|---|---|---|\n"
@@ -105,28 +114,53 @@ class Candidates:
     others: list
     topics_of: dict = field(default_factory=dict)
     listed: set = field(default_factory=set)
+    journal: list = field(default_factory=list)  # journal papers among the topic and radar candidates
+    venues: dict = field(default_factory=dict)  # {venue: journal papers that day}
+
+    @property
+    def arxiv_total(self):
+        return self.total - sum(self.venues.values())
 
 
-def build_candidates(raw, ai_records, topics, patterns, known):
+def venue_of(paper):
+    """A journal paper's venue; None for an arXiv paper."""
+    return None if is_arxiv(paper) else (paper.get("venue") or paper.get("source") or "?")
+
+
+def with_local_abstract(paper, local):
+    """A journal paper with its local abstract as `summary`, for matching and the prompt; it is never published."""
+    abstract = None if is_arxiv(paper) else local.get(paper["id"])
+    return {**paper, "summary": abstract} if abstract else paper
+
+
+def build_candidates(raw, ai_records, topics, patterns, known, local=None):
+    """`local`: {id: abstract} of journal papers, from this machine's work folder."""
     summarised = {r["id"]: r for r in ai_records if has_summary(r)}
-    papers = [summarised.get(p["id"], p) for p in dedupe_by_id(raw)]
+    papers = [with_local_abstract(summarised.get(p["id"], p), local or {}) for p in dedupe_by_id(raw)]
     records = {p["id"]: p for p in papers}
     by_topic = {t["name"]: [] for t in topics}
-    radar, others, topics_of = [], [], {}
+    radar, others, journal, topics_of, venues = [], [], [], {}, {}
     for paper in papers:
         names = topics_for(paper, topics)
         topics_of[paper["id"]] = names
+        venue = venue_of(paper)
+        if venue:
+            venues[venue] = venues.get(venue, 0) + 1
         if paper["id"] in known:
             continue
         for name in names:
             by_topic[name].append(paper)
-        is_radar = is_radar_candidate(f"{paper.get('title', '')} {paper.get('summary', '')}", patterns)
+        abstract = paper.get("summary") or (paper.get("AI") or {}).get("tldr") or ""
+        is_radar = is_radar_candidate(f"{paper.get('title', '')} {abstract}", patterns)
         if is_radar:
             radar.append(paper)
         if not names and not is_radar:
             others.append(paper)
+        elif venue:
+            journal.append(paper)
     done = len(summarised.keys() & records.keys())
-    return Candidates(records, len(papers), done, by_topic, radar, others, topics_of, set(records) - set(known))
+    listed = set(records) - set(known)
+    return Candidates(records, len(papers), done, by_topic, radar, others, topics_of, listed, journal, venues)
 
 
 # --- Model prompts and answers -----------------------------------------------------
@@ -142,13 +176,27 @@ def _snippet(paper):
 
 
 def _code_tag(paper):
-    return " [code]" if paper.get("code_url") and not PROJECT_PAGE.match(paper["code_url"]) else ""
+    code = " [code]" if paper.get("code_url") and not PROJECT_PAGE.match(paper["code_url"]) else ""
+    venue = venue_of(paper)
+    return f"{code} [{venue}]" if venue else code
 
 
 def _block(paper):
-    # A feed paper's abstract is not published; its summary's TL;DR stands in for it.
+    # A journal paper's abstract is local; without it, its summary's TL;DR stands in for it.
     abstract = paper.get("summary") or (paper.get("AI") or {}).get("tldr")
     return f"=== {paper['id']}{_code_tag(paper)}\ntitle: {_one_line(paper.get('title'))}\nabstract: {_one_line(abstract)}\n"
+
+
+def _journal_rules(found):
+    """The writer's extra rules on a day with journal papers; nothing on an arXiv-only day."""
+    if not found.venues:
+        return "", "", ""
+    answer = "journal | <paper id> | <中文一句话要点>\n"
+    rule = (
+        f"- Papers marked [venue] are journal papers, ids doi:... (or a bare arXiv ID when they also have one). They compete with arXiv papers on the same footing under topics, radar and other. "
+        f"journal: at most {MAX_JOURNAL} more journal papers worth his time but not placed anywhere else, keyword matches first; none is fine.\n"
+    )
+    return answer, rule, f"{found.arxiv_total} new arXiv papers and {sum(found.venues.values())} journal papers"
 
 
 def writer_prompt(day, found, topics, feedback, brief):
@@ -161,20 +209,21 @@ def writer_prompt(day, found, topics, feedback, brief):
         sections.append(f"## {topic['name']} ({len(papers)})\n{body}")
     radar = [p for p in found.radar if p["id"] not in listed]
     topic_lines = "\n".join(f"- {t['name']}: {', '.join(t['keywords'])}" for t in topics)
-    return f"""You choose papers for Eric's daily arXiv report, which is written in Chinese. Day: {day}, {found.total} new papers.
+    journal_answer, journal_rule, counted = _journal_rules(found)
+    return f"""You choose papers for Eric's daily arXiv report, which is written in Chinese. Day: {day}, {counted or f"{found.total} new papers"}.
 Read his standing preferences and the project brief, then the candidates.
 
 Answer with plain lines and nothing else, each one of:
 topic | <topic name exactly as listed> | <arXiv id> | <中文一句话要点，40 字以内>
 radar | <高|中|可借鉴> | <arXiv id> | <中文一句话：可能撞在哪里，或能借鉴什么> | <check 或 ->
 other | <arXiv id> | <中文一句话要点>
-note | <可选：一句话总评>
+{journal_answer}note | <可选：一句话总评>
 
 Rules:
 - At most {MAX_PER_TOPIC} topic lines per topic. His preferences decide how generous to be: for a topic he marks as a focus, include close secondary candidates (and say in the gist how they relate); for the others, only papers worth his time, and none is fine. A paper from any list may go under a topic it fits, not only keyword matches.
 - Radar: grade with the brief's collision levels from what the abstract or TL;DR says; at most {MAX_RADAR} lines, the most relevant to the brief's claim and planned experiments first, none if nothing fits. 可借鉴 also covers confounds that would contaminate those experiments (numerical precision, sampler and trainer mismatch, hyperparameters not retuned per condition). Write `check` on at most {MAX_DEEP} lines whose grade needs the full text (high or medium candidates).
 - other: at most {MAX_OTHER} high-signal papers that fit none of the topics.
-- A paper appears once: a radar paper is not repeated under a topic or other.
+{journal_rule}- A paper appears once: a radar paper is not repeated under a topic or other.
 - A gist states what the paper itself claims. Automatic video, geometry or spatial scores are not evidence of human stereo comfort.
 - Use only arXiv IDs from the lists below. End with exactly one note line.
 
@@ -214,10 +263,13 @@ radar | <高|中|可借鉴|无> | <arXiv id> | <中文一句话> | <建议动作
 {blocks}"""
 
 
-def parse_picks(text, valid_ids, topic_names):
-    """The writer's answer as {topics, radar, other, note}, and the lines it had to drop."""
+def parse_picks(text, valid_ids, topic_names, journal_ids=frozenset()):
+    """The writer's answer as {topics, radar, other, journal, note}, and the lines it had to drop.
+
+    `journal_ids`: the day's journal papers, the only papers a `journal` line may name.
+    """
     by_name = {name.lower(): name for name in topic_names}
-    picks = {"topics": {}, "radar": [], "other": [], "note": ""}
+    picks = {"topics": {}, "radar": [], "other": [], "journal": [], "note": ""}
     problems = []
     for raw_line in (text or "").splitlines():
         if raw_line.strip().startswith("```"):
@@ -248,6 +300,11 @@ def parse_picks(text, valid_ids, topic_names):
                 problems.append(f"dropped: {line.strip()}")
             elif len(picks["other"]) < MAX_OTHER:
                 picks["other"].append((parts[1], parts[2]))
+        elif kind == "journal" and len(parts) >= 3:
+            if parts[1] not in journal_ids:
+                problems.append(f"dropped: {line.strip()}")
+            elif len(picks["journal"]) < MAX_JOURNAL and parts[1] not in {pid for pid, _ in picks["journal"]}:
+                picks["journal"].append((parts[1], parts[2]))
         elif kind == "note" and len(parts) >= 2:
             picks["note"] = parts[1]
     return picks, problems
@@ -365,14 +422,19 @@ def run_model(argv, prompt, cwd):
     return result.stdout
 
 
+def has_arxiv_copy(paper):
+    """An arXiv paper, or a journal paper whose id is its arXiv ID."""
+    return is_arxiv(paper) or bool(BARE_ARXIV_ID.fullmatch(paper.get("id", "")))
+
+
 def deepen(picks, found, brief, argv, cwd, work, problems):
     """Read the full text of the radar papers marked `check` and regrade them.
 
     Without a PDF or an answer the abstract grades stay, marked 仅摘要.
     """
     papers = []
-    # Full text is read from arXiv only; a feed paper keeps its abstract grade.
-    checked = [i for i in picks["radar"] if i["check"] and is_arxiv(found.records.get(i["id"], {}))]
+    # Full text is read from arXiv only (a journal paper with an arXiv ID too); any other keeps its abstract grade.
+    checked = [i for i in picks["radar"] if i["check"] and has_arxiv_copy(found.records.get(i["id"], {}))]
     for item in checked[:MAX_DEEP]:
         text = fetch_fulltext(item["id"], work)
         if text:
@@ -403,7 +465,7 @@ def day_link(site, day, topic=None, paper=None, start=None):
     if topic:
         params.append(f"topic={quote(topic, safe='')}")
     if paper:
-        params.append(f"paper={paper}")
+        params.append(f"paper={quote(paper, safe='')}")
     return f"{site}#{'&'.join(params)}"
 
 
@@ -423,6 +485,42 @@ def _paper_link(site, day, found, paper_id, topic=None):
     return f"[{title}]({day_link(site, day, topic=chosen, paper=paper_id)})"
 
 
+def _venue(found, paper_id, *rest):
+    """'（IEEE TCSVT）' after a journal paper, with `rest` (level, reading) joined in; arXiv papers keep '（rest）' or ''."""
+    venue = venue_of(found.records[paper_id])
+    inner = "，".join(rest)
+    if venue:
+        return f"（{venue}；{inner}）" if inner else f"（{venue}）"
+    return f"（{inner}）" if inner else ""
+
+
+def _gist(found, paper_id, gist):
+    """' — gist' after an arXiv paper, '（venue）— gist' after a journal paper, as the report has always read."""
+    label = _venue(found, paper_id)
+    return f"{label}— {gist}" if label else f" — {gist}"
+
+
+def _venue_counts(papers):
+    counts = {}
+    for paper in papers:
+        venue = venue_of(paper)
+        counts[venue] = counts.get(venue, 0) + 1
+    return " · ".join(f"{venue} {n}" for venue, n in sorted(counts.items(), key=lambda item: (-item[1], item[0])))
+
+
+def _journal_section(site, day, found, picks, shown):
+    """The short section for journal papers, on a day with journal candidates or journal picks only."""
+    chosen = [(pid, gist) for pid, gist in picks.get("journal", []) if pid not in shown]
+    if not (found.journal or chosen):
+        return []
+    shown.update(pid for pid, _ in chosen)
+    matched = f"匹配 {len(found.journal)} 篇：{_venue_counts(found.journal)}" if found.journal else ""
+    if not chosen:
+        return ["", f"**{JOURNAL_SECTION}**：今日无精选（{matched}）"]
+    lines = ["", f"**{JOURNAL_SECTION}**（{matched}）" if matched else f"**{JOURNAL_SECTION}**"]
+    return lines + [f"- {_paper_link(site, day, found, pid)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in chosen]
+
+
 def _code_link(found, paper_id):
     """' · [代码](url)' for a linked repository, ' · [项目页](url)' for a project page."""
     url = found.records[paper_id].get("code_url")
@@ -436,7 +534,8 @@ def render_report(day, today, found, picks, topics, site, hot=()):
     shown = {item["id"] for item in picks["radar"]}
     lines = [f"# arXiv 日报 · {today}（周{weekday(today)}）", ""]
     batch = "" if day == today else f"（arXiv {day} 批次）"
-    lines += [f"**{found.total} 篇新论文**{batch}（摘要 {found.done}/{found.total}）· [打开当天]({day_link(site, day)})", ""]
+    journals = f" · 期刊 {sum(found.venues.values())} 篇" if found.venues else ""
+    lines += [f"**{found.arxiv_total} 篇新论文{journals}**{batch}（摘要 {found.done}/{found.total}）· [打开当天]({day_link(site, day)})", ""]
     if hot:
         liked = "；".join(
             f"[{shorten(title, TITLE_CHARS)}]({day_link(site, d, topic='all', paper=pid)}) ▲{count}" for d, pid, title, count in hot
@@ -446,7 +545,8 @@ def render_report(day, today, found, picks, topics, site, hot=()):
         lines.append("**雷达**：")
         for item in sorted(picks["radar"], key=lambda i: LEVEL_ORDER[i["level"]]):
             seen = "已读全文" if item["read"] else "仅摘要"
-            lines.append(f"- {_paper_link(site, day, found, item['id'])}（{item['level']}，{seen}）— {item['reason']}{_code_link(found, item['id'])}")
+            label = _venue(found, item["id"], item["level"], seen)
+            lines.append(f"- {_paper_link(site, day, found, item['id'])}{label}— {item['reason']}{_code_link(found, item['id'])}")
     else:
         lines.append("**雷达**：今日无可能撞车的论文")
     for index, topic in enumerate(topics):
@@ -461,11 +561,12 @@ def render_report(day, today, found, picks, topics, site, hot=()):
             lines.append(f"**{name}**：{empty}（{more}）")
             continue
         lines.append(f"**{name}**（{more}）")
-        lines += [f"- {_paper_link(site, day, found, pid, name)} — {gist}{_code_link(found, pid)}" for pid, gist in chosen]
+        lines += [f"- {_paper_link(site, day, found, pid, name)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in chosen]
+    lines += _journal_section(site, day, found, picks, shown)
     other = [(pid, gist) for pid, gist in picks["other"] if pid not in shown]
     if other:
         lines += ["", "**其他**"]
-        lines += [f"- {_paper_link(site, day, found, pid)} — {gist}{_code_link(found, pid)}" for pid, gist in other]
+        lines += [f"- {_paper_link(site, day, found, pid)}{_gist(found, pid, gist)}{_code_link(found, pid)}" for pid, gist in other]
     if picks["note"]:
         lines += ["", f"> {picks['note']}"]
     return "\n".join(lines) + "\n"
@@ -473,7 +574,8 @@ def render_report(day, today, found, picks, topics, site, hot=()):
 
 def push_message(day, found, picks, site):
     """One line under 200 characters: count, the strongest radar paper, picks, link."""
-    head = f"arXiv {day[5:]}：{found.total} 篇。"
+    journals = f" + 期刊 {sum(found.venues.values())} 篇" if found.venues else ""
+    head = f"arXiv {day[5:]}：{found.arxiv_total} 篇{journals}。"
     picked = sum(len(items) for items in picks["topics"].values())
     tail = f"{f'精选 {picked} 篇。' if picked else ''} {day_link(site, day)}"
     if not picks["radar"]:
@@ -509,9 +611,8 @@ def ledger_marker(day):
 
 
 def picked_ids(picks):
-    return [pid for items in picks["topics"].values() for pid, _ in items] + [pid for pid, _ in picks["other"]] + [
-        item["id"] for item in picks["radar"]
-    ]
+    listed = [pid for items in picks["topics"].values() for pid, _ in items] + [pid for pid, _ in picks["other"]]
+    return listed + [pid for pid, _ in picks.get("journal", [])] + [item["id"] for item in picks["radar"]]
 
 
 def append_ledger(path, today, day, found, picks):
@@ -584,13 +685,17 @@ def choose(args, day, found, topics, brief, feedback, work):
     (work / "writer.prompt.txt").write_text(prompt, encoding="utf-8")
     argv, answer, failed = ask(clients(args), prompt, args.repo)
     (work / "writer.out.txt").write_text(answer, encoding="utf-8")
-    picks, parse_problems = parse_picks(answer, found.listed, [t["name"] for t in topics])
+    journal_ids = {pid for pid in found.listed if venue_of(found.records[pid])}
+    picks, parse_problems = parse_picks(answer, found.listed, [t["name"] for t in topics], journal_ids)
     problems = [*(f"{error}; {argv[0]} wrote the report instead" for error in failed), *parse_problems]
     if not (picks["topics"] or picks["radar"] or picks["other"] or picks["note"]):
         raise RuntimeError("; ".join([*failed, f"no usable lines in the answer from {argv[0]} (see {work / 'writer.out.txt'})"]))
     picks = deepen(picks, found, brief, argv, args.repo, work, problems)
     titles = {pid: found.records[pid].get("title", "") for pid in picked_ids(picks)}
     saved = {"day": day, "total": found.total, **picks, "titles": titles}
+    if found.venues:  # Sunday's page counts journal picks by topic and the week's journal papers by venue
+        journal_topics = {pid: found.topics_of.get(pid, []) for pid, _ in picks["journal"]}
+        saved = {**saved, "journal_topics": journal_topics, "venues": found.venues}
     (work / "picks.json").write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
     return picks, problems, argv[0]
 
@@ -613,14 +718,14 @@ def cmd_digest(args):
     ai_records = datafiles.read_records(branch, datafiles.ai_path(day, args.language))
     brief, feedback = _read(vault / "project-brief.md"), _read(vault / "feedback.md")
     topics = load_topics()
-    found = build_candidates(raw, ai_records, topics, radar_patterns(brief), known_ids(vault, today))
     local = abstracts.load(args.work_dir)
+    found = build_candidates(raw, ai_records, topics, radar_patterns(brief), known_ids(vault, today), local)
     # Feed papers without a local abstract never get a summary, so they do not hold the report.
     can_summarise = found.total - datafiles.counts(raw, ai_records, local).get("no_abstract", 0)
     if args.wait_summaries and found.done < SUMMARISED_ENOUGH * can_summarise and not args.final:
         emit(status="summaries-pending", date=day, done=found.done, total=found.total)
         return 0
-    work = Path(args.cache) / day
+    work = Path(args.cache or (vault / "work" if args.dry_run else DEFAULT_CACHE)) / day
     work.mkdir(parents=True, exist_ok=True)
     try:
         picks, problems, client = choose(args, day, found, topics, brief, feedback, work)
@@ -635,7 +740,8 @@ def cmd_digest(args):
     report_path.write_text(report, encoding="utf-8")
     append_ledger(vault / "ledger.md", today, day, found, picks)
     try:
-        datafiles.record_run(branch, day, args.language, "report", abstracts=local)
+        if not args.dry_run:
+            datafiles.record_run(branch, day, args.language, "report", abstracts=local)
     except (PublishError, subprocess.SubprocessError) as error:
         problems.append(f"run log not updated: {error}")
     emit(
@@ -663,5 +769,6 @@ def add_parser(sub):
     digest.add_argument("--command", help='headless client, JSON list with {model}; the prompt comes on stdin')
     digest.add_argument("--fallback", type=fallback_argv, default=FALLBACK_COMMAND, help="client tried when the default one fails (JSON list, no fallback with --command); '' for none")
     digest.add_argument("--site", help="reading page URL; default from the repository")
-    digest.add_argument("--cache", default=".cache/digest", help="work files (prompts, answers, picks)")
+    digest.add_argument("--cache", help=f"work files (prompts, answers, picks); default {DEFAULT_CACHE}, or <dir>/work with --dry-run")
+    digest.add_argument("--dry-run", action="store_true", help="write into --dir only: no run-log entry on the data branch; point --dir at a scratch folder")
     digest.set_defaults(func=cmd_digest)
