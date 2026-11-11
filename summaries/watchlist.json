@@ -1,0 +1,24 @@
+{
+  "about": "Watch list v1 from docs/specs/s1-sources-beyond-arxiv.md (Q2). The feed command resolves each name to its source IDs; optional fields: issn, openalex_source, openreview_venue, sources (subset of openalex, crossref, openreview).",
+  "venues": [
+    {"name": "CVPR", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ICCV", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ECCV", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "NeurIPS", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ICML", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ICLR", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "AAAI", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "IJCAI", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ACM MM", "kind": "conference", "group": "ML and CV conferences"},
+    {"name": "ACM TOG", "kind": "journal", "group": "Graphics and VR"},
+    {"name": "IEEE TVCG", "kind": "journal", "group": "Graphics and VR"},
+    {"name": "Computer Graphics Forum", "kind": "journal", "group": "Graphics and VR"},
+    {"name": "IEEE TPAMI", "kind": "journal", "group": "Journals"},
+    {"name": "IJCV", "kind": "journal", "group": "Journals"},
+    {"name": "IEEE TIP", "kind": "journal", "group": "Journals"},
+    {"name": "IEEE TCSVT", "kind": "journal", "group": "Journals"},
+    {"name": "JMLR", "kind": "journal", "group": "Journals"},
+    {"name": "TMLR", "kind": "journal", "group": "Journals"},
+    {"name": "Journal of Vision", "kind": "journal", "group": "Vision science"}
+  ]
+}

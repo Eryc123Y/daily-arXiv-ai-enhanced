@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from summaries import abstracts
 from summaries.blocks import format_chunk, parse_blocks
 from summaries.datafiles import (
     ai_path,
@@ -15,7 +16,7 @@ from summaries.datafiles import (
     read_records,
 )
 from summaries.prompting import instructions
-from summaries.records import AI_FIELDS, pending_papers
+from summaries.records import AI_FIELDS, pending_papers, with_abstracts
 
 LOCK_TTL_SECONDS = 3 * 3600
 
@@ -61,7 +62,7 @@ def merge_outputs(args):
     known = {p["id"] for p in read_records(branch, raw_path(args.date))}
     unknown = sorted(set(summaries) - known)
     problems += [f"{paper_id}: not in the day's raw file" for paper_id in unknown]
-    stats = publish_summaries(branch, args.date, args.language, summaries, "claude-code")
+    stats = publish_summaries(branch, args.date, args.language, summaries, "claude-code", abstracts.load(args.work_dir))
     archive = directory / "merged"
     for out in outputs:
         archive.mkdir(parents=True, exist_ok=True)
@@ -83,7 +84,8 @@ def write_chunks(args):
     branch.fetch()
     raw = read_records(branch, raw_path(args.date))
     ai_records = read_records(branch, ai_path(args.date, args.language))
-    todo = pending_papers(raw, ai_records)
+    local = abstracts.load(args.work_dir)
+    todo = with_abstracts(pending_papers(raw, ai_records, local), local)
     guide = directory / "INSTRUCTIONS.md"
     guide.write_text(subagent_instructions(args.language), encoding="utf-8")
     chunks = []
@@ -94,7 +96,7 @@ def write_chunks(args):
         chunks.append({"input": f"{stem}.in.txt", "output": f"{stem}.out.txt", "papers": len(part)})
     return {
         "date": args.date,
-        **counts(raw, ai_records),
+        **counts(raw, ai_records, local),
         "merged_leftovers": leftovers,
         "instructions": str(guide),
         "chunks": chunks,
@@ -103,21 +105,21 @@ def write_chunks(args):
 
 def subagent_instructions(language):
     fields = "\n".join(f"{name}: ..." for name in AI_FIELDS)
-    return f"""# Summarise arXiv papers
+    return f"""# Summarise papers
 
 {instructions(language)}
 
 ## Input
-The input file holds one block per paper: a line `=== <arXiv id>`, then a `title:` line and an `abstract:` line.
+The input file holds one block per paper: a line `=== <paper id>`, then a `title:` line and an `abstract:` line.
 
 ## Output
 Use the Write tool to write the output file with one block per input paper, in input order, exactly in this format:
 
-=== <arXiv id>
+=== <paper id>
 {fields}
 
 Rules:
-- Every paper in the input gets a block. Copy each `=== <arXiv id>` line exactly.
+- Every paper in the input gets a block. Copy each `=== <paper id>` line exactly.
 - Field names stay in English as shown; field contents are in {language}.
 - Each field is a single line. No Markdown, no blank fields, nothing else in the file.
 

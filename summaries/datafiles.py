@@ -13,6 +13,7 @@ from summaries.records import (
     merge_summaries,
     parse_jsonl,
     pending_papers,
+    without_abstract,
 )
 
 SITE_SETTINGS = "assets/site.json"
@@ -55,10 +56,16 @@ def read_records(branch, path):
     return parse_jsonl(branch.read(path) or "")
 
 
-def counts(raw, ai_records):
+def counts(raw, ai_records, abstracts=frozenset()):
+    """total, done, pending; plus no_abstract (feed papers that cannot be summarised here) when there are any.
+
+    `abstracts` holds the ids of feed papers whose abstract is in this machine's work folder.
+    """
     total = len(dedupe_by_id(raw))
-    pending = len(pending_papers(raw, ai_records))
-    return {"total": total, "done": total - pending, "pending": pending}
+    pending = len(pending_papers(raw, ai_records, abstracts))
+    missing = len(without_abstract(raw, ai_records, abstracts))
+    stats = {"total": total, "done": total - pending - missing, "pending": pending}
+    return {**stats, "no_abstract": missing} if missing else stats
 
 
 def recent_days(branch, days):
@@ -68,13 +75,14 @@ def recent_days(branch, days):
     return sorted((d for d in found if d >= cutoff), reverse=True)
 
 
-def publish_summaries(branch, day, language, new, source):
+def publish_summaries(branch, day, language, new, source, abstracts=frozenset()):
     stats = {}
 
     def build(current):
         raw = read_records(current, raw_path(day))
         merged = merge_summaries(raw, read_records(current, ai_path(day, language)), new)
-        stats.update(counts(raw, merged))
+        stats.clear()
+        stats.update(counts(raw, merged, abstracts))
         return {ai_path(day, language): dump_jsonl(merged)}
 
     if new:
@@ -85,12 +93,12 @@ def publish_summaries(branch, day, language, new, source):
     return stats
 
 
-def record_run(branch, day, language, path, reason=None):
+def record_run(branch, day, language, path, reason=None, abstracts=frozenset()):
     """Append which summary path ran for `day` to logs/summary-runs.jsonl."""
     entry = {}
 
     def build(current):
-        stats = counts(read_records(current, raw_path(day)), read_records(current, ai_path(day, language)))
+        stats = counts(read_records(current, raw_path(day)), read_records(current, ai_path(day, language)), abstracts)
         entry.clear()
         entry.update(
             date=day,

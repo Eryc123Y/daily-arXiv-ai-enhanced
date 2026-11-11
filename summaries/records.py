@@ -23,6 +23,11 @@ def clean_ai(value):
     return cleaned
 
 
+def is_arxiv(record):
+    """A record without `source` is an arXiv record (every record written before the feed)."""
+    return (record.get("source") or "arxiv") == "arxiv"
+
+
 def has_summary(record):
     return isinstance(record, dict) and bool(record.get("id")) and clean_ai(record.get("AI")) is not None
 
@@ -46,10 +51,29 @@ def dedupe_by_id(records):
     return unique
 
 
-def pending_papers(raw, ai_records):
-    """Raw papers that do not yet have a complete summary, in raw order."""
+def unsummarised(raw, ai_records):
     done = {r["id"] for r in ai_records if has_summary(r)}
     return [p for p in dedupe_by_id(raw) if p["id"] not in done]
+
+
+def pending_papers(raw, ai_records, abstracts=frozenset()):
+    """Raw papers that do not yet have a complete summary and can get one, in raw order.
+
+    An arXiv record carries its abstract. A feed record can be summarised only
+    while its abstract is in this machine's work folder (`abstracts`, ids or a
+    dict); without it, it is never pending, so it cannot stay pending forever.
+    """
+    return [p for p in unsummarised(raw, ai_records) if is_arxiv(p) or p["id"] in abstracts]
+
+
+def without_abstract(raw, ai_records, abstracts=frozenset()):
+    """Feed records with no summary and no local abstract: listed, never summarised."""
+    return [p for p in unsummarised(raw, ai_records) if not is_arxiv(p) and p["id"] not in abstracts]
+
+
+def with_abstracts(papers, abstracts):
+    """Copies of `papers` with each feed record's local abstract as `summary`, for the summary prompt only."""
+    return [p if is_arxiv(p) else {**p, "summary": abstracts.get(p["id"], "")} for p in papers]
 
 
 def merge_summaries(raw, existing_ai_records, new_summaries):
