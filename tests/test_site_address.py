@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from summaries import digest, github, setup
+from summaries import digest, github
 
 LITSCOUT = "https://litscout.turing2234.com/"
 
@@ -43,9 +43,8 @@ def test_the_sites_file_only_holds_https_addresses():
     assert all(url.startswith("https://") and url.endswith("/") for url in addresses.values())
 
 
-def test_reports_and_setup_link_to_the_configured_address(monkeypatch, tmp_path):
+def test_reports_link_to_the_configured_address(monkeypatch, tmp_path):
     monkeypatch.setenv("DATA_REPO", "Eryc123Y/daily-arXiv-ai-enhanced")
     assert digest.site_url(tmp_path) == LITSCOUT
-    assert setup.site_url("Eryc123Y/daily-arXiv-ai-enhanced") == LITSCOUT
     monkeypatch.setenv("DATA_REPO", "alice/my-arxiv")
     assert digest.site_url(tmp_path) == "https://alice.github.io/my-arxiv/"

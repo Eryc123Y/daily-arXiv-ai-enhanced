@@ -455,8 +455,8 @@ def deepen(picks, found, brief, argv, cwd, work, problems):
 
 
 def site_url(repo_dir):
-    owner, name = github.repo_slug(repo_dir).split("/", 1)
-    return f"https://{owner.lower()}.github.io/{name}/"
+    """The reading page the report links to; see github.site_url."""
+    return github.site_url(github.repo_slug(repo_dir))
 
 
 def day_link(site, day, topic=None, paper=None, start=None):
