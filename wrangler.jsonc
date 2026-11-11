@@ -1,0 +1,14 @@
+// Cloudflare Workers static-assets hosting for litscout.turing2234.com.
+// Build with `python3 scripts/build_site.py` (copies the public page files into dist/),
+// then deploy with `npx wrangler deploy`. Data stays on the GitHub `data` branch.
+{
+  "name": "litscout-daily",
+  "compatibility_date": "2026-11-12",
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "none"
+  },
+  "workers_dev": false,
+  "routes": [{ "pattern": "litscout.turing2234.com", "custom_domain": true }]
+}

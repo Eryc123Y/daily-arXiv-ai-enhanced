@@ -23,12 +23,6 @@ def _try(*args):
         return (error.stderr or str(error)).strip()
 
 
-def site_url(slug):
-    owner, name = slug.split("/")
-    owner = owner.lower()
-    return f"https://{owner}.github.io/" if name.lower() == f"{owner}.github.io" else f"https://{owner}.github.io/{name}/"
-
-
 def cmd_setup(args):
     slug = github.repo_slug(args.repo)
     variables = {"CATEGORIES": args.categories, "LANGUAGE": args.language, "SUMMARY_MODE": args.mode}
@@ -60,7 +54,7 @@ def cmd_setup(args):
     print("\n".join(notes))
     print(
         f"""
-Your page: {site_url(slug)}
+Your page: {github.site_url(slug)}
 
 Crawl today's papers on this machine (and backfill missed days):
   uv run python -m summaries ensure-day
