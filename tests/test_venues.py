@@ -14,7 +14,18 @@ AREAS = {
     "ML and vision": {"CVPR", "ICCV", "ECCV", "NeurIPS", "ICML", "ICLR", "AAAI", "IJCAI", "ACM MM",
                       "IEEE TPAMI", "IJCV", "IEEE TIP", "IEEE TCSVT", "JMLR", "TMLR"},
     "Graphics and VR": {"ACM TOG", "IEEE TVCG", "Computer Graphics Forum"},
-    "Vision science": {"Journal of Vision"},
+    "NLP and linguistics": {"ACL", "EMNLP", "NAACL", "EACL", "TACL", "Computational Linguistics", "CoNLL",
+                            "Mathematics of Language", "COLM"},
+    "RL and AI": {"AAMAS", "JAAMAS", "JAIR", "Artificial Intelligence (Elsevier)", "RLC"},
+    "Learning theory": {"COLT", "ALT", "AISTATS", "UAI", "Annals of Statistics", "SIMODS", "Information and Inference",
+                        "Machine Learning (Springer)", "IEEE TIT"},
+    "Logic and formal languages": {"LICS", "LMCS", "Journal of Automated Reasoning", "CPP", "ITP", "ICALP"},
+    "Cognitive science": {"Cognitive Science", "Open Mind", "Computational Brain and Behavior", "Journal of Language Evolution"},
+    "Neural networks and continual learning": {"CoLLAs", "Neural Computation", "Foundations and Trends in ML",
+                                               "Nature Machine Intelligence", "Neural Networks", "IEEE TNNLS"},
+    # Journal of Vision joins its sister journal Vision Research here; "Vision science" held only it.
+    "3D, stereo and perception": {"3DV", "QoMEX", "IEEE TMM", "Vision Research", "Journal of Vision"},
+    "Computational neuroscience": {"PLOS Computational Biology"},
 }
 
 
@@ -27,7 +38,7 @@ def write_list(tmp_path, venues):
 # --- The watch list -------------------------------------------------------------
 
 
-def test_every_watched_venue_has_one_of_the_three_areas():
+def test_every_watched_venue_has_one_of_the_areas():
     venues = feed.load_watchlist()
 
     by_area = {}
@@ -49,13 +60,14 @@ def test_an_area_is_accepted_beside_the_other_fields(tmp_path):
 # --- The published summary -------------------------------------------------------
 
 
-def test_the_summary_holds_name_kind_and_area_only_in_watch_list_order():
+def test_the_summary_holds_name_kind_area_and_top_only_in_watch_list_order():
     summary = datafiles.venue_summary()
 
-    assert summary[0] == {"name": "CVPR", "kind": "conference", "area": "ML and vision"}
-    assert {"name": "ACM TOG", "kind": "journal", "area": "Graphics and VR"} in summary
+    assert summary[0] == {"name": "CVPR", "kind": "conference", "area": "ML and vision", "top": True}
+    assert {"name": "ACM TOG", "kind": "journal", "area": "Graphics and VR", "top": True} in summary
+    assert {"name": "EACL", "kind": "conference", "area": "NLP and linguistics", "top": False} in summary
     assert [v["name"] for v in summary] == [v["name"] for v in feed.load_watchlist()]
-    assert all(set(v) == {"name", "kind", "area"} for v in summary)
+    assert all(set(v) == {"name", "kind", "area", "top"} for v in summary)
 
 
 def test_a_venue_without_an_area_is_published_with_area_null_and_broken_entries_are_left_out(tmp_path):
@@ -66,7 +78,17 @@ def test_a_venue_without_an_area_is_published_with_area_null_and_broken_entries_
         "not a venue",
     ])
 
-    assert datafiles.venue_summary(path) == [{"name": "TIP", "kind": "journal", "area": None}]
+    assert datafiles.venue_summary(path) == [{"name": "TIP", "kind": "journal", "area": None, "top": False}]
+
+
+def test_a_venue_is_top_only_when_the_watch_list_says_true(tmp_path):
+    path = write_list(tmp_path, [
+        {"name": "A", "kind": "journal", "group": "x", "top": True},
+        {"name": "B", "kind": "journal", "group": "x", "top": False},
+        {"name": "C", "kind": "journal", "group": "x", "top": "yes"},
+    ])
+
+    assert [v["top"] for v in datafiles.venue_summary(path)] == [True, False, False]
 
 
 def test_an_unreadable_watch_list_publishes_nothing(tmp_path):

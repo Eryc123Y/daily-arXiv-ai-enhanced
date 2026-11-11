@@ -1,7 +1,7 @@
 """R2: a feed paper already on the data branch, or twice in one batch, is published once.
 
-Matched by arXiv ID, then DOI, then normalised title plus the first author's
-family name. Titles by the same first author that are more than 90% alike
+Matched by id (an arXiv ID, or a feed paper's openreview: or url: id), then
+DOI, then normalised title plus the first author's family name. Titles by the same first author that are more than 90% alike
 also match, so a journal version whose title gained a colon or lost a hyphen
 is not published again.
 """
@@ -11,13 +11,10 @@ import unicodedata
 from dataclasses import replace
 from difflib import SequenceMatcher
 
-from summaries.records import is_arxiv
-
 TITLE_SIMILARITY = 0.9
 DOI_PREFIX = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
 ARXIV_PREFIX = re.compile(r"^arxiv:", re.IGNORECASE)
 ARXIV_VERSION = re.compile(r"v\d+$")
-FEED_ID = re.compile(r"^(?:doi|openreview):")
 
 
 def _ascii_words(text):
@@ -47,10 +44,11 @@ def normalise_arxiv_id(arxiv_id):
 
 def _keys(record):
     paper_id = record.get("id") or ""
-    arxiv_id = paper_id if is_arxiv(record) or not FEED_ID.match(paper_id) else None
+    # The id names the paper, except a doi: id, which is matched by its DOI (any case, any prefix).
+    same_id = paper_id if paper_id and not paper_id.startswith("doi:") else None
     doi = normalise_doi(record.get("doi")) or (paper_id[4:] if paper_id.startswith("doi:") else None)
     authors = record.get("authors") or [""]
-    return arxiv_id, doi, normalise_title(record.get("title")), family_name(authors[0])
+    return same_id, doi, normalise_title(record.get("title")), family_name(authors[0])
 
 
 class Index:
@@ -60,9 +58,9 @@ class Index:
         self.ids, self.dois, self.titles = {}, {}, {}
 
     def add(self, record, owner=None):
-        arxiv_id, doi, title, family = _keys(record)
-        if arxiv_id:
-            self.ids.setdefault(arxiv_id, owner)
+        same_id, doi, title, family = _keys(record)
+        if same_id:
+            self.ids.setdefault(same_id, owner)
         if doi:
             self.dois.setdefault(doi, owner)
         if title:
@@ -70,9 +68,9 @@ class Index:
 
     def find(self, record):
         """(matched, owner) for `record`."""
-        arxiv_id, doi, title, family = _keys(record)
-        if arxiv_id and arxiv_id in self.ids:
-            return True, self.ids[arxiv_id]
+        same_id, doi, title, family = _keys(record)
+        if same_id and same_id in self.ids:
+            return True, self.ids[same_id]
         if doi and doi in self.dois:
             return True, self.dois[doi]
         same_author = self.titles.get(family, {})

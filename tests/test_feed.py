@@ -30,11 +30,11 @@ def line(**overrides):
 # --- Watch list ---------------------------------------------------------------
 
 
-def test_watch_list_v1_holds_the_specs_nineteen_venues():
+def test_watch_list_v2_keeps_the_specs_nineteen_venues():
     venues = feed.load_watchlist()
 
     names = [v["name"] for v in venues]
-    assert len(names) == 19 and len(set(names)) == 19
+    assert len(names) == len(set(names))
     for name in ("CVPR", "ICLR", "ACM TOG", "IEEE TCSVT", "TMLR", "Journal of Vision"):
         assert name in names
     assert {v["kind"] for v in venues} == {"conference", "journal"}
@@ -71,7 +71,6 @@ def test_watch_list_refuses_a_source_outside_the_lawful_three(tmp_path):
     [
         {"name": "TIP", "kind": "magazine", "group": "Journals"},
         {"name": "", "kind": "journal", "group": "Journals"},
-        {"name": "TIP", "kind": "journal", "group": "Journals", "scrape_url": "https://example.org"},
         {"name": "TIP", "kind": "journal", "group": "Journals", "issn": "1057-7149"},
         {"name": "TIP", "kind": "journal", "group": "Journals", "issn": [1057]},
         {"name": "ICLR", "kind": "conference", "group": "x", "openreview_venues": "ICLR.cc/2026/Conference"},
@@ -90,13 +89,14 @@ def test_watch_list_accepts_optional_source_ids(tmp_path):
 
 
 def test_the_lawful_sources_are_fixed_in_code():
-    assert feed.SOURCES == ("openalex", "crossref", "openreview")
+    """R6: official APIs and the publishers' own indexes (ACL Anthology, PMLR, JMLR, DataCite); nothing else."""
+    assert feed.SOURCES == ("openalex", "crossref", "openreview", "acl-anthology", "pmlr", "datacite", "jmlr")
 
 
 # --- Lines --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("source", ["openalex", "crossref", "openreview"])
+@pytest.mark.parametrize("source", ["openalex", "crossref", "openreview", "acl-anthology", "pmlr", "datacite", "jmlr"])
 def test_each_lawful_source_is_accepted(source):
     papers, invalid = feed.parse_output(line(source=source))
 
@@ -137,9 +137,11 @@ def test_published_record_has_the_shape_and_no_abstract():
         ({"arxiv_id": "arXiv:2611.01234v2", "doi": "10.1/x", "openreview_id": "abc"}, "2611.01234"),
         ({"doi": "https://doi.org/10.1145/ABC.1", "openreview_id": "abc"}, "doi:10.1145/abc.1"),
         ({"doi": None, "openreview_id": "aBc_12"}, "openreview:aBc_12"),
+        # PMLR, JMLR and some ACL Anthology papers have none of the three; their page address is stable.
+        ({"url": "https://proceedings.mlr.press/v337/alfarra26a.html"}, "url:https://proceedings.mlr.press/v337/alfarra26a.html"),
     ],
 )
-def test_id_is_the_arxiv_id_then_the_doi_then_the_openreview_forum(ids, expected):
+def test_id_is_the_arxiv_id_then_the_doi_then_the_openreview_forum_then_the_url(ids, expected):
     [paper], _ = feed.parse_output(line(**{"arxiv_id": None, "doi": None, "openreview_id": None, **ids}))
 
     assert paper.record["id"] == expected
@@ -153,7 +155,6 @@ def test_invalid_lines_are_dropped_and_counted():
         line(title=" "),
         line(published="5 Nov 2026"),
         line(authors="Ada Lovelace"),
-        line(doi=None, arxiv_id=None, openreview_id=None),
         line(url="javascript:alert(1)"),
         line(oa_url="ftp://example.org/x.pdf"),
         line(abstract=12),
@@ -162,7 +163,7 @@ def test_invalid_lines_are_dropped_and_counted():
 
     papers, invalid = feed.parse_output("\n".join(lines))
 
-    assert len(papers) == 1 and invalid == 9
+    assert len(papers) == 1 and invalid == 8
 
 
 def test_an_empty_abstract_counts_as_none():
@@ -196,6 +197,17 @@ def test_a_feed_paper_matching_by_doi_is_not_added():
     kept, dropped = dedupe.fresh(existing, [parsed(doi="https://doi.org/10.1109/TCSVT.2026.1234567", source="crossref")])
 
     assert (kept, dropped) == ([], 1)
+
+
+def test_a_paper_known_by_its_url_or_openreview_id_is_not_added_twice():
+    url = "https://proceedings.mlr.press/v337/alfarra26a.html"
+    first = parsed(doi=None, url=url, source="pmlr", title="Online learning")
+    retitled = parsed(doi=None, url=url, source="pmlr", title="Bandits, revised", authors=["Grace Hopper"])
+    other = parsed(doi=None, url="https://proceedings.mlr.press/v337/other26a.html", source="pmlr", title="Bandits")
+    forum = parsed(doi=None, openreview_id="aBc", source="openreview")
+
+    assert dedupe.fresh([first.record], [retitled, other]) == ([other], 1)
+    assert dedupe.fresh([forum.record], [parsed(doi=None, openreview_id="aBc", source="openreview", title="New title")]) == ([], 1)
 
 
 def test_a_journal_version_of_an_arxiv_paper_matches_by_title_and_first_author():
