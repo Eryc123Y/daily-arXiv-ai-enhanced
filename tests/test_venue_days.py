@@ -3,10 +3,10 @@
 import json
 
 import pytest
-from conftest import git, seed_data_branch
 from test_cli import branch_file, data_repo, paper, pipeline, run  # noqa: F401 (fixtures)
 from test_feed_pipeline import TODAY, feed, feed_line, seed  # noqa: F401 (fixtures)
 
+from conftest import git, seed_data_branch
 from summaries import datafiles
 from summaries.databranch import DataBranch, PublishError, check_public
 from summaries.records import dump_jsonl

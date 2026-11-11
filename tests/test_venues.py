@@ -3,9 +3,9 @@
 import json
 
 import pytest
-from conftest import git, seed_data_branch
 from test_cli import branch_file, data_repo, paper, pipeline, run  # noqa: F401 (fixtures)
 
+from conftest import git, seed_data_branch
 from summaries import datafiles, feed
 from summaries.databranch import PublishError, check_public
 from summaries.records import dump_jsonl

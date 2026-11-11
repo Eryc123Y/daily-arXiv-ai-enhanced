@@ -54,7 +54,7 @@ def _parse_fields(lines):
             continue
         label = LABEL.match(line)
         key = label.group(1).lower() if label else None
-        if key in AI_FIELDS:
+        if label and key in AI_FIELDS:
             fields[key] = label.group(2).strip()
             last = key
         elif last is not None:

@@ -1,6 +1,8 @@
-import pytest
-from conftest import git, seed_data_branch
+import subprocess
 
+import pytest
+
+from conftest import git, seed_data_branch
 from summaries.databranch import DataBranch, Identity, PublishError
 
 BOT = Identity("Eryc123Y", "145822832+Eryc123Y@users.noreply.github.com")
@@ -128,7 +130,7 @@ def test_read_raises_when_a_listed_file_cannot_be_loaded(tmp_path, remote_and_cl
     (clone / ".git" / "objects" / blob[:2] / blob[2:]).unlink()
     git(clone, "remote", "set-url", "origin", str(tmp_path / "unreachable.git"))
 
-    with pytest.raises(Exception):
+    with pytest.raises(subprocess.CalledProcessError):
         branch.read("data/2026-10-30.jsonl")
     assert branch.read("data/absent.jsonl") is None
 

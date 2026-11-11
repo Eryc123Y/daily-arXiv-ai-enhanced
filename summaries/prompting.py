@@ -9,7 +9,7 @@ FIELD_GUIDE = {
 }
 
 
-def instructions(language):
+def instructions(language: str) -> str:
     fields = "\n".join(f"- {name}: {guide}" for name, guide in FIELD_GUIDE.items())
     return (
         "You are a professional paper analyst. Summarise a research paper from its title "

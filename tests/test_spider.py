@@ -1,8 +1,7 @@
 from pathlib import Path
 
-from scrapy.http import HtmlResponse, Request
-
 from daily_arxiv.spiders.arxiv import ArxivSpider
+from scrapy.http import HtmlResponse, Request
 
 FIXTURE = Path(__file__).parent / "fixtures" / "arxiv_new_cs_CV.html"
 URL = "https://arxiv.org/list/cs.CV/new?show=2000"

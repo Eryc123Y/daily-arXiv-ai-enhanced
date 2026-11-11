@@ -81,8 +81,8 @@ def backfill_rows(radar_text):
     """The radar rows Sunday's look-back added, with their level without the "（回溯…）" note."""
     rows = []
     for found, paper_id, title, level in _rows(radar_text):
-        if "回溯" in level:
-            rows.append(Row(found, paper_id, title, LEVEL.match(level).group(1)))
+        if "回溯" in level and (match := LEVEL.match(level)):
+            rows.append(Row(found, paper_id, title, match.group(1)))
     return rows
 
 

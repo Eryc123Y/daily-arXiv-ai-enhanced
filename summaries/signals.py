@@ -9,7 +9,7 @@ upvoted papers of the previous batch. No model and no key are involved.
 """
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 
 import requests
 
@@ -67,7 +67,7 @@ def dump_signals(found):
 
 
 def cmd_hf_signals(args):
-    today = date.fromisoformat(args.today) if args.today else datetime.now(timezone.utc).date()
+    today = date.fromisoformat(args.today) if args.today else datetime.now(UTC).date()
     lists = [(today - timedelta(days=n)).isoformat() for n in range(args.days)]
     upvotes = hf_upvotes(lists, fetch_hf_list)
     branch = datafiles.make_branch(args)

@@ -2,12 +2,12 @@ import json
 import subprocess
 
 import pytest
-from conftest import git, seed_data_branch
 
+from conftest import git
 from summaries import github
 from summaries.cli import main
-from summaries.github import parse_repo_slug, repo_slug
 from summaries.databranch import BOT_IDENTITY, Identity, resolve_identity
+from summaries.github import parse_repo_slug, repo_slug
 from summaries.records import dump_jsonl
 
 DAY = "2026-10-30"

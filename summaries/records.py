@@ -6,6 +6,7 @@ summary live only in the raw `<date>.jsonl`; the site merges the two files.
 """
 
 import json
+from collections.abc import Collection
 
 AI_FIELDS = ("tldr", "motivation", "method", "result", "conclusion")
 
@@ -56,7 +57,7 @@ def unsummarised(raw, ai_records):
     return [p for p in dedupe_by_id(raw) if p["id"] not in done]
 
 
-def pending_papers(raw, ai_records, abstracts=frozenset()):
+def pending_papers(raw, ai_records, abstracts: Collection[str] = frozenset()):
     """Raw papers that do not yet have a complete summary and can get one, in raw order.
 
     An arXiv record carries its abstract. A feed record can be summarised only
@@ -66,7 +67,7 @@ def pending_papers(raw, ai_records, abstracts=frozenset()):
     return [p for p in unsummarised(raw, ai_records) if is_arxiv(p) or p["id"] in abstracts]
 
 
-def without_abstract(raw, ai_records, abstracts=frozenset()):
+def without_abstract(raw, ai_records, abstracts: Collection[str] = frozenset()):
     """Feed records with no summary and no local abstract: listed, never summarised."""
     return [p for p in unsummarised(raw, ai_records) if not is_arxiv(p) and p["id"] not in abstracts]
 

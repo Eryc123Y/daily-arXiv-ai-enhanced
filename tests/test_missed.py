@@ -1,7 +1,6 @@
 import json
 
 from conftest import seed_data_branch
-
 from summaries import missed
 from summaries.cli import main
 from summaries.records import dump_jsonl

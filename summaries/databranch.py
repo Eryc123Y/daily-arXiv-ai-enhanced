@@ -56,7 +56,7 @@ def resolve_identity(repo_dir, env):
         return BOT_IDENTITY
 
     def config(key):
-        result = subprocess.run(["git", "config", key], cwd=str(repo_dir), capture_output=True, text=True)
+        result = subprocess.run(["git", "config", key], cwd=str(repo_dir), capture_output=True, text=True, check=False)
         return result.stdout.strip() if result.returncode == 0 else ""
 
     name, email = config("user.name"), config("user.email")

@@ -4,7 +4,8 @@ import json
 import os
 import re
 import shlex
-from datetime import datetime, timedelta, timezone
+from collections.abc import Collection
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from summaries.databranch import DataBranch
@@ -85,7 +86,7 @@ def venue_day_counts(branch, files=None):
     """
     files = files or {}
     paths = sorted({p for p in branch.list_files("data/") if RAW_FILE.match(p)} | {p for p in files if RAW_FILE.match(p)})
-    counts = ((RAW_FILE.match(p).group(1), count_venue_papers(files[p] if p in files else branch.read(p))) for p in paths)
+    counts = ((m.group(1), count_venue_papers(files[p] if p in files else branch.read(p))) for p in paths if (m := RAW_FILE.match(p)))
     return {day: n for day, n in counts if n}
 
 
@@ -112,7 +113,7 @@ def with_venue_days(current, files):
     The days being written are recounted on top of the counts on `current`; without readable counts
     there, every day is counted. ensure-day recounts every day once per run (publish_venue_days).
     """
-    written = {RAW_FILE.match(p).group(1): count_venue_papers(text) for p, text in files.items() if RAW_FILE.match(p)}
+    written = {m.group(1): count_venue_papers(text) for p, text in files.items() if (m := RAW_FILE.match(p))}
     if not written:
         return files
     known = published_venue_days(current)
@@ -141,7 +142,7 @@ def read_records(branch, path):
     return parse_jsonl(branch.read(path) or "")
 
 
-def counts(raw, ai_records, abstracts=frozenset()):
+def counts(raw, ai_records, abstracts: Collection[str] = frozenset()):
     """total, done, pending; plus no_abstract (feed papers that cannot be summarised here) when there are any.
 
     `abstracts` holds the ids of feed papers whose abstract is in this machine's work folder.
@@ -155,12 +156,12 @@ def counts(raw, ai_records, abstracts=frozenset()):
 
 def recent_days(branch, days):
     """Dates with a raw file in the last `days` days, newest first."""
-    cutoff = (datetime.now(timezone.utc).date() - timedelta(days=days)).isoformat()
+    cutoff = (datetime.now(UTC).date() - timedelta(days=days)).isoformat()
     found = (m.group(1) for p in branch.list_files("data/") if (m := RAW_FILE.match(p)))
     return sorted((d for d in found if d >= cutoff), reverse=True)
 
 
-def publish_summaries(branch, day, language, new, source, abstracts=frozenset()):
+def publish_summaries(branch, day, language, new, source, abstracts: Collection[str] = frozenset()):
     stats = {}
 
     def build(current):
@@ -178,7 +179,7 @@ def publish_summaries(branch, day, language, new, source, abstracts=frozenset())
     return stats
 
 
-def record_run(branch, day, language, path, reason=None, abstracts=frozenset()):
+def record_run(branch, day, language, path, reason=None, abstracts: Collection[str] = frozenset()):
     """Append which summary path ran for `day` to logs/summary-runs.jsonl."""
     entry = {}
 
@@ -188,7 +189,7 @@ def record_run(branch, day, language, path, reason=None, abstracts=frozenset()):
         entry.update(
             date=day,
             path=path,
-            at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            at=datetime.now(UTC).isoformat(timespec="seconds"),
             **stats,
             **({"reason": reason} if reason else {}),
         )

@@ -2,8 +2,8 @@ import json
 import re
 
 import pytest
-from conftest import git, seed_data_branch
 
+from conftest import git, seed_data_branch
 from summaries import digest, weekly
 from summaries.cli import main
 from summaries.records import dump_jsonl
@@ -76,17 +76,15 @@ def test_candidates_group_keyword_and_radar_hits_and_skip_known_papers():
 
 
 def test_picks_keep_only_valid_lines_and_respect_the_caps():
-    text = "\n".join(
-        [
-            "topic | 2D-to-3D and stereo | 1 | 立体视频方法",
-            "topic | 2D-to-3D and stereo | 99 | 不在今天的列表里",
-            "topic | Unknown topic | 1 | 未知主题",
-            "radar | 中 | 2 | 复用与监督方式都比较了 | check",
-            "radar | high | 3 | 英文等级也接受",
-            "other | 3 | 其他高信号",
-            "note | 今天立体论文少",
-            "random chatter",
-        ]
+    text = (
+        "topic | 2D-to-3D and stereo | 1 | 立体视频方法\n"
+        "topic | 2D-to-3D and stereo | 99 | 不在今天的列表里\n"
+        "topic | Unknown topic | 1 | 未知主题\n"
+        "radar | 中 | 2 | 复用与监督方式都比较了 | check\n"
+        "radar | high | 3 | 英文等级也接受\n"
+        "other | 3 | 其他高信号\n"
+        "note | 今天立体论文少\n"
+        "random chatter"
     )
     picks, problems = digest.parse_picks(text, {"1", "2", "3"}, [t["name"] for t in TOPICS])
     assert picks["topics"] == {"2D-to-3D and stereo": [("1", "立体视频方法")]}
@@ -270,7 +268,7 @@ def test_a_failed_full_text_download_keeps_the_abstract_grade(tmp_path, remote_a
     def no_text(paper_id, work):
         return None
 
-    code, out, prompts = run_digest(clone, vault, monkeypatch, capsys, [writer], fulltext=no_text)
+    code, _out, prompts = run_digest(clone, vault, monkeypatch, capsys, [writer], fulltext=no_text)
 
     assert code == 0 and len(prompts) == 1
     assert "（中，仅摘要）" in (vault / "digests" / f"{DAY}.md").read_text()
@@ -498,14 +496,14 @@ def test_the_report_names_claude_when_it_answers(tmp_path, remote_and_clone, mon
 @pytest.mark.parametrize("extra", [["--command", '["mycli", "{model}"]'], ["--fallback", ""]])
 def test_no_fallback_with_an_explicit_client_or_an_empty_fallback(tmp_path, remote_and_clone, monkeypatch, capsys, extra):
     calls = []
-    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "mycli")), *extra)
+    _code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "mycli")), *extra)
 
     assert out["status"] == "error" and "codex" not in calls and len(calls) == 1
 
 
 def test_the_error_names_both_clients_when_both_fail(tmp_path, remote_and_clone, monkeypatch, capsys):
     calls = []
-    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "codex")))
+    _code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, clients_model(calls, failing=("claude", "codex")))
 
     assert out["status"] == "error" and calls == ["claude", "codex"]
     assert "claude exited" in out["reason"] and "codex exited" in out["reason"]
@@ -524,7 +522,7 @@ def test_an_unusable_fallback_answer_keeps_the_claude_error(tmp_path, remote_and
             raise RuntimeError("claude exited with 1: OAuth session expired")
         return "Sorry, I cannot produce the report."
 
-    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
+    _code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
 
     assert out["status"] == "error" and "OAuth session expired" in out["reason"] and "codex" in out["reason"]
 

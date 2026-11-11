@@ -5,8 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import git, seed_data_branch
 
+from conftest import git, seed_data_branch
 from summaries.cli import main
 from summaries.local_runner import chunk_prompt, client_argv
 from summaries.records import dump_jsonl, parse_jsonl
@@ -65,7 +65,7 @@ def fake_client(calls, fail=()):
         prompt = next(a for a in argv if "Input file:" in a)
         source = re.search(r"Input file: (\S+?)\.(?:\s|$)", prompt).group(1)
         target = re.search(r"Output file: (\S+?)\.(?:\s|$)", prompt).group(1)
-        ids = re.findall(r"^=== (\S+)$", Path(source).read_text(), flags=re.M)
+        ids = re.findall(r"^=== (\S+)$", Path(source).read_text(), flags=re.MULTILINE)
         if any(i in fail for i in ids):
             return SimpleNamespace(returncode=1, stdout="", stderr="model overloaded")
         Path(target).write_text("".join(f"=== {i}\n{FIELDS}\n" for i in ids))

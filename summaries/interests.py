@@ -12,7 +12,7 @@ from pathlib import Path
 
 PRESETS = Path(__file__).resolve().parent.parent / "js" / "interest-presets.js"
 SEPARATOR = r"[\s\-‐-—_/]+"
-TOPIC = re.compile(r"name:\s*'([^']+)',\s*keywords:\s*\[(.*?)\]", re.S)
+TOPIC = re.compile(r"name:\s*'([^']+)',\s*keywords:\s*\[(.*?)\]", re.DOTALL)
 QUOTED = re.compile(r"'([^']+)'")
 
 
@@ -33,7 +33,7 @@ def _keyword_regex(terms):
     patterns = [p for p in map(_term_pattern, sorted(terms, key=len, reverse=True)) if p]
     if not patterns:
         return None
-    return re.compile(rf"(^|[^A-Za-z0-9])({'|'.join(patterns)})(?![A-Za-z0-9])", re.I)
+    return re.compile(rf"(^|[^A-Za-z0-9])({'|'.join(patterns)})(?![A-Za-z0-9])", re.IGNORECASE)
 
 
 def keyword_matches(text, keyword):

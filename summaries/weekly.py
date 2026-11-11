@@ -103,7 +103,7 @@ def read_log(args):
         branch = datafiles.make_branch(args)
         branch.fetch()
         return parse_jsonl(branch.read(datafiles.RUN_LOG) or "")
-    except Exception as error:  # the review page is still useful without its health table
+    except Exception as error:  # noqa: BLE001 - the review page is still useful without its health table
         print(f"health table skipped: {error}")
         return []
 
