@@ -511,23 +511,32 @@ input:checked + .toggle-slider:before {
     padding: 10px;
 }
 
-/* Scrollbar styling for the papers list */
-.papers-list::-webkit-scrollbar {
-    width: 8px;
+/* Scrollbar styling for the papers list: the standard properties, with the WebKit ones only where those are missing. */
+.papers-list {
+    --scrollbar-thumb: #888;
+    --scrollbar-track: #f1f1f1;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
 }
 
-.papers-list::-webkit-scrollbar-track {
-    background: #f1f1f1;
-    border-radius: 4px;
-}
+@supports not (scrollbar-color: auto) {
+    .papers-list::-webkit-scrollbar {
+        width: 8px;
+    }
 
-.papers-list::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-}
+    .papers-list::-webkit-scrollbar-track {
+        background: var(--scrollbar-track);
+        border-radius: 4px;
+    }
 
-.papers-list::-webkit-scrollbar-thumb:hover {
-    background: #555;
+    .papers-list::-webkit-scrollbar-thumb {
+        background: var(--scrollbar-thumb);
+        border-radius: 4px;
+    }
+
+    .papers-list::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
 }
 
 .analysis-container {
