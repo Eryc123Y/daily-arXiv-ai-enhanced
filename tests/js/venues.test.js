@@ -147,8 +147,8 @@ test('the three rows on a mixed day', () => {
     ['all', 'All', 9], ['arxiv', 'arXiv preprints', 3], ['conference', 'Top conferences', 1], ['journal', 'Top journals', 4],
   ]);
   assert.deepEqual(triples(groups.areas), [
-    ['all', 'All', 9], ['ML and vision', 'ML and vision', 4], ['Graphics and VR', 'Graphics and VR', 1], ['Vision science', 'Vision science', 0],
-  ]);
+    ['all', 'All', 9], ['ML and vision', 'ML and vision', 4], ['Graphics and VR', 'Graphics and VR', 1],
+  ]); // Vision science has no paper that day, so it is not offered
   assert.deepEqual(triples(groups.venues), [
     ['all', 'All', 9],
     ['venue:IEEE TCSVT', 'IEEE TCSVT', 2],
@@ -253,4 +253,17 @@ test('other venues read as a refinement and survive a day switch only while the 
   assert.equal(Filters.isRefined({ ...base, type: 'other' }), true);
   assert.equal(Filters.keepValid({ ...base, type: 'other' }, RECORDS, TIERED).type, 'other');
   assert.equal(Filters.keepValid({ ...base, type: 'other' }, RECORDS, VENUES).type, 'all');
+});
+
+test('a choice that would show nothing is left out of its row, unless it is the one chosen', () => {
+  const noConference = RECORDS.filter(r => r.id !== ICLR);
+  assert.deepEqual(rows(base, VENUES, noConference).types.map(o => o.key), ['all', 'arxiv', 'journal']);
+  assert.deepEqual(rows({ ...base, type: 'conference' }, VENUES, noConference).types.map(o => o.key), ['all', 'arxiv', 'conference', 'journal']);
+  assert.deepEqual(rows({ ...base, area: 'Vision science' }).areas.map(o => o.key), ['all', 'ML and vision', 'Graphics and VR', 'Vision science']);
+  for (const filters of [base, { ...base, topic: 'Stereo' }, { ...base, codeOnly: true }, { ...base, type: 'journal' }]) {
+    const groups = rows(filters);
+    for (const row of [groups.types, groups.areas, groups.venues]) {
+      assert.deepEqual(row.filter(o => o.key !== 'all' && o.count === 0), [], JSON.stringify(filters));
+    }
+  }
 });
