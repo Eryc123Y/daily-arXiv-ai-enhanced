@@ -66,3 +66,55 @@ def test_parse_blocks_strips_markdown_decoration_from_labels():
         "result": "d",
         "conclusion": "e",
     }
+
+
+# Haiku wrote a whole chunk like this on 2026-11-11 (.cache/summaries/2026-11-11/merged/1794443731-chunk-000.out.txt):
+# every block's five fields on one line. All 40 summaries were dropped.
+INLINE = """=== 2601.04256
+tldr: Uses descriptive set theory to determine the complexity of the family of monitorable sets in a countable topological space. motivation: Monitorability has been studied topologically, but the complexity of the family of monitorable sets had not been characterized. method: Analyzes monitorable sets in a countable space X, separately for second countable and non-second-countable X. result: For second countable X the family of monitorable sets is Π^0_3, and the exact complexities it can have are determined; for non-second-countable X it can be Π^1_1-complete. conclusion: The topology of the space, in particular second countability, decisively governs how complex the family of monitorable sets can be.
+=== doi:10.46298/lmcs-22(4:15)2026
+tldr: Gives a grounded inductive definition of α-equivalence for the untyped λ-calculus and shows that it conforms to the standard specification. motivation: α-equivalence is usually not defined inductively, which makes it hard to teach the untyped λ-calculus to undergraduates. method: Provides an inductive definition of α-equivalence and checks it against the specification in the literature. result: The definition conforms to the literature's specification, and the whole work is formalized in the Rocq Prover. conclusion: α-equivalence can be defined inductively, giving a simpler formal basis that is machine-checked in Rocq.
+=== 2411.03006
+tldr: Links the representational power of neural networks with piecewise linear activations to the extension complexity of polytopes, giving lower bounds on network size. motivation: Lower bounds on the size of ReLU and maxout networks are scarce, and tools from polyhedral geometry have not been applied to them. method: Shows that extension complexity lower-bounds any monotone or input-convex network that solves a linear optimization problem over a polytope, and introduces virtual extension complexity, which covers general networks as a difference of two linear programs. result: Yields exponential lower bounds for such networks on several problems, including maximum weight matching; proves that virtual extension complexity lower-bounds general networks, but derives no useful bounds on it; shows that a polytope can be optimized efficiently given a virtual extended formulation of small encoding size. conclusion: Virtual extension complexity deserves study in its own right, while useful lower bounds for general neural networks remain open.
+"""
+
+
+def test_parse_blocks_splits_fields_written_on_one_line():
+    summaries, problems = parse_blocks(INLINE)
+    assert problems == []
+    assert list(summaries) == ["2601.04256", "doi:10.46298/lmcs-22(4:15)2026", "2411.03006"]
+    first = summaries["2601.04256"]
+    assert first["tldr"].startswith("Uses descriptive set theory") and first["tldr"].endswith("topological space.")
+    assert first["motivation"] == "Monitorability has been studied topologically, but the complexity of the family of monitorable sets had not been characterized."
+    assert first["method"] == "Analyzes monitorable sets in a countable space X, separately for second countable and non-second-countable X."
+    assert first["result"].startswith("For second countable X") and first["result"].endswith("Π^1_1-complete.")
+    assert first["conclusion"].startswith("The topology of the space")
+
+
+def test_parse_blocks_splits_inline_fields_with_decorated_labels_and_fullwidth_colons():
+    text = "=== 2610.00005\n**TLDR**：一 Motivation: 二 method: 三 **result**: 四 conclusion：五\n"
+    summaries, problems = parse_blocks(text)
+    assert problems == []
+    assert summaries["2610.00005"] == {"tldr": "一", "motivation": "二", "method": "三", "result": "四", "conclusion": "五"}
+
+
+def test_parse_blocks_still_rejects_an_inline_block_missing_a_field():
+    text = "=== 2610.00006\ntldr: a motivation: b method: c conclusion: e\n"
+    summaries, problems = parse_blocks(text)
+    assert summaries == {}
+    assert problems == ["2610.00006: incomplete block"]
+
+
+def test_parse_blocks_still_rejects_an_inline_block_with_an_empty_field():
+    text = "=== 2610.00007\ntldr: a motivation: method: c result: d conclusion: e\n"
+    summaries, problems = parse_blocks(text)
+    assert summaries == {}
+    assert problems == ["2610.00007: incomplete block"]
+
+
+def test_a_label_word_inside_a_well_formed_field_stays_text():
+    """A block already complete line by line is not re-split, so 'result:' in a sentence is kept as written."""
+    text = "=== 2610.00008\ntldr: a\nmotivation: b\nmethod: compare, then report the result: c\nresult: d\nconclusion: e\n"
+    summaries, _ = parse_blocks(text)
+    assert summaries["2610.00008"]["method"] == "compare, then report the result: c"
+    assert summaries["2610.00008"]["result"] == "d"
