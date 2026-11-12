@@ -29,7 +29,7 @@ RUN_LOG = "logs/summary-runs.jsonl"
 RAW_FILE = re.compile(r"^data/(\d{4}-\d{2}-\d{2})\.jsonl$")
 
 
-def raw_path(day):
+def raw_path(day: str) -> str:
     return f"data/{day}.jsonl"
 
 

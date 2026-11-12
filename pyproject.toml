@@ -39,6 +39,7 @@ strict = [
     "summaries/mode.py",
     "summaries/github.py",
     "summaries/abstracts.py",
+    "summaries/abstract_retry.py",
 ]
 
 [tool.ruff]

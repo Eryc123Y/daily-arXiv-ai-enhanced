@@ -356,6 +356,7 @@ def pipeline(tmp_path, remote_and_clone, monkeypatch):
 
     monkeypatch.setattr(github, "gh", lambda *args: pytest.fail(f"GitHub was called: {args}"))
     monkeypatch.delenv("FEED_COMMAND", raising=False)  # a machine with the feed set up must not run it here
+    monkeypatch.delenv("ABSTRACTS_COMMAND", raising=False)
     monkeypatch.setattr(cli, "utc_today", lambda: state.today)
     monkeypatch.setattr(localcrawl, "crawl", crawl)
     monkeypatch.setattr(localcrawl, "recent", recent)
@@ -377,8 +378,8 @@ def test_ensure_day_does_nothing_when_the_day_is_published(tmp_path, pipeline, c
 
     code, out = pipeline.run(capsys=capsys)
 
-    # "feed": ensure-day says the feed was skipped when FEED_COMMAND is unset (spec S1, R5).
-    assert code == 0 and json.loads(out) == {"date": "2026-11-09", "status": "present", "total": 1, "feed": "skipped"}
+    # "feed": ensure-day says the feed was skipped when FEED_COMMAND is unset (spec S1, R5); likewise ABSTRACTS_COMMAND.
+    assert code == 0 and json.loads(out) == {"date": "2026-11-09", "status": "present", "total": 1, "feed": "skipped", "abstracts": {"status": "off"}}
     assert pipeline.crawls == [] and pipeline.wanted == []
 
 
