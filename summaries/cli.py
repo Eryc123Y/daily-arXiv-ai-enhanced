@@ -17,6 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from summaries import (
+    abstract_retry,
     abstracts,
     digest,
     feed,
@@ -288,7 +289,7 @@ def ensure_arxiv(args, branch, day, today):
 def cmd_ensure_day(args):
     """Make sure a weekday's papers are published: crawl today's on this machine, backfill missed days,
     then publish the feed's papers under today (any day of the week; skipped without FEED_COMMAND),
-    and keep the public venue list current."""
+    fill missing feed abstracts (off without ABSTRACTS_COMMAND), and keep the public venue list current."""
     today = utc_today()
     day = args.date or today
     branch = make_branch(args)
@@ -296,6 +297,7 @@ def cmd_ensure_day(args):
     code, report = ensure_arxiv(args, branch, day, today)
     if day == today:
         report["feed"] = feed.run(branch, day, args.repo, args.work_dir, os.environ)
+        report["abstracts"] = abstract_retry.run(branch, day, args.repo, args.work_dir, os.environ)
     report.update(publish_venues(branch))
     emit(**report)
     return code

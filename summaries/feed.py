@@ -36,9 +36,11 @@ untouched: LitScout reads the same file.
 import json
 import re
 import subprocess
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from summaries import abstracts, dedupe
 from summaries.datafiles import (
@@ -307,7 +309,7 @@ def request_since(branch, day):
     return min(cursor_since(branch, day), days_before(day, RECHECK_DAYS))
 
 
-def raw_days(branch, day, days=HISTORY_DAYS):
+def raw_days(branch: Any, day: str, days: int = HISTORY_DAYS) -> dict[str, list[Any]]:
     """{day: records} for the raw files of the `days` days up to and including `day`."""
     start = days_before(day, days)
     found = {}
@@ -332,7 +334,7 @@ def lacking_abstracts(by_day, day):
     }
 
 
-def with_abstracts_flagged(records, gained):
+def with_abstracts_flagged(records: Iterable[Any], gained: Collection[str]) -> list[Any]:
     """`records` with `has_abstract: true` on those whose id gained an abstract (the text stays local)."""
     return [{**r, "has_abstract": True} if isinstance(r, dict) and r.get("id") in gained else r for r in records]
 

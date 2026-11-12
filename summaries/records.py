@@ -6,7 +6,8 @@ summary live only in the raw `<date>.jsonl`; the site merges the two files.
 """
 
 import json
-from collections.abc import Collection
+from collections.abc import Collection, Iterable, Mapping
+from typing import Any
 
 AI_FIELDS = ("tldr", "motivation", "method", "result", "conclusion")
 
@@ -24,7 +25,7 @@ def clean_ai(value):
     return cleaned
 
 
-def is_arxiv(record):
+def is_arxiv(record: Mapping[str, Any]) -> bool:
     """A record without `source` is an arXiv record (every record written before the feed)."""
     return (record.get("source") or "arxiv") == "arxiv"
 
@@ -37,7 +38,7 @@ def parse_jsonl(text):
     return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def dump_jsonl(records):
+def dump_jsonl(records: Iterable[Any]) -> str:
     return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
 
 
