@@ -201,3 +201,11 @@ def test_a_retry_keeps_the_blocks_the_first_attempt_got_right(tmp_path, remote_a
 
     assert report["failures"] == []
     assert [r["id"] for r in parse_jsonl(git(remote, "show", f"data:{AI_FILE}"))] == ["1", "2"]
+
+
+def test_chunk_prompt_lets_a_client_without_file_tools_use_the_shell_for_the_two_files():
+    """Codex 0.166 reads and writes files only through shell commands; told not to run any, it gave up (2026-11-13)."""
+    prompt = chunk_prompt("/r/INSTRUCTIONS.md", "/r/chunk-000.in.txt", "/r/chunk-000.out.txt")
+    assert "do not run shell commands" not in prompt
+    assert "shell commands only to read those two files and to write the output file" in prompt
+    assert "do not edit anything else" in prompt
