@@ -39,6 +39,8 @@ def test_the_shipped_presets_load_with_their_keywords():
     assert "RLVR" in keywords["Weak supervision and data reuse"]
     assert {"Lean", "autoformalization", "Chomsky hierarchy"} <= set(keywords["Formal languages and reasoning"])
     assert {"RLHF", "Markov decision process", "credit assignment"} <= set(keywords["Reinforcement learning and agents"])
+    # Too broad on its own (Eric, 2026-11-13): about 32 matches a day; the narrower keywords stay.
+    assert "reinforcement learning" not in keywords["Reinforcement learning and agents"]
     assert {"BabyLM", "poverty of the stimulus", "iterated learning"} <= set(keywords["Language, cognition and learnability"])
     assert {"rate-distortion", "minimum description length", "PAC learning"} <= set(keywords["Learning theory and information"])
 
