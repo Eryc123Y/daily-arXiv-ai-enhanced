@@ -58,3 +58,12 @@ test('the crawl entry is not mistaken for a summary run', () => {
 test('broken log lines are skipped', () => {
   assert.equal(Status.parseLog('{not json\n' + LOG).length, 4);
 });
+
+test('the summaries part says when the count is, or includes, journal and conference papers', () => {
+  const log = Status.parseLog(JSON.stringify({ date: '2026-11-12', path: 'local-claude', at: '2026-11-12T02:40:53+00:00', total: 30, done: 30, pending: 0 }));
+  const text = papers => Status.statusParts({ log, day: '2026-11-12', newest: false, time, papers }).map(p => p.text);
+  assert.deepEqual(text({ arxiv: 0, venue: 30 }), ['Summaries 30/30 (journal and conference papers; no arXiv papers this day), local Claude, 02:40']);
+  assert.deepEqual(text({ arxiv: 500, venue: 30 }), ['Summaries 30/30 (incl. journals and conferences), local Claude, 02:40']);
+  assert.deepEqual(text({ arxiv: 500, venue: 0 }), ['Summaries 30/30, local Claude, 02:40']);
+  assert.deepEqual(text(undefined), ['Summaries 30/30, local Claude, 02:40']);
+});

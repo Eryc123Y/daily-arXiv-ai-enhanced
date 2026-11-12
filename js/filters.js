@@ -208,7 +208,8 @@ function (Render, Sources, PaperData) {
    * conferences and top journals when the venue list has them, and other
    * venues when it has venues not marked top), Area (empty when the list names no areas), and Venue (each venue
    * of the chosen type and area by how many papers it has that day, ties by
-   * name; empty when there is none). null when every paper is from arXiv, so
+   * name; empty when there is none). A choice whose count is 0 is left out of
+   * its row unless it is the one chosen. null when every paper is from arXiv, so
    * an arXiv-only day shows no section.
    * @param {PageRecord[]} records
    * @param {FilterCounts} counts
@@ -227,10 +228,13 @@ function (Render, Sources, PaperData) {
      * @returns {FilterOption}
      */
     const option = (map, key, label) => ({ key, label, count: map.get(key) || 0 });
-    const types = TYPES.filter(([key]) => key === 'all' || (key === Sources.ARXIV ? hasArxiv : offered.has(key)))
-      .map(([key, label]) => option(counts.types, key, label));
+    // A choice that would show nothing is left out, unless it is the one chosen (so it can be undone).
+    /** @param {FilterOption[]} options @param {string} active */
+    const useful = (options, active) => options.filter(o => o.key === 'all' || o.count > 0 || o.key === active);
+    const types = useful(TYPES.filter(([key]) => key === 'all' || (key === Sources.ARXIV ? hasArxiv : offered.has(key)))
+      .map(([key, label]) => option(counts.types, key, label)), filters.type);
     const names = venueAreas(venues);
-    const areas = names.length ? [option(counts.areas, 'all', 'All'), ...names.map(a => option(counts.areas, a, a))] : [];
+    const areas = names.length ? useful([option(counts.areas, 'all', 'All'), ...names.map(a => option(counts.areas, a, a))], filters.area) : [];
     const shown = records.filter(r => !PaperData.isArxiv(r)
       && (isAll(filters.type) || Sources.typeKey(r, venues) === filters.type)
       && (isAll(filters.area) || Sources.sourceArea(r, venues) === filters.area));
@@ -239,7 +243,7 @@ function (Render, Sources, PaperData) {
     const total = (/** @type {string} */ key) => totals.get(key) || 0;
     const label = (/** @type {string} */ key) => labels.get(key) || '';
     const keys = [...totals.keys()].sort((a, b) => total(b) - total(a) || label(a).localeCompare(label(b)));
-    const venueRow = keys.length ? [option(counts.sources, 'all', 'All'), ...keys.map(key => option(counts.sources, key, label(key)))] : [];
+    const venueRow = keys.length ? useful([option(counts.sources, 'all', 'All'), ...keys.map(key => option(counts.sources, key, label(key)))], filters.source) : [];
     return { types, areas, venues: venueRow };
   }
 

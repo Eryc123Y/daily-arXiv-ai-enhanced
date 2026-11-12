@@ -874,6 +874,13 @@ textarea {
   padding: 0;
 }
 
+/* A day has 500 to 900 rows. Rows past the first screen skip layout and paint until they
+   scroll near it; the size is an estimate the browser replaces once a row has been drawn. */
+.rows > li:nth-child(n + 12) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto none auto 8rem;
+}
+
 .topic-list button {
   width: 100%;
   min-height: 40px;

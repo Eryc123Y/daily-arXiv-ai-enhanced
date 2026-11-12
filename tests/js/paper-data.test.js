@@ -93,7 +93,7 @@ test('preset topics hold exactly the flat keyword list', () => {
     'Learning theory and information',
   ]);
   // information-theoretic came back on 2026-11-12 inside its own topic (about two papers a day, half on topic).
-  for (const noisy of ['disparity', 'off-policy', 'sample efficiency', 'PPO', 'data quality', 'exploration', 'multi-agent', 'compression']) {
+  for (const noisy of ['reinforcement learning', 'disparity', 'off-policy', 'sample efficiency', 'PPO', 'data quality', 'exploration', 'multi-agent', 'compression']) {
     assert.ok(!INTEREST_PRESETS.keywords.includes(noisy), `${noisy} matches mostly unrelated papers`);
   }
 });
@@ -130,4 +130,10 @@ test('keyword cases shared with summaries/interests.py', () => {
   for (const { keyword, text, matches } of cases) {
     assert.equal(PaperData.keywordMatches(text, keyword), matches, `${keyword} | ${text}`);
   }
+});
+
+test('a browser that saved the 2026-11-12 defaults gets the current ones', () => {
+  const { keywordsFor } = require('../../js/interest-presets.js');
+  const saved = [...INTEREST_PRESETS.keywords, 'reinforcement learning'];
+  assert.deepEqual(keywordsFor(saved), { keywords: INTEREST_PRESETS.keywords, clearSaved: true });
 });

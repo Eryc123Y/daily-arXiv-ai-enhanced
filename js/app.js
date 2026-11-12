@@ -361,7 +361,9 @@ function renderStatus(days) {
     box.hidden = true;
     return;
   }
-  const parts = Status.statusParts({ ...state.status, day: days[0], newest: days[0] === state.days[0], time: clockTime });
+  const venue = state.dayRecords.filter(r => !PaperData.isArxiv(r)).length;
+  const papers = { arxiv: state.dayRecords.length - venue, venue };
+  const parts = Status.statusParts({ ...state.status, day: days[0], newest: days[0] === state.days[0], time: clockTime, papers });
   box.hidden = !parts.length;
   box.innerHTML = parts
     .map(part => {

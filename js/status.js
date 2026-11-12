@@ -79,6 +79,21 @@
   /** @typedef {(at: string) => string} TimeFormat */
 
   /**
+   * How many of the day's papers are from arXiv and from journals and conferences.
+   * @typedef {{ arxiv: number, venue: number }} DayPapers
+   */
+
+  /**
+   * The run log counts a day's papers together, so the line says when journal
+   * and conference papers are among them: the arXiv list beside it does not show those.
+   * @param {DayPapers} [papers]
+   */
+  function venueNote(papers) {
+    if (!papers || !papers.venue) return '';
+    return papers.arxiv ? ' (incl. journals and conferences)' : ' (journal and conference papers; no arXiv papers this day)';
+  }
+
+  /**
    * @param {RunLogEntry | null} entry
    * @param {TimeFormat} time
    * @returns {StatusPart | null}
@@ -90,9 +105,10 @@
   /**
    * @param {RunLogEntry | null} entry
    * @param {TimeFormat} time
+   * @param {DayPapers} [papers]
    * @returns {StatusPart | null}
    */
-  function summaryPart(entry, time) {
+  function summaryPart(entry, time, papers) {
     if (!entry) return null;
     if (entry.path.startsWith('paused')) {
       const reason = entry.reason ? `: ${entry.reason.length > REASON_CHARS ? `${entry.reason.slice(0, REASON_CHARS - 1)}…` : entry.reason}` : '';
@@ -100,7 +116,7 @@
     }
     const who = PATHS[entry.path] || entry.path;
     const tone = entry.pending ? 'busy' : 'ok';
-    return { text: `Summaries ${entry.done}/${entry.total}, ${who}, ${time(entry.at)}`, tone };
+    return { text: `Summaries ${entry.done}/${entry.total}${venueNote(papers)}, ${who}, ${time(entry.at)}`, tone };
   }
 
   /**
@@ -116,12 +132,12 @@
 
   /**
    * [{text, tone: ok|busy|warn|error, href?}] for the day; the crawl only for the newest day.
-   * @param {{ log: RunLogEntry[], day: string, newest: boolean, time: TimeFormat }} options
+   * @param {{ log: RunLogEntry[], day: string, newest: boolean, time: TimeFormat, papers?: DayPapers }} options
    * @returns {StatusPart[]}
    */
-  function statusParts({ log, day, newest, time }) {
+  function statusParts({ log, day, newest, time, papers }) {
     const runs = dayRuns(log, day);
-    return [newest ? crawlPart(runs.crawl, time) : null, summaryPart(runs.summaries, time), reportPart(runs, newest, time)]
+    return [newest ? crawlPart(runs.crawl, time) : null, summaryPart(runs.summaries, time, papers), reportPart(runs, newest, time)]
       .filter(/** @returns {part is StatusPart} */ part => Boolean(part));
   }
 
