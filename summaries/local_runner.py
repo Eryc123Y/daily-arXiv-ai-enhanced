@@ -4,7 +4,10 @@
 Code scheduled task does, without Claude-specific tools: for each recent
 day with pending papers it writes the chunk files, gives each chunk to the
 client's headless command (a few at a time), merges and pushes the results,
-logs the day's path as `local-<client>` and releases the lock. The prompt
+logs the day's path as `local-<client>` and releases the lock. A chunk whose
+output holds fewer complete blocks than it had papers is run once more (the
+first output is kept beside it, so the merge takes the blocks of both) and,
+still short, counts as failed. The prompt
 goes to the client as one argument, never through a shell. Only Claude
 exposes plan usage, so other clients get a per-run budget (--max-chunks).
 """
@@ -16,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from summaries import abstracts, datafiles, localtask
+from summaries.blocks import block_ids, parse_blocks
 
 CHUNK_TIMEOUT = 900
 run_command = subprocess.run
@@ -45,8 +49,8 @@ def client_argv(client, prompt, model=None, command=None):
     raise ValueError(f"unknown client '{client}' (use claude, codex, antigravity or custom)")
 
 
-def run_chunk(chunk, plan, args):
-    """Run one chunk; return a problem description, or None when the output file was written."""
+def call_client(chunk, plan, args):
+    """Run the client on one chunk; return a problem description, or None when the output file was written."""
     name = Path(chunk["input"]).name
     argv = client_argv(args.client, chunk_prompt(plan["instructions"], chunk["input"], chunk["output"]), args.model, args.command)
     try:
@@ -59,6 +63,39 @@ def run_chunk(chunk, plan, args):
     if not Path(chunk["output"]).exists():
         return f"{name}: {argv[0]} finished without writing the output file"
     return None
+
+
+def first_attempt_path(chunk):
+    """Where a short first output is kept during the retry: still `*.out.txt`, so the merge reads it."""
+    return Path(chunk["output"].removesuffix(".out.txt") + ".try1.out.txt")
+
+
+def complete_blocks(chunk):
+    """How many of the chunk's papers have a complete block in its output files."""
+    wanted = set(block_ids(Path(chunk["input"]).read_text(encoding="utf-8")))
+    found = set()
+    for out in (Path(chunk["output"]), first_attempt_path(chunk)):
+        if out.exists():
+            found |= set(parse_blocks(out.read_text(encoding="utf-8"))[0])
+    return len(wanted & found), len(wanted)
+
+
+def run_chunk(chunk, plan, args):
+    """Run one chunk, once more if its output is short; return a problem description, or None."""
+    problem = call_client(chunk, plan, args)
+    if problem:
+        return problem
+    found, papers = complete_blocks(chunk)
+    if found >= papers:
+        return None
+    Path(chunk["output"]).rename(first_attempt_path(chunk))
+    problem = call_client(chunk, plan, args)
+    found, papers = complete_blocks(chunk)
+    if found >= papers:
+        return None
+    name = Path(chunk["input"]).name
+    short = f"{name}: {found} of {papers} papers have a complete summary block after a retry"
+    return f"{short}; {problem.removeprefix(f'{name}: ')}" if problem else short
 
 
 def summarise_day(day_args, args, budget):

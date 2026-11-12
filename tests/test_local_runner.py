@@ -134,3 +134,70 @@ def test_run_local_respects_another_runs_lock(tmp_path, remote_and_clone, monkey
 
     assert code == 3 and report["locked"] is True and calls == []
     assert lock.exists()
+
+
+def scripted_client(calls, outputs):
+    """A coding agent whose n-th call writes outputs[n](ids) to the output file (the last one repeats)."""
+
+    def run(argv, cwd, capture_output, text, timeout, stdin):
+        calls.append(argv)
+        prompt = next(a for a in argv if "Input file:" in a)
+        source = re.search(r"Input file: (\S+?)\.(?:\s|$)", prompt).group(1)
+        target = re.search(r"Output file: (\S+?)\.(?:\s|$)", prompt).group(1)
+        ids = re.findall(r"^=== (\S+)$", Path(source).read_text(), flags=re.MULTILINE)
+        Path(target).write_text(outputs[min(len(calls), len(outputs)) - 1](ids))
+        return SimpleNamespace(returncode=0, stdout="done", stderr="")
+
+    return run
+
+
+def complete(ids):
+    return "".join(f"=== {i}\n{FIELDS}\n" for i in ids)
+
+
+def first_lacks_a_field(ids):
+    """Every block complete except the first one's, which has no conclusion."""
+    return complete(ids).replace("conclusion: c\n", "", 1)
+
+
+def test_a_chunk_with_fewer_complete_blocks_than_papers_is_retried_once(tmp_path, remote_and_clone, monkeypatch, capsys):
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
+    calls = []
+
+    code, report = run_local(clone, monkeypatch, capsys, scripted_client(calls, [first_lacks_a_field, complete]), "--client", "claude")
+
+    assert code == 0 and len(calls) == 2
+    assert report["failures"] == []
+    assert (report["dates"][0]["done"], report["dates"][0]["pending"]) == (2, 0)
+    log = parse_jsonl(git(remote, "show", "data:logs/summary-runs.jsonl"))[-1]
+    assert log["reason"] == "1 chunks, 0 failed"
+
+
+def test_a_chunk_still_short_after_its_retry_counts_as_failed_with_the_counts(tmp_path, remote_and_clone, monkeypatch, capsys):
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2"), paper("3")])})
+    calls = []
+
+    code, report = run_local(clone, monkeypatch, capsys, scripted_client(calls, [first_lacks_a_field]), "--client", "claude")
+
+    assert code == 0 and len(calls) == 2
+    [failure] = report["failures"]
+    assert failure.startswith("chunk-000.in.txt:") and "2 of 3 papers" in failure
+    assert (report["dates"][0]["done"], report["dates"][0]["pending"]) == (2, 1)
+    log = parse_jsonl(git(remote, "show", "data:logs/summary-runs.jsonl"))[-1]
+    assert log["reason"] == "1 chunks, 1 failed"
+
+
+def test_a_retry_keeps_the_blocks_the_first_attempt_got_right(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """The first attempt lacks paper 1's conclusion, the retry paper 2's: together they cover both."""
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
+
+    def second_lacks_a_field(ids):
+        return complete(ids[:1]) + first_lacks_a_field(ids[1:])
+
+    _, report = run_local(clone, monkeypatch, capsys, scripted_client([], [first_lacks_a_field, second_lacks_a_field]), "--client", "claude")
+
+    assert report["failures"] == []
+    assert [r["id"] for r in parse_jsonl(git(remote, "show", f"data:{AI_FILE}"))] == ["1", "2"]

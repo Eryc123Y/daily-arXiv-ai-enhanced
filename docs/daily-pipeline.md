@@ -67,6 +67,8 @@ The new path, measured on real chunks of 2026-11-02:
 | Report writer (Sonnet, one call, no prompt cache) | 94,600 input and 1,600 output tokens, $0.21 for 450 papers; with TL;DRs in the "other papers" list cut to 160 characters the prompt went from 230k to 179k characters (about $0.16) |
 | Orchestrator | 7-9 tool calls instead of 51 |
 
+Haiku does not always keep the block format. On 2026-11-11 it wrote one 40-paper chunk with each block's five fields on a single line (`tldr: ... motivation: ... method: ...`); the parser dropped all 40 and `run-local` still logged `2 chunks, 0 failed`. Since then the parser splits such a line on the field labels when the line-by-line reading leaves a block incomplete (a block that really lacks a field is still rejected), and `run-local` checks each chunk's output: fewer complete blocks than papers runs the chunk once more, keeping the first output beside it (`chunk-NNN.try1.out.txt`) so the merge takes the blocks of both, and a chunk still short counts as failed with the counts (`chunk-000.in.txt: 38 of 40 papers have a complete summary block after a retry`) in the JSON's `failures` and the run log's reason.
+
 ### Haiku reading PDFs instead of abstracts
 
 | Input per paper | Tokens |
