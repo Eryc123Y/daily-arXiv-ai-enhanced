@@ -28,7 +28,8 @@ run_command = subprocess.run
 def chunk_prompt(instructions, input_path, output_path):
     return (
         f"Read {instructions} and follow it exactly. Input file: {input_path}. Output file: {output_path}. "
-        "Only read those two files and write the output file; do not run shell commands or edit anything else."
+        "Only read the instructions and the input file and write the output file; do not edit anything else. "
+        "If you have no file tools, use shell commands only to read those two files and to write the output file."
     )
 
 
