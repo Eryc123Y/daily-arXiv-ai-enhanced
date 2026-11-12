@@ -40,3 +40,4 @@
 {"date": "2026-11-11", "path": "local-claude", "at": "2026-11-12T13:42:54+00:00", "total": 838, "done": 822, "pending": 0, "no_abstract": 16, "reason": "1 chunks, 0 failed"}
 {"date": "2026-11-12", "path": "local-custom", "at": "2026-11-12T17:27:36+00:00", "total": 418, "done": 35, "pending": 382, "no_abstract": 1, "reason": "1 chunks, 1 failed"}
 {"date": "2026-11-12", "path": "local-codex", "at": "2026-11-12T17:28:29+00:00", "total": 418, "done": 35, "pending": 382, "no_abstract": 1, "reason": "1 chunks, 1 failed"}
+{"date": "2026-11-12", "path": "local-custom", "at": "2026-11-12T17:32:41+00:00", "total": 418, "done": 75, "pending": 342, "no_abstract": 1, "reason": "1 chunks, 0 failed"}
