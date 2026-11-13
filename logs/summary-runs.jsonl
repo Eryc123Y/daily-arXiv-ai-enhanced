@@ -46,3 +46,4 @@
 {"date": "2026-11-12", "path": "paused-no-key", "at": "2026-11-13T02:40:24+00:00", "total": 418, "done": 417, "pending": 1, "reason": "5h 2%, weekly 97%; the ANTHROPIC_API_KEY secret is not set"}
 {"date": "2026-11-13", "path": "local-claude", "at": "2026-11-13T04:41:10+00:00", "total": 18, "done": 4, "pending": 0, "no_abstract": 14, "reason": "1 chunks, 0 failed"}
 {"date": "2026-11-12", "path": "local-claude", "at": "2026-11-13T04:41:29+00:00", "total": 418, "done": 418, "pending": 0, "reason": "1 chunks, 0 failed"}
+{"date": "2026-11-13", "path": "crawl", "at": "2026-11-13T08:34:00+00:00", "total": 778, "added": 760}
