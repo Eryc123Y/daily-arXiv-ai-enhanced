@@ -37,7 +37,11 @@ def test_client_antigravity_sends_the_prompt_as_the_value_of_p_and_falls_back_to
     primary, fallback = digest.clients(parse("--client", "antigravity"))
     assert primary[:3] == ["agy", "-p", digest.PROMPT_ARG]
     assert {"--sandbox", "--disable-slash-commands"} <= set(primary)
-    assert json.loads(primary[primary.index("--settings") + 1]) == {"agentMode": ""}  # Default mode: nothing is auto-approved
+    settings = json.loads(primary[primary.index("--settings") + 1])
+    # Default mode and strict review, plus deny rules for every tool kind: the writer needs no tools at all.
+    assert settings["agentMode"] == "" and settings["toolPermission"] == "strict"
+    assert {"command(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)", "read_file(/)", "write_file(/)"} <= set(settings["permissions"]["deny"])
+    assert "--dangerously-skip-permissions" not in primary
     assert "--model" not in primary  # the Claude default "sonnet" is not an agy model
     assert fallback == digest.FALLBACK_COMMAND
     assert digest.clients(parse("--client", "antigravity", "--model", "g"))[0][-2:] == ["--model", "g"]
@@ -84,6 +88,15 @@ def test_without_the_placeholder_the_prompt_goes_on_stdin(monkeypatch):
 
     argv, kwargs = run.calls[0]
     assert argv == ["codex", "exec", "-"] and kwargs["input"] == "the prompt" and kwargs["stdin"] is None
+
+
+def test_a_prompt_with_a_nul_byte_fails_without_running_instead_of_crashing(monkeypatch):
+    run = Recorder()
+    monkeypatch.setattr(digest.subprocess, "run", run)
+
+    with pytest.raises(RuntimeError, match="NUL"):
+        digest.run_model(["agy", "-p", digest.PROMPT_ARG], "before\x00after", "/repo")
+    assert run.calls == []
 
 
 def test_a_prompt_too_long_for_the_command_line_fails_without_running(monkeypatch):

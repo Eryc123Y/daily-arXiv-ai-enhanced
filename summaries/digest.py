@@ -66,9 +66,23 @@ PROMPT_ARG = "{prompt}"
 MAX_PROMPT_ARG_BYTES = 900_000
 DEFAULT_MODELS = {"claude": "sonnet"}
 CLIENTS = ("claude", "codex", "antigravity")
-# agy -p takes the prompt as its value (no plain-text stdin). Default mode (agentMode "") approves nothing,
-# so a headless run refuses any tool call instead of waiting; the writer needs no tools.
-ANTIGRAVITY_COMMAND = ["agy", "-p", PROMPT_ARG, "--settings", '{"agentMode": ""}', "--sandbox", "--disable-slash-commands", "--print-timeout", f"{MODEL_TIMEOUT - 60}s"]
+# Session-only agy settings for the writer, which needs no tools: Default mode, strict review and deny rules for
+# every tool kind. agy merges these with the shared and project grants in ~/.gemini/config, and a headless run
+# refuses (soft-denies) a call that would need approval. A broad shared grant such as write_file(/) approves a call
+# whatever the mode, so only the deny rules can hold it back (agy documents explicit deny rules as applying even when
+# everything else is approved; see docs/daily-pipeline.md, not yet exercised by a live run).
+ANTIGRAVITY_WRITER_SETTINGS = {
+    "agentMode": "",
+    "toolPermission": "strict",
+    "enableTerminalSandbox": True,
+    "allowNonWorkspaceAccess": False,
+    "permissions": {"deny": ["command(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)", "read_file(/)", "write_file(/)"]},
+}
+# agy -p takes the prompt as the flag's value (its stdin is for --input-format stream-json).
+ANTIGRAVITY_COMMAND = [
+    "agy", "-p", PROMPT_ARG, "--settings", json.dumps(ANTIGRAVITY_WRITER_SETTINGS), "--sandbox", "--disable-slash-commands",
+    "--print-timeout", f"{MODEL_TIMEOUT - 60}s",
+]  # fmt: skip
 USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
 REPORT_TITLE = "LitScout 日报"  # the site's name (PR 38); "arXiv" stays only where it names the source
 JOURNAL_SECTION = "来自期刊"
@@ -412,12 +426,16 @@ def clients(args):
     return [primary, args.fallback]
 
 
-def ask(argvs, prompt, cwd):
-    """Try each client in turn: (the argv that answered, its answer, the errors of those that failed)."""
+def ask(argvs, prompt, cwd, usable=lambda argv, answer: answer):
+    """Try each client in turn: (the argv that answered, usable(argv, answer), the errors of those that failed).
+
+    `usable` turns an answer into the result or raises RuntimeError, so an answer that exits 0 but cannot be used
+    (empty, a refusal) moves on to the next client like a failed call does.
+    """
     errors = []
     for argv in argvs:
         try:
-            return argv, run_model(argv, prompt, cwd), errors
+            return argv, usable(argv, run_model(argv, prompt, cwd)), errors
         except RuntimeError as error:
             errors = [*errors, str(error)]
     raise RuntimeError("; ".join(errors))
@@ -427,6 +445,8 @@ def prompt_io(argv, prompt):
     """(argv, stdin text): PROMPT_ARG parts become the prompt and stdin gets nothing (None); otherwise the prompt is stdin."""
     if PROMPT_ARG not in argv:
         return argv, prompt
+    if "\x00" in prompt:  # subprocess would raise ValueError: no argument can hold a NUL byte
+        raise RuntimeError(f"{argv[0]}: the prompt holds a NUL byte, which a command-line argument cannot carry")
     size = len(prompt.encode("utf-8"))
     if size > MAX_PROMPT_ARG_BYTES:
         raise RuntimeError(f"{argv[0]}: the prompt ({size} bytes) is too long for a command-line argument")
@@ -738,13 +758,20 @@ def choose(args, day, found, topics, brief, feedback, work):
     """
     prompt = writer_prompt(day, found, topics, feedback, brief)
     (work / "writer.prompt.txt").write_text(prompt, encoding="utf-8")
-    argv, answer, failed = ask(clients(args), prompt, args.repo)
-    (work / "writer.out.txt").write_text(answer, encoding="utf-8")
     journal_ids = {pid for pid in found.listed if venue_of(found.records[pid])}
-    picks, parse_problems = parse_picks(answer, found.listed, [t["name"] for t in topics], journal_ids)
+
+    def usable(argv, answer):
+        """The answer's picks and dropped lines; an answer with no usable line fails over to the next client."""
+        picks, dropped = parse_picks(answer, found.listed, [t["name"] for t in topics], journal_ids)
+        if not (picks["topics"] or picks["radar"] or picks["other"] or picks["note"]):
+            kept = work / f"writer.out.{Path(argv[0]).name}.txt"
+            kept.write_text(answer, encoding="utf-8")
+            raise RuntimeError(f"no usable lines in the answer from {argv[0]} (see {kept})")
+        (work / "writer.out.txt").write_text(answer, encoding="utf-8")
+        return picks, dropped
+
+    argv, (picks, parse_problems), failed = ask(clients(args), prompt, args.repo, usable)
     problems = [*(f"{error}; {argv[0]} wrote the report instead" for error in failed), *parse_problems]
-    if not (picks["topics"] or picks["radar"] or picks["other"] or picks["note"]):
-        raise RuntimeError("; ".join([*failed, f"no usable lines in the answer from {argv[0]} (see {work / 'writer.out.txt'})"]))
     picks = deepen(picks, found, brief, argv, args.repo, work, problems)
     titles = {pid: found.records[pid].get("title", "") for pid in picked_ids(picks)}
     saved = {"day": day, "total": found.total, **picks, "titles": titles}

@@ -33,15 +33,20 @@ def test_codex_runs_exec_in_a_workspace_write_sandbox():
     assert client_argv("codex", PROMPT, model="m") == ["codex", "exec", "--sandbox", "workspace-write", "-m", "m", PROMPT]
 
 
-def test_antigravity_runs_its_cli_headless_with_file_edits_only():
-    """accept-edits approves the output file; commands are not approved, so headless agy refuses them instead of waiting.
+def test_antigravity_runs_its_cli_headless_with_commands_mcp_and_urls_denied():
+    """accept-edits for the output file; session deny rules for commands, MCP tools and URLs.
 
-    The prompt is the value of -p (agy reads no plain-text prompt from stdin), and agy stops itself before the
-    runner's own timeout would kill it.
+    The deny rules matter because agy also applies the shared grants in ~/.gemini/config (which may allow far more);
+    writes are not denied, since the output file lives under the repository's .cache. The prompt is the value of -p,
+    and agy stops itself before the runner's own timeout would kill it.
     """
     argv = client_argv("antigravity", PROMPT)
     assert argv[:3] == ["agy", "-p", PROMPT]
     assert argv[argv.index("--mode") + 1] == "accept-edits"
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert {"command(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)"} <= set(settings["permissions"]["deny"])
+    assert not any(rule.startswith("write_file(") for rule in settings["permissions"]["deny"])
+    assert settings["agentMode"] == "accept-edits" and settings["toolPermission"] == "request-review"
     assert {"--sandbox", "--disable-slash-commands"} <= set(argv)
     assert "--dangerously-skip-permissions" not in argv  # the chunks hold untrusted abstracts
     timeout = argv[argv.index("--print-timeout") + 1]
@@ -225,8 +230,8 @@ def test_chunk_prompt_lets_a_client_without_file_tools_use_the_shell_for_the_two
     assert "do not edit anything else" in prompt
 
 
-def test_antigravity_works_in_the_day_folder_so_its_approved_edits_cannot_reach_the_repository(tmp_path, remote_and_clone, monkeypatch, capsys):
-    """accept-edits approves edits inside agy's workspace (its working folder); outside it a headless run refuses."""
+def test_antigravity_works_in_the_day_folder_with_absolute_paths(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """agy's workspace is the day's folder, not the repository (a narrower default, not a sandbox: shared grants apply)."""
     remote, clone = remote_and_clone
     seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
     calls, cwds = [], []
