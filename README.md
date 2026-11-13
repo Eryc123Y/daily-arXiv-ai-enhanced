@@ -103,7 +103,7 @@ uv run python -m summaries run-local --client codex
 |---|---|
 | `claude` | `claude -p <prompt> --model haiku --allowedTools Read,Write` |
 | `codex` | `codex exec --sandbox workspace-write <prompt>` |
-| `antigravity` | `agy -p <prompt>` (files inside the workspace are allowed by default) |
+| `antigravity` | `agy -p <prompt> --sandbox --disable-slash-commands --mode accept-edits --print-timeout 840s` (run in the day's chunk folder: file edits there are approved; a headless run refuses commands and edits elsewhere instead of waiting) |
 | `custom` | your own argv, e.g. `--command '["mycli","-p","{prompt}","--model","{model}"]'` |
 
 Useful flags: `--model`, `--parallel 2` (calls at once), `--max-chunks N` (a per-run budget, since only Claude exposes plan usage), `--days 4`. Progress is merged and pushed every few chunks and the day is logged as `local-<client>`, so a run that stops resumes on the next one. Schedule it with cron or launchd, for example `30 10,16,21 * * * cd ~/daily-arXiv-ai-enhanced && uv run python -m summaries run-local --client codex --max-chunks 40 >> .cache/run-local.log 2>&1`. Agents working in this repository get the same instructions from [`AGENTS.md`](AGENTS.md) (Codex, Antigravity) and [`CLAUDE.md`](CLAUDE.md).

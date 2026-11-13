@@ -8,7 +8,8 @@ logs the day's path as `local-<client>` and releases the lock. A chunk whose
 output holds fewer complete blocks than it had papers is run once more (the
 first output is kept beside it, so the merge takes the blocks of both) and,
 still short, counts as failed. The prompt
-goes to the client as one argument, never through a shell. Only Claude
+goes to the client as one argument, never through a shell (Antigravity's
+`agy -p` takes it as the flag's value and reads no prompt from stdin). Only Claude
 exposes plan usage, so other clients get a per-run budget (--max-chunks).
 """
 
@@ -22,6 +23,8 @@ from summaries import abstracts, datafiles, localtask
 from summaries.blocks import block_ids, parse_blocks
 
 CHUNK_TIMEOUT = 900
+# agy flags for an unattended call: terminal sandbox on, no slash-command or skill expansion of the prompt.
+ANTIGRAVITY_HEADLESS = ["--sandbox", "--disable-slash-commands"]
 run_command = subprocess.run
 
 
@@ -41,7 +44,10 @@ def client_argv(client, prompt, model=None, command=None):
     if client == "codex":
         return ["codex", "exec", "--sandbox", "workspace-write", *(["-m", model] if model else []), prompt]
     if client == "antigravity":
-        return ["agy", "-p", prompt, *(["--model", model] if model else [])]
+        # -p takes the prompt as its value. accept-edits approves writing the output file; anything else that needs
+        # approval (commands) is refused by a headless run rather than waited on. No --dangerously-skip-permissions:
+        # the chunks hold untrusted abstracts. agy stops itself (exit 3) before CHUNK_TIMEOUT would kill it.
+        return ["agy", "-p", prompt, *ANTIGRAVITY_HEADLESS, "--mode", "accept-edits", "--print-timeout", f"{CHUNK_TIMEOUT - 60}s", *(["--model", model] if model else [])]
     if client == "custom":
         if not command:
             raise ValueError("--client custom needs --command, a JSON list with {prompt} (and optionally {model})")
@@ -50,14 +56,28 @@ def client_argv(client, prompt, model=None, command=None):
     raise ValueError(f"unknown client '{client}' (use claude, codex, antigravity or custom)")
 
 
+def chunk_call(chunk, plan, args):
+    """(argv, working folder) for one chunk.
+
+    Antigravity works in the day's folder, which holds the instructions and the chunk files: accept-edits approves
+    edits inside its workspace only, so an abstract that talks it into editing code cannot reach the repository.
+    """
+    if args.client == "antigravity":
+        instructions, source, target = (str(Path(p).resolve()) for p in (plan["instructions"], chunk["input"], chunk["output"]))
+        return client_argv(args.client, chunk_prompt(instructions, source, target), args.model, args.command), str(Path(target).parent)
+    return client_argv(args.client, chunk_prompt(plan["instructions"], chunk["input"], chunk["output"]), args.model, args.command), args.repo
+
+
 def call_client(chunk, plan, args):
     """Run the client on one chunk; return a problem description, or None when the output file was written."""
     name = Path(chunk["input"]).name
-    argv = client_argv(args.client, chunk_prompt(plan["instructions"], chunk["input"], chunk["output"]), args.model, args.command)
+    argv, cwd = chunk_call(chunk, plan, args)
     try:
-        result = run_command(argv, cwd=args.repo, capture_output=True, text=True, timeout=CHUNK_TIMEOUT, stdin=subprocess.DEVNULL)
+        result = run_command(argv, cwd=cwd, capture_output=True, text=True, timeout=CHUNK_TIMEOUT, stdin=subprocess.DEVNULL)
     except subprocess.TimeoutExpired:
         return f"{name}: no answer within {CHUNK_TIMEOUT // 60} minutes"
+    except OSError as error:  # not installed or not on the scheduled task's PATH
+        return f"{name}: cannot run {argv[0]}: {error}"
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "").strip().splitlines()[-1:] or [""]
         return f"{name}: {argv[0]} exited with {result.returncode}: {detail[0][:200]}"

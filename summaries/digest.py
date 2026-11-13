@@ -60,6 +60,15 @@ MODEL_TIMEOUT = 900
 DEFAULT_COMMAND = ["claude", "-p", "--model", "{model}", "--tools", "", "--strict-mcp-config"]
 # Tried when the default client fails, for example when the claude sign-in has expired.
 FALLBACK_COMMAND = ["codex", "exec", "-s", "read-only", "--skip-git-repo-check", "-c", 'model_reasoning_effort="medium"', "-"]
+# A command part replaced by the prompt itself; a command without it gets the prompt on stdin.
+PROMPT_ARG = "{prompt}"
+# Under macOS's ARG_MAX (1 MiB for arguments and environment together); a longer prompt fails over to the fallback.
+MAX_PROMPT_ARG_BYTES = 900_000
+DEFAULT_MODELS = {"claude": "sonnet"}
+CLIENTS = ("claude", "codex", "antigravity")
+# agy -p takes the prompt as its value (no plain-text stdin). Default mode (agentMode "") approves nothing,
+# so a headless run refuses any tool call instead of waiting; the writer needs no tools.
+ANTIGRAVITY_COMMAND = ["agy", "-p", PROMPT_ARG, "--settings", '{"agentMode": ""}', "--sandbox", "--disable-slash-commands", "--print-timeout", f"{MODEL_TIMEOUT - 60}s"]
 USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
 REPORT_TITLE = "LitScout 日报"  # the site's name (PR 38); "arXiv" stays only where it names the source
 JOURNAL_SECTION = "来自期刊"
@@ -365,9 +374,21 @@ def fetch_fulltext(paper_id, work):
 # --- Model calls ---------------------------------------------------------------
 
 
+def client_command(client, model):
+    """The writer's command line for a named client; `model` None takes the client's own default."""
+    model = model or DEFAULT_MODELS.get(client)
+    if client == "claude":
+        return model_argv(None, model)
+    if client == "codex":
+        return [*FALLBACK_COMMAND[:-1], *(["-m", model] if model else []), FALLBACK_COMMAND[-1]]
+    if client == "antigravity":
+        return [*ANTIGRAVITY_COMMAND, *(["--model", model] if model else [])]
+    raise ValueError(f"unknown client '{client}' (use {', '.join(CLIENTS)})")
+
+
 def model_argv(command, model):
     template = json.loads(command) if command else DEFAULT_COMMAND
-    return [part.replace("{model}", model) for part in template]
+    return [part.replace("{model}", model or DEFAULT_MODELS["claude"]) for part in template]
 
 
 def fallback_argv(value):
@@ -384,9 +405,9 @@ def fallback_argv(value):
 
 
 def clients(args):
-    """The writer client, then the fallback; an explicit --command or an empty --fallback has none."""
-    primary = model_argv(args.command, args.model)
-    if args.command or not args.fallback:
+    """The writer client, then the fallback; an explicit --command, an empty --fallback or a fallback the same as the client has none."""
+    primary = model_argv(args.command, args.model) if args.command else client_command(args.client, args.model)
+    if args.command or not args.fallback or args.fallback == primary:
         return [primary]
     return [primary, args.fallback]
 
@@ -402,12 +423,24 @@ def ask(argvs, prompt, cwd):
     raise RuntimeError("; ".join(errors))
 
 
+def prompt_io(argv, prompt):
+    """(argv, stdin text): PROMPT_ARG parts become the prompt and stdin gets nothing (None); otherwise the prompt is stdin."""
+    if PROMPT_ARG not in argv:
+        return argv, prompt
+    size = len(prompt.encode("utf-8"))
+    if size > MAX_PROMPT_ARG_BYTES:
+        raise RuntimeError(f"{argv[0]}: the prompt ({size} bytes) is too long for a command-line argument")
+    return [prompt if part == PROMPT_ARG else part for part in argv], None
+
+
 def run_model(argv, prompt, cwd):
-    """One headless call with the prompt on stdin; caching is off because nothing is reused."""
+    """One headless call with the prompt on stdin or as an argument; caching is off because nothing is reused."""
+    command, stdin_text = prompt_io(argv, prompt)
     try:
         result = subprocess.run(
-            argv,
-            input=prompt,
+            command,
+            input=stdin_text,
+            stdin=subprocess.DEVNULL if stdin_text is None else None,
             cwd=cwd,
             capture_output=True,
             text=True,
@@ -787,8 +820,10 @@ def add_parser(sub):
     digest.add_argument("--final", action="store_true", help="last run of the day: note a day without a new batch")
     digest.add_argument("--wait-summaries", action="store_true", help="wait while under 95%% of the day is summarised, unless --final")
     digest.add_argument("--force", action="store_true", help="rewrite today's report and report a day again")
-    digest.add_argument("--model", default="sonnet")
-    digest.add_argument("--command", help='headless client, JSON list with {model}; the prompt comes on stdin')
+    digest.add_argument("--model", help="model for the client (claude defaults to sonnet; codex and antigravity to their own default)")
+    chooser = digest.add_mutually_exclusive_group()
+    chooser.add_argument("--client", choices=CLIENTS, default="claude", help="headless client that writes the report (default claude)")
+    chooser.add_argument("--command", help="headless client, JSON list with {model}; the prompt comes on stdin, or in place of a {prompt} part")
     digest.add_argument("--fallback", type=fallback_argv, default=FALLBACK_COMMAND, help="client tried when the default one fails (JSON list, no fallback with --command); '' for none")
     digest.add_argument("--site", help="reading page URL; default from the repository")
     digest.add_argument("--cache", help=f"work files (prompts, answers, picks); default {DEFAULT_CACHE}, or <dir>/work with --dry-run")
