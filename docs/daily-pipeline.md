@@ -97,9 +97,20 @@ On 2026-11-02, in two reruns, the new report's radar named the same two papers a
 
 When the report's `claude -p` call fails (on 2026-11-05 and 11-06 its sign-in had expired: "OAuth session expired and could not be refreshed", and both days had no report until it was rerun by hand), `digest` asks Codex instead (`codex exec -s read-only`, `--fallback` to change or `''` to turn off; never with an explicit `--command`). The full-text check then goes to the client that answered. The output's `client` names the writer, `problems` carries the claude error, and the task adds a line asking Eric to sign in again. The summaries already had a fallback: Haiku subagents when every headless chunk fails.
 
+`digest --client claude|codex|antigravity` picks the writer (default `claude` with Sonnet; `--model` otherwise defaults to the client's own). `agy -p` takes the prompt as the flag's value, while its stdin is read only with `--input-format stream-json`, so for `antigravity` the prompt goes on the command line (a `{prompt}` part in `--command` does the same). A prompt the command line cannot carry, over 900 kB (near macOS's 1 MiB argument limit) or holding a NUL byte, fails over to the Codex fallback without starting agy. Any writer answer with no usable line (empty, a refusal, a sign-in message) also fails over, even when the client exited with 0; the first client's reason stays in `problems` and its answer in `writer.out.<client>.txt`.
+
 At 80% of the 5-hour or weekly window the task stops using the subscription and runs `summaries handover`, which summarises the rest of the day through the API on the Mac when a provider key is in the task's environment and otherwise pauses until a later run (`paused-no-key` in `logs/summary-runs.jsonl`, as on 2026-11-02). With Haiku 5.5 an API fallback costs about $0.15 for a 450-paper day. Until 2026-11-08 this dispatched `summarize-api.yml` in Actions with the key as a repository secret; that workflow is deleted, and the Mac has no key, so the fallback pauses.
 
 `SUMMARY_PROVIDER` defaults to `anthropic` and `SUMMARY_MODEL` to `claude-haiku-5-5`.
+
+### Antigravity permissions
+
+agy merges three sources of permission rules in every session, headless or not: the shared grants in `~/.gemini/config/config.json` (`userSettings.globalPermissionGrants`, the same for the desktop app), the project's grants, and the CLI's `settings.json` (`~/.gemini/antigravity-cli/settings.json`; `--settings` overlays it for one session without saving). Shared grants approved once in the desktop app can be broad (a `write_file(/)` or `mcp(*)` grant, for example), and a grant approves a call whatever the mode. So neither `--mode` nor `agentMode` alone keeps a run from using a tool: a headless run soft-denies only the calls that would still need approval. What `--settings` can add is deny rules, which agy applies on top of the allows (its changelog: explicit deny rules still apply even under `--dangerously-skip-permissions`). Checked with the local `agy -p /permissions` and `/config` answers (no model call) on 2026-11-13; not yet exercised by a live run:
+
+- `digest`: `agentMode ""` (Default), `toolPermission strict`, terminal sandbox on, and deny `command(*)`, `mcp(*)`, `read_url(*)`, `execute_url(*)`, `read_file(/)`, `write_file(/)`. The writer needs no tools.
+- `run-local`: `--mode accept-edits` (also as `agentMode`, since the default mode is now Auto), `toolPermission request-review`, terminal sandbox on, and deny `command(*)`, `mcp(*)`, `read_url(*)`, `execute_url(*)`; agy works in the day's chunk folder. Writes are not denied, because the output file is under the repository's `.cache/` and a deny covering the repository would block it; a chunk's writes elsewhere are bounded only by the shared and project grants.
+
+Before the scheduled task switches to agy, scope the shared and project grants (a dedicated project for the sidecar, without `write_file(/)`), so that writes are limited too.
 
 ## Open items
 

@@ -8,7 +8,7 @@ import pytest
 
 from conftest import git, seed_data_branch
 from summaries.cli import main
-from summaries.local_runner import chunk_prompt, client_argv
+from summaries.local_runner import CHUNK_TIMEOUT, chunk_prompt, client_argv
 from summaries.records import dump_jsonl, parse_jsonl
 
 DAY = "2026-10-30"
@@ -33,9 +33,26 @@ def test_codex_runs_exec_in_a_workspace_write_sandbox():
     assert client_argv("codex", PROMPT, model="m") == ["codex", "exec", "--sandbox", "workspace-write", "-m", "m", PROMPT]
 
 
-def test_antigravity_runs_its_cli_headless():
-    assert client_argv("antigravity", PROMPT) == ["agy", "-p", PROMPT]
-    assert client_argv("antigravity", PROMPT, model="m") == ["agy", "-p", PROMPT, "--model", "m"]
+def test_antigravity_runs_its_cli_headless_with_commands_mcp_and_urls_denied():
+    """accept-edits for the output file; session deny rules for commands, MCP tools and URLs.
+
+    The deny rules matter because agy also applies the shared grants in ~/.gemini/config (which may allow far more);
+    writes are not denied, since the output file lives under the repository's .cache. The prompt is the value of -p,
+    and agy stops itself before the runner's own timeout would kill it.
+    """
+    argv = client_argv("antigravity", PROMPT)
+    assert argv[:3] == ["agy", "-p", PROMPT]
+    assert argv[argv.index("--mode") + 1] == "accept-edits"
+    settings = json.loads(argv[argv.index("--settings") + 1])
+    assert {"command(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)"} <= set(settings["permissions"]["deny"])
+    assert not any(rule.startswith("write_file(") for rule in settings["permissions"]["deny"])
+    assert settings["agentMode"] == "accept-edits" and settings["toolPermission"] == "request-review"
+    assert {"--sandbox", "--disable-slash-commands"} <= set(argv)
+    assert "--dangerously-skip-permissions" not in argv  # the chunks hold untrusted abstracts
+    timeout = argv[argv.index("--print-timeout") + 1]
+    assert timeout.endswith("s") and int(timeout[:-1]) < CHUNK_TIMEOUT
+    assert "--model" not in argv
+    assert client_argv("antigravity", PROMPT, model="m")[-2:] == ["--model", "m"]
 
 
 def test_custom_commands_fill_the_prompt_and_model_placeholders():
@@ -56,12 +73,14 @@ def test_chunk_prompt_names_the_instruction_input_and_output_files():
 FIELDS = "tldr: t\nmotivation: m\nmethod: x\nresult: r\nconclusion: c\n"
 
 
-def fake_client(calls, fail=()):
+def fake_client(calls, fail=(), cwds=None):
     """Acts like a coding agent: reads the chunk named in the prompt and writes blocks."""
 
     def run(argv, cwd, capture_output, text, timeout, stdin):
         assert stdin is subprocess.DEVNULL
         calls.append(argv)
+        if cwds is not None:
+            cwds.append(cwd)
         prompt = next(a for a in argv if "Input file:" in a)
         source = re.search(r"Input file: (\S+?)\.(?:\s|$)", prompt).group(1)
         target = re.search(r"Output file: (\S+?)\.(?:\s|$)", prompt).group(1)
@@ -209,3 +228,42 @@ def test_chunk_prompt_lets_a_client_without_file_tools_use_the_shell_for_the_two
     assert "do not run shell commands" not in prompt
     assert "shell commands only to read those two files and to write the output file" in prompt
     assert "do not edit anything else" in prompt
+
+
+def test_antigravity_works_in_the_day_folder_with_absolute_paths(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """agy's workspace is the day's folder, not the repository (a narrower default, not a sandbox: shared grants apply)."""
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1"), paper("2")])})
+    calls, cwds = [], []
+
+    code, report = run_local(clone, monkeypatch, capsys, fake_client(calls, cwds=cwds), "--client", "antigravity")
+
+    day_folder = (clone / ".cache" / "summaries" / DAY).resolve()
+    assert code == 0 and report["failures"] == [] and cwds == [str(day_folder)]
+    prompt = calls[0][2]
+    for name in ("INSTRUCTIONS.md", "chunk-000.in.txt", "chunk-000.out.txt"):
+        assert str(day_folder / name) in prompt
+
+
+def test_other_clients_still_work_in_the_repository(tmp_path, remote_and_clone, monkeypatch, capsys):
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+    cwds = []
+
+    run_local(clone, monkeypatch, capsys, fake_client([], cwds=cwds), "--client", "codex")
+
+    assert cwds == [str(clone)]
+
+
+def test_a_client_that_cannot_start_is_a_chunk_failure_not_a_crash(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """agy missing from the scheduled task's PATH: the run still prints its JSON, so the task can fall back."""
+    remote, clone = remote_and_clone
+    seed_data_branch(tmp_path, remote, {f"data/{DAY}.jsonl": dump_jsonl([paper("1")])})
+
+    def missing(argv, **_kwargs):
+        raise FileNotFoundError(2, "No such file or directory", argv[0])
+
+    code, report = run_local(clone, monkeypatch, capsys, missing, "--client", "antigravity")
+
+    assert code == 0 and len(report["failures"]) == 1
+    assert "cannot run agy" in report["failures"][0]
