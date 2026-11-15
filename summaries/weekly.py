@@ -16,7 +16,21 @@ from summaries import datafiles, digest, missed
 from summaries.records import parse_jsonl
 
 ANNOUNCED_BY, ON_TIME_BY = time(10, 0), time(11, 30)  # the "report on time" measure in docs/ROADMAP.md
-PATH_NAMES = {"claude-code": "local Claude", "local-claude": "local Claude", "api": "API", "api-fallback": "API fallback"}
+PATH_NAMES = {
+    "claude-code": "local Claude",
+    "local-claude": "local Claude",
+    "local-codex": "local Codex",
+    "local-antigravity": "local Antigravity",
+    "local-custom": "local custom client",
+    "antigravity": "Antigravity subagents",  # the scheduled task's fallback: `record --path antigravity`
+    "api": "API",
+    "api-fallback": "API fallback",
+}
+
+
+def path_name(path):
+    """How the health lines name a run-log path; an unknown one is shown as logged."""
+    return PATH_NAMES.get(path, path)
 
 
 def load_week(cache, today):
@@ -86,7 +100,7 @@ def health_lines(log, days, tz=None, misses=None):
         def when(entry, day=day):
             return _clock(entry["at"], day, tz) if entry else "—"
 
-        finished = f"{when(done)}（{PATH_NAMES.get(done['path'], done['path'])}）" if done else f"{when(done)} "
+        finished = f"{when(done)}（{path_name(done['path'])}）" if done else f"{when(done)} "
         note = f"；暂停 {paused} 次" if paused else ""
         lines.append(f"- {day[5:]}：{when(landed)} → {finished}→ {when(report)}{note}")
     hits, eligible = on_time(log, days, tz)

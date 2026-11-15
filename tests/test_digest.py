@@ -1,11 +1,12 @@
 import json
 import re
+import subprocess
 
 import pytest
 
 from conftest import git, seed_data_branch
 from summaries import digest, weekly
-from summaries.cli import main
+from summaries.cli import build_parser, main
 from summaries.records import dump_jsonl
 
 DAY = "2026-11-02"
@@ -305,9 +306,11 @@ def test_an_answer_with_nothing_usable_writes_nothing_and_fails(tmp_path, remote
     seed_day(tmp_path, remote)
     vault = make_vault(tmp_path)
 
-    code, out, _ = run_digest(clone, vault, monkeypatch, capsys, ["Please log in to continue.\n"])
+    # claude's answer is unusable, so codex is asked too; its answer is no better
+    code, out, _ = run_digest(clone, vault, monkeypatch, capsys, ["Please log in to continue.\n", "Sorry.\n"])
 
     assert code == 1 and out["status"] == "error"
+    assert "answer from claude" in out["reason"] and "answer from codex" in out["reason"]
     assert not (vault / "digests" / f"{DAY}.md").exists()
     assert "网站数据" not in (vault / "ledger.md").read_text()
 
@@ -464,6 +467,10 @@ def clients_model(calls, failing=("claude",)):
     return model
 
 
+def digest_args(*extra):
+    return build_parser().parse_args(["digest", "--dir", "v", *extra])
+
+
 def run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model, *extra):
     remote, clone = remote_and_clone
     seed_day(tmp_path, remote)
@@ -530,3 +537,54 @@ def test_an_unusable_fallback_answer_keeps_the_claude_error(tmp_path, remote_and
 def test_the_note_for_a_day_without_a_batch_carries_the_site_name():
     note = digest.no_batch_note(DAY, "2026-10-30", SITE)
     assert note.startswith(f"# LitScout 日报 · {DAY}（周一）") and "arXiv 今天没有新批次" in note
+
+
+@pytest.mark.parametrize("answer", ["", "I can't help with that."])
+def test_an_empty_or_unparseable_answer_that_exits_0_still_hands_the_report_to_codex(tmp_path, remote_and_clone, monkeypatch, capsys, answer):
+    """agy (or claude) exiting 0 with nothing usable is a failed writer: Codex answers, and the reason is kept."""
+    calls = []
+    codex = clients_model(calls, failing=())
+
+    def model(argv, prompt, cwd):
+        if argv[0] == "agy":
+            calls.append("agy")
+            return answer
+        return codex(argv, prompt, cwd)
+
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model, "--client", "antigravity")
+
+    assert code == 0 and out["status"] == "written" and out["client"] == "codex"
+    assert calls == ["agy", "codex", "codex"]
+    assert any("no usable lines in the answer from agy" in p and "codex wrote the report instead" in p for p in out["problems"])
+    assert (tmp_path / "c" / DAY / "writer.out.agy.txt").read_text(encoding="utf-8") == answer  # kept for a look
+
+
+def test_an_unusable_claude_answer_also_falls_back(tmp_path, remote_and_clone, monkeypatch, capsys):
+    calls = []
+    codex = clients_model(calls, failing=())
+
+    def model(argv, prompt, cwd):
+        if argv[0] == "claude":
+            calls.append("claude")
+            return "```\n```\n"
+        return codex(argv, prompt, cwd)
+
+    code, out = run_with_clients(tmp_path, remote_and_clone, monkeypatch, capsys, model)
+
+    assert (code, out["client"], calls[:2]) == (0, "codex", ["claude", "codex"])
+
+
+def test_a_prompt_with_a_nul_byte_skips_agy_and_reaches_codex_on_stdin(tmp_path, remote_and_clone, monkeypatch, capsys):
+    """An argument cannot hold NUL (ValueError in subprocess); agy is skipped cleanly and Codex reads the prompt from stdin."""
+    seen = []
+
+    def run(argv, **kwargs):
+        seen.append((argv[0], kwargs["input"]))
+        return subprocess.CompletedProcess(argv, 0, stdout="note | n\n", stderr="")
+
+    monkeypatch.setattr(digest.subprocess, "run", run)
+    argv, answer, errors = digest.ask(digest.clients(digest_args("--client", "antigravity")), "a\x00b", "/repo")
+
+    assert (argv[0], answer) == ("codex", "note | n\n")
+    assert seen == [("codex", "a\x00b")]
+    assert len(errors) == 1 and "NUL" in errors[0] and errors[0].startswith("agy")
