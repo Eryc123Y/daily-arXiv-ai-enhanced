@@ -60,7 +60,7 @@ def client_argv(client, prompt, model=None, command=None):
         # abstracts. agy stops itself (exit 3) before CHUNK_TIMEOUT would kill it.
         return [
             "agy", "-p", prompt, *ANTIGRAVITY_HEADLESS, "--mode", "accept-edits", "--settings", json.dumps(ANTIGRAVITY_CHUNK_SETTINGS),
-            "--print-timeout", f"{CHUNK_TIMEOUT - 60}s", *(["--model", model] if model else []),
+            "--print-timeout", f"{CHUNK_TIMEOUT - 60}s", "--model", model or "gemini-4-hydrogen-low",
         ]  # fmt: skip
     if client == "custom":
         if not command:
@@ -187,7 +187,7 @@ def cmd_run_local(args):
 def add_parser(sub):
     run = sub.add_parser("run-local", help="summarise pending papers with a local coding-agent CLI")
     run.add_argument("--client", required=True, choices=["claude", "codex", "antigravity", "custom"])
-    run.add_argument("--model", help="model for the client (claude defaults to haiku)")
+    run.add_argument("--model", help="model for the client (claude defaults to haiku, antigravity to gemini-4-hydrogen-low)")
     run.add_argument("--command", help='custom client: JSON list, e.g. ["mycli","-p","{prompt}"]')
     run.add_argument("--parallel", type=int, default=2, help="chunks run at the same time")
     run.add_argument("--max-chunks", type=int, help="stop after this many chunks (usage budget)")

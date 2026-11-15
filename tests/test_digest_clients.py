@@ -42,7 +42,7 @@ def test_client_antigravity_sends_the_prompt_as_the_value_of_p_and_falls_back_to
     assert settings["agentMode"] == "" and settings["toolPermission"] == "strict"
     assert {"command(*)", "unsandboxed(*)", "mcp(*)", "read_url(*)", "execute_url(*)", "read_file(/)", "write_file(/)"} <= set(settings["permissions"]["deny"])
     assert "--dangerously-skip-permissions" not in primary
-    assert "--model" not in primary  # the Claude default "sonnet" is not an agy model
+    assert primary[primary.index("--model") + 1] == "gemini-4-hydrogen-medium"
     assert fallback == digest.FALLBACK_COMMAND
     assert digest.clients(parse("--client", "antigravity", "--model", "g"))[0][-2:] == ["--model", "g"]
 

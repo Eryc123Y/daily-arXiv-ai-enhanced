@@ -64,7 +64,7 @@ FALLBACK_COMMAND = ["codex", "exec", "-s", "read-only", "--skip-git-repo-check",
 PROMPT_ARG = "{prompt}"
 # Under macOS's ARG_MAX (1 MiB for arguments and environment together); a longer prompt fails over to the fallback.
 MAX_PROMPT_ARG_BYTES = 900_000
-DEFAULT_MODELS = {"claude": "sonnet"}
+DEFAULT_MODELS = {"claude": "sonnet", "antigravity": "gemini-4-hydrogen-medium"}
 CLIENTS = ("claude", "codex", "antigravity")
 # Session-only agy settings for the writer, which needs no tools: Default mode, strict review and deny rules for
 # every tool kind. agy merges these with the shared and project grants in ~/.gemini/config, and a headless run
@@ -847,7 +847,7 @@ def add_parser(sub):
     digest.add_argument("--final", action="store_true", help="last run of the day: note a day without a new batch")
     digest.add_argument("--wait-summaries", action="store_true", help="wait while under 95%% of the day is summarised, unless --final")
     digest.add_argument("--force", action="store_true", help="rewrite today's report and report a day again")
-    digest.add_argument("--model", help="model for the client (claude defaults to sonnet; codex and antigravity to their own default)")
+    digest.add_argument("--model", help="model for the client (claude defaults to sonnet, antigravity to gemini-4-hydrogen-medium; codex to its own default)")
     chooser = digest.add_mutually_exclusive_group()
     chooser.add_argument("--client", choices=CLIENTS, default="claude", help="headless client that writes the report (default claude)")
     chooser.add_argument("--command", help="headless client, JSON list with {model}; the prompt comes on stdin, or in place of a {prompt} part")

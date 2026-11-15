@@ -51,7 +51,7 @@ def test_antigravity_runs_its_cli_headless_with_commands_mcp_and_urls_denied():
     assert "--dangerously-skip-permissions" not in argv  # the chunks hold untrusted abstracts
     timeout = argv[argv.index("--print-timeout") + 1]
     assert timeout.endswith("s") and int(timeout[:-1]) < CHUNK_TIMEOUT
-    assert "--model" not in argv
+    assert argv[argv.index("--model") + 1] == "gemini-4-hydrogen-low"
     assert client_argv("antigravity", PROMPT, model="m")[-2:] == ["--model", "m"]
 
 
