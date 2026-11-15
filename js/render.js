@@ -158,6 +158,8 @@ function (PaperData, Sources) {
     return topics.filter(t => t.keywords.some(k => hit.has(k.toLowerCase()))).map(t => t.name);
   }
 
+  const TOPIC_COLOURS = 10;
+
   /**
    * Everything the views need to know about a paper's relation to the user's interests.
    * @param {PageRecord} paper
@@ -172,7 +174,7 @@ function (PaperData, Sources) {
       match,
       matched: match.keywords.length + match.authors.length > 0,
       score: match.keywords.length + 2 * match.authors.length,
-      topics: topics.map((t, index) => ({ name: t.name, index })).filter(t => names.has(t.name)),
+      topics: topics.map((t, index) => ({ name: t.name, index: index % TOPIC_COLOURS })).filter(t => names.has(t.name)),
     };
   }
 
@@ -406,6 +408,7 @@ ${body}
     formatRange,
     authorLine,
     CODE_ICON,
+    TOPIC_COLOURS,
     codeKind,
     matchesFor,
     topicsFor,
