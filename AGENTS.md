@@ -28,7 +28,8 @@ The page is served by Cloudflare at https://litscout.turing2234.com/, not GitHub
 - Host: Cloudflare Workers static assets. Worker `litscout-daily`, configured by `wrangler.jsonc` (serves `./dist`, custom domain `litscout.turing2234.com`, no `workers.dev` address).
 - Build: `python3 scripts/build_site.py` copies an allowlist of public page files into `dist/` (gitignored). Deploy: `npx wrangler deploy`.
 - Automatic deploy: Cloudflare Workers Builds runs the build and deploy commands on every push or merge to `main`. Do not deploy from a feature branch.
-- Manual fallback: on an up-to-date `main`, `python3 scripts/build_site.py && npx wrangler deploy` (needs `npx wrangler login` on that machine).
+- Post-merge check (required): after every push or merge to `main` affecting the site, always verify the live site (`npx -y wrangler deployments list` and confirm `https://litscout.turing2234.com/` returns 200 with the updated `?v=` assets). If automatic deploy did not trigger, run the manual fallback immediately from up-to-date `main`.
+- Manual fallback: on an up-to-date `main`, `python3 scripts/build_site.py && npx -y wrangler deploy` (needs `npx wrangler login` on that machine).
 - To check a deploy: Cloudflare dashboard → Workers & Pages → `litscout-daily` → Deployments, or `npx wrangler deployments list`; then confirm https://litscout.turing2234.com/ returns 200.
 - Do not rename the Worker (`name` in `wrangler.jsonc`); a new name creates a separate Worker without the domain.
 - The `litscout.turing2234.com` DNS record is managed by the Worker custom domain. Do not add a manual DNS record for it.
