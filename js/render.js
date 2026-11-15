@@ -158,8 +158,6 @@ function (PaperData, Sources) {
     return topics.filter(t => t.keywords.some(k => hit.has(k.toLowerCase()))).map(t => t.name);
   }
 
-  const TOPIC_COLOURS = 10;
-
   /**
    * Everything the views need to know about a paper's relation to the user's interests.
    * @param {PageRecord} paper
@@ -174,7 +172,7 @@ function (PaperData, Sources) {
       match,
       matched: match.keywords.length + match.authors.length > 0,
       score: match.keywords.length + 2 * match.authors.length,
-      topics: topics.map((t, index) => ({ name: t.name, index: index % TOPIC_COLOURS })).filter(t => names.has(t.name)),
+      topics: topics.map((t, index) => ({ name: t.name, index })).filter(t => names.has(t.name)),
     };
   }
 
@@ -194,7 +192,7 @@ function (PaperData, Sources) {
     if (info.topics.length) {
       const first = info.topics[0];
       const more = info.topics.length > 1 ? ` <span class="row-more">+${info.topics.length - 1}</span>` : '';
-      return `<span class="row-topic topic-${first.index}"><span class="dot"></span>${esc(first.name)}${more}</span>`;
+      return `<span class="row-topic topic-${first.index} topic-color" style="--topic-i:${first.index}"><span class="dot"></span>${esc(first.name)}${more}</span>`;
     }
     if (info.match.authors.length) return `<span class="row-topic topic-author"><span class="dot"></span>Your authors</span>`;
     return `<span class="row-topic">${esc((paper.categories || [])[0] || '')}</span>`;
@@ -352,7 +350,7 @@ ${tail}`;
   function renderReader(paper, info, terms, options = {}) {
     const ai = paper.pending ? null : paper.AI;
     const topicLine = info.topics
-      .map(t => `<span class="reader-topic topic-${t.index}"><span class="dot"></span>${esc(t.name)}</span>`)
+      .map(t => `<span class="reader-topic topic-${t.index} topic-color" style="--topic-i:${t.index}"><span class="dot"></span>${esc(t.name)}</span>`)
       .join('');
     const reasons = [...info.match.keywords, ...info.match.authors];
     const matches = reasons.length
@@ -408,7 +406,6 @@ ${body}
     formatRange,
     authorLine,
     CODE_ICON,
-    TOPIC_COLOURS,
     codeKind,
     matchesFor,
     topicsFor,
