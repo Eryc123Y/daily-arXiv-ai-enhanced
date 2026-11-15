@@ -16,7 +16,7 @@ import requests
 from summaries import datafiles
 
 HF_DAILY = "https://huggingface.co/api/daily_papers"
-USER_AGENT = "daily-arxiv-signals/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
+USER_AGENT = "litscout-daily-signals/1.0 (+https://github.com/Eryc123Y/litscout-daily)"
 
 
 class SignalsUnavailable(RuntimeError):

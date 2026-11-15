@@ -7,7 +7,7 @@
  * FALLBACK_REPO below; change it there when you host the page yourself.
  */
 (function (root) {
-  const FALLBACK_REPO = { owner: 'Eryc123Y', repo: 'daily-arXiv-ai-enhanced' };
+  const FALLBACK_REPO = { owner: 'Eryc123Y', repo: 'litscout-daily' };
 
   /**
    * The oldest day the page offers (calendar, ‹ ›, ranges, links). Days

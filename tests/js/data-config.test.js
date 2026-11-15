@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 
 const { repoFromLocation } = require('../../js/data-config.js');
 
-const FALLBACK = { owner: 'Eryc123Y', repo: 'daily-arXiv-ai-enhanced' };
+const FALLBACK = { owner: 'Eryc123Y', repo: 'litscout-daily' };
 
 test('a fork on GitHub Pages reads data from its own repository', () => {
   assert.deepEqual(

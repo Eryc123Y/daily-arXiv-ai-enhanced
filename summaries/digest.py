@@ -83,7 +83,7 @@ ANTIGRAVITY_COMMAND = [
     "agy", "-p", PROMPT_ARG, "--settings", json.dumps(ANTIGRAVITY_WRITER_SETTINGS), "--sandbox", "--disable-slash-commands",
     "--print-timeout", f"{MODEL_TIMEOUT - 60}s",
 ]  # fmt: skip
-USER_AGENT = "daily-arxiv-digest/1.0 (+https://github.com/Eryc123Y/daily-arXiv-ai-enhanced)"
+USER_AGENT = "litscout-daily-digest/1.0 (+https://github.com/Eryc123Y/litscout-daily)"
 REPORT_TITLE = "LitScout 日报"  # the site's name (PR 38); "arXiv" stays only where it names the source
 JOURNAL_SECTION = "来自期刊"
 NO_STEREO = "今日无 2D→3D / 立体视觉相关论文"

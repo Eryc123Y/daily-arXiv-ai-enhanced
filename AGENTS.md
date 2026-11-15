@@ -1,6 +1,6 @@
 # Notes for coding agents
 
-Daily arXiv: a scheduled task on the maintainer's Mac crawls arXiv's `/new` listings into the `data` branch (`summaries ensure-day`, which also backfills missed days; no GitHub Actions schedule since 2026-11-09); summaries are written either by a local coding agent (default) or by an LLM API in Actions; the static site in this branch reads both. See README.md for the full picture.
+LitScout Daily: a scheduled task on the maintainer's Mac crawls arXiv's `/new` listings into the `data` branch (`summaries ensure-day`, which also backfills missed days; no GitHub Actions schedule since 2026-11-09); summaries are written either by a local coding agent (default) or by an LLM API in Actions; the static site in this branch reads both. See README.md for the full picture.
 
 ## Layout
 

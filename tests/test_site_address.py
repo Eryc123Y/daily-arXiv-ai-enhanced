@@ -10,8 +10,8 @@ LITSCOUT = "https://litscout.turing2234.com/"
 
 
 def test_this_repository_uses_its_own_domain():
-    assert github.site_url("Eryc123Y/daily-arXiv-ai-enhanced") == LITSCOUT
-    assert github.site_url("eryc123y/Daily-arXiv-AI-enhanced") == LITSCOUT
+    assert github.site_url("Eryc123Y/litscout-daily") == LITSCOUT
+    assert github.site_url("eryc123y/LitScout-Daily") == LITSCOUT
 
 
 @pytest.mark.parametrize(
@@ -39,12 +39,12 @@ def test_a_missing_sites_file_means_github_pages(tmp_path):
 
 def test_the_sites_file_only_holds_https_addresses():
     addresses = json.loads(github.SITES.read_text(encoding="utf-8"))["addresses"]
-    assert addresses == {"Eryc123Y/daily-arXiv-ai-enhanced": LITSCOUT}
+    assert addresses == {"Eryc123Y/litscout-daily": LITSCOUT}
     assert all(url.startswith("https://") and url.endswith("/") for url in addresses.values())
 
 
 def test_reports_link_to_the_configured_address(monkeypatch, tmp_path):
-    monkeypatch.setenv("DATA_REPO", "Eryc123Y/daily-arXiv-ai-enhanced")
+    monkeypatch.setenv("DATA_REPO", "Eryc123Y/litscout-daily")
     assert digest.site_url(tmp_path) == LITSCOUT
     monkeypatch.setenv("DATA_REPO", "alice/my-arxiv")
     assert digest.site_url(tmp_path) == "https://alice.github.io/my-arxiv/"
