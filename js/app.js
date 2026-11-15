@@ -151,8 +151,12 @@ function chip(kind, key, label, count, active) {
 }
 
 function filterItem(/** @type {string} */ kind, /** @type {string} */ key, /** @type {string} */ label, /** @type {number | undefined} */ count, /** @type {string | null} */ active, /** @type {number | string | undefined} */ colourIndex = undefined) {
-  const slot = typeof colourIndex === 'number' ? colourIndex % Render.TOPIC_COLOURS : colourIndex;
-  const dot = slot === undefined ? '' : `<span class="dot topic-${slot}"></span>`;
+  let dot = '';
+  if (typeof colourIndex === 'number') {
+    dot = `<span class="dot topic-${colourIndex} topic-color" style="--topic-i:${colourIndex}"></span>`;
+  } else if (colourIndex !== undefined) {
+    dot = `<span class="dot topic-${colourIndex}"></span>`;
+  }
   return `<li><button type="button" data-${kind}="${esc(key)}" aria-pressed="${active === key}">${dot}<span class="label">${esc(label)}</span><span class="count">${count}</span></button></li>`;
 }
 

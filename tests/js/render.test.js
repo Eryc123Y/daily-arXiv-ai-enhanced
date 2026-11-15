@@ -48,7 +48,7 @@ test('a list row shows topic, title, authors and the pending state', () => {
   const html = Render.renderRow(paper({ pending: true }), info, true);
   assert.match(html, /data-id="2610.00001"/);
   assert.match(html, /aria-current="true"/);
-  assert.match(html, /class="row-topic topic-0"/);
+  assert.match(html, /class="row-topic topic-0 topic-color"/);
   assert.match(html, /Summary pending/);
   assert.match(html, /Ada Lovelace, Alan Turing/);
 });
@@ -140,15 +140,15 @@ test('the reader carries an arXiv margin stamp, as on the PDF', () => {
   assert.match(Render.renderReader(paper({ AI, pending: false }), Render.describe(p, [], [], TOPICS), []), /reader-stamp" aria-hidden="true">arXiv:2610\.00001 \[cs\.CV\]<\/p>/);
 });
 
-test('topic colour slots cover 10 topics and wrap beyond the palette size', () => {
-  const manyTopics = Array.from({ length: 12 }, (_, i) => ({ name: `Topic ${i}`, keywords: [`kw${i}`] }));
+test('topic colour slots generate unique --topic-i indices without a fixed cap', () => {
+  const manyTopics = Array.from({ length: 15 }, (_, i) => ({ name: `Topic ${i}`, keywords: [`kw${i}`] }));
   const p5 = paper({ title: 'Study of kw5', summary: 'none' });
   const info5 = Render.describe(p5, ['kw5'], [], manyTopics);
-  assert.match(Render.renderRow(p5, info5, false), /class="row-topic topic-5"/);
-  assert.match(Render.renderReader(p5, info5, ['kw5']), /class="reader-topic topic-5"/);
+  assert.match(Render.renderRow(p5, info5, false), /class="row-topic topic-5 topic-color" style="--topic-i:5"/);
+  assert.match(Render.renderReader(p5, info5, ['kw5']), /class="reader-topic topic-5 topic-color" style="--topic-i:5"/);
 
-  const p10 = paper({ title: 'Study of kw10', summary: 'none' });
-  const info10 = Render.describe(p10, ['kw10'], [], manyTopics);
-  assert.match(Render.renderRow(p10, info10, false), /class="row-topic topic-0"/);
-  assert.match(Render.renderReader(p10, info10, ['kw10']), /class="reader-topic topic-0"/);
+  const p14 = paper({ title: 'Study of kw14', summary: 'none' });
+  const info14 = Render.describe(p14, ['kw14'], [], manyTopics);
+  assert.match(Render.renderRow(p14, info14, false), /class="row-topic topic-14 topic-color" style="--topic-i:14"/);
+  assert.match(Render.renderReader(p14, info14, ['kw14']), /class="reader-topic topic-14 topic-color" style="--topic-i:14"/);
 });

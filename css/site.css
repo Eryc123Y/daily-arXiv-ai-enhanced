@@ -42,16 +42,9 @@
   --ok: #3f8a55;
   --warn: #c08a1e;
   --error: #c0392b;
-  --t0: #0b7a87;
-  --t1: #4b47b8;
-  --t2: #a86a00;
-  --t3: #b0306e;
-  --t4: #2a7b44;
-  --t5: #8437a6;
-  --t6: #b83a2d;
-  --t7: #5d6f18;
-  --t8: #4d5c78;
-  --t9: #7c5024;
+  --topic-l: 0.45;
+  --topic-c: 0.14;
+  --topic-h0: 205deg;
   --t-author: #1f6fa8;
   color-scheme: light;
 }
@@ -86,16 +79,9 @@
     --ok: #7fe0a3;
     --warn: #f3c07c;
     --error: #ff7d89;
-    --t0: #8adcf0;
-    --t1: #ff92d0;
-    --t2: #f3c07c;
-    --t3: #7fe0a3;
-    --t4: #b5a8ff;
-    --t5: #ff8f85;
-    --t6: #cbe374;
-    --t7: #f2df74;
-    --t8: #d89eff;
-    --t9: #9ec5d6;
+    --topic-l: 0.84;
+    --topic-c: 0.115;
+    --topic-h0: 210deg;
     --t-author: #a9c8ff;
     color-scheme: dark;
   }
@@ -130,16 +116,9 @@
   --ok: #7fe0a3;
   --warn: #f3c07c;
   --error: #ff7d89;
-  --t0: #8adcf0;
-  --t1: #ff92d0;
-  --t2: #f3c07c;
-  --t3: #7fe0a3;
-  --t4: #b5a8ff;
-  --t5: #ff8f85;
-  --t6: #cbe374;
-  --t7: #f2df74;
-  --t8: #d89eff;
-  --t9: #9ec5d6;
+  --topic-l: 0.84;
+  --topic-c: 0.115;
+  --topic-h0: 210deg;
   --t-author: #a9c8ff;
   color-scheme: dark;
 }
@@ -173,16 +152,9 @@
   --ok: #7fb98c;
   --warn: #e2b45e;
   --error: #e5776c;
-  --t0: #6fcdbd;
-  --t1: #aeacf2;
-  --t2: #e7b45c;
-  --t3: #e89cc0;
-  --t4: #8fd182;
-  --t5: #eb8a78;
-  --t6: #d6cf6e;
-  --t7: #cfa0e8;
-  --t8: #e3d696;
-  --t9: #a8b8c8;
+  --topic-l: 0.81;
+  --topic-c: 0.105;
+  --topic-h0: 175deg;
   --t-author: #82c3ec;
   color-scheme: dark;
 }
@@ -216,16 +188,9 @@
   --ok: #4fd3df;
   --warn: #f0b65a;
   --error: #f27d8a;
-  --t0: #4fd3df;
-  --t1: #a3a6ff;
-  --t2: #f0b65a;
-  --t3: #f27d8a;
-  --t4: #6ee09c;
-  --t5: #d996f5;
-  --t6: #c9df6b;
-  --t7: #ff9a76;
-  --t8: #f5df78;
-  --t9: #9cb6cc;
+  --topic-l: 0.82;
+  --topic-c: 0.125;
+  --topic-h0: 200deg;
   --t-author: #7fc4f5;
   color-scheme: dark;
 }
@@ -259,16 +224,9 @@
   --ok: #3f8a55;
   --warn: #b5841c;
   --error: #b33a32;
-  --t0: #2e7d86;
-  --t1: #5a55b0;
-  --t2: #94691a;
-  --t3: #a04875;
-  --t4: #37784c;
-  --t5: #7d489c;
-  --t6: #a8463a;
-  --t7: #5f6c28;
-  --t8: #506073;
-  --t9: #7a5534;
+  --topic-l: 0.47;
+  --topic-c: 0.105;
+  --topic-h0: 205deg;
   --t-author: #2b59c3;
   color-scheme: light;
 }
@@ -355,16 +313,9 @@ textarea {
   flex: none;
 }
 
-.topic-0 { color: var(--t0); }
-.topic-1 { color: var(--t1); }
-.topic-2 { color: var(--t2); }
-.topic-3 { color: var(--t3); }
-.topic-4 { color: var(--t4); }
-.topic-5 { color: var(--t5); }
-.topic-6 { color: var(--t6); }
-.topic-7 { color: var(--t7); }
-.topic-8 { color: var(--t8); }
-.topic-9 { color: var(--t9); }
+/* Golden-angle hue stepping in OKLCH keeps perceptual brightness and contrast
+   consistent per theme for any number of topics. */
+.topic-color { color: oklch(var(--topic-l) var(--topic-c) calc(var(--topic-h0) + var(--topic-i, 0) * 137.508deg)); }
 .topic-author { color: var(--t-author); }
 
 /* Buttons ------------------------------------------------------------------- */
@@ -1134,16 +1085,7 @@ textarea {
   color: var(--muted);
 }
 
-.row-topic.topic-0 { color: var(--t0); }
-.row-topic.topic-1 { color: var(--t1); }
-.row-topic.topic-2 { color: var(--t2); }
-.row-topic.topic-3 { color: var(--t3); }
-.row-topic.topic-4 { color: var(--t4); }
-.row-topic.topic-5 { color: var(--t5); }
-.row-topic.topic-6 { color: var(--t6); }
-.row-topic.topic-7 { color: var(--t7); }
-.row-topic.topic-8 { color: var(--t8); }
-.row-topic.topic-9 { color: var(--t9); }
+.row-topic.topic-color { color: oklch(var(--topic-l) var(--topic-c) calc(var(--topic-h0) + var(--topic-i, 0) * 137.508deg)); }
 .row-topic.topic-author { color: var(--t-author); }
 
 .row-more {
