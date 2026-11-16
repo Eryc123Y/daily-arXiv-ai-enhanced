@@ -60,3 +60,4 @@
 {"date": "2026-11-16", "path": "local-antigravity", "at": "2026-11-16T02:25:58+00:00", "total": 4, "done": 4, "pending": 0, "reason": "1 chunks, 0 failed"}
 {"date": "2026-11-15", "path": "local-antigravity", "at": "2026-11-16T02:26:32+00:00", "total": 104, "done": 102, "pending": 0, "no_abstract": 2, "reason": "1 chunks, 0 failed"}
 {"date": "2026-11-16", "path": "crawl", "at": "2026-11-16T04:20:57+00:00", "total": 376, "added": 372}
+{"date": "2026-11-16", "path": "local-antigravity", "at": "2026-11-16T04:30:22+00:00", "total": 376, "done": 376, "pending": 0, "reason": "10 chunks, 0 failed"}
