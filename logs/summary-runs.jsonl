@@ -69,3 +69,4 @@
 {"date": "2026-11-17", "path": "crawl", "at": "2026-11-17T13:21:02+00:00", "total": 1126, "added": 1106}
 {"date": "2026-11-17", "path": "local-antigravity", "at": "2026-11-17T13:36:31+00:00", "total": 1128, "done": 447, "pending": 668, "no_abstract": 13, "reason": "12 chunks, 1 failed"}
 {"date": "2026-11-18", "path": "local-antigravity", "at": "2026-11-18T02:28:06+00:00", "total": 19, "done": 8, "pending": 0, "no_abstract": 11, "reason": "1 chunks, 0 failed"}
+{"date": "2026-11-17", "path": "local-antigravity", "at": "2026-11-18T02:34:23+00:00", "total": 1128, "done": 887, "pending": 240, "no_abstract": 1, "reason": "11 chunks, 0 failed"}
